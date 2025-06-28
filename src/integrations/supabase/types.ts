@@ -2297,6 +2297,71 @@ export type Database = {
           },
         ]
       }
+      vehicle_positions: {
+        Row: {
+          accuracy: number | null
+          address: string | null
+          altitude: number | null
+          battery_level: number | null
+          created_at: string
+          engine_temperature: number | null
+          fuel_level: number | null
+          heading: number
+          id: string
+          ignition_status: boolean
+          latitude: number
+          longitude: number
+          recorded_at: string
+          speed: number
+          timestamp: string
+          vehicle_id: string
+        }
+        Insert: {
+          accuracy?: number | null
+          address?: string | null
+          altitude?: number | null
+          battery_level?: number | null
+          created_at?: string
+          engine_temperature?: number | null
+          fuel_level?: number | null
+          heading?: number
+          id?: string
+          ignition_status?: boolean
+          latitude: number
+          longitude: number
+          recorded_at?: string
+          speed?: number
+          timestamp: string
+          vehicle_id: string
+        }
+        Update: {
+          accuracy?: number | null
+          address?: string | null
+          altitude?: number | null
+          battery_level?: number | null
+          created_at?: string
+          engine_temperature?: number | null
+          fuel_level?: number | null
+          heading?: number
+          id?: string
+          ignition_status?: boolean
+          latitude?: number
+          longitude?: number
+          recorded_at?: string
+          speed?: number
+          timestamp?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_positions_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vehicles: {
         Row: {
           brand: string | null

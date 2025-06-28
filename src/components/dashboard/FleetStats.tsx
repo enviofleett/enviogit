@@ -1,38 +1,47 @@
 
 import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Monitor, Zap, Shield, Settings } from 'lucide-react';
+import { useGPS51Data } from '@/hooks/useGPS51Data';
 
 const FleetStats = () => {
+  const { vehicles, loading } = useGPS51Data();
+
+  // Calculate real-time fleet statistics
+  const activeVehicles = vehicles.filter(v => v.latest_position?.ignition_status).length;
+  const totalVehicles = vehicles.length;
+  const vehiclesWithGPS = vehicles.filter(v => v.latest_position).length;
+  const maintenanceVehicles = vehicles.filter(v => v.status === 'maintenance').length;
+
   const stats = [
     {
-      title: 'Active Vehicles',
-      value: '24',
-      change: '+2 from yesterday',
+      title: 'Total Vehicles',
+      value: loading ? '...' : totalVehicles.toString(),
+      change: `${vehiclesWithGPS} with GPS data`,
       icon: Monitor,
-      color: 'text-green-600',
-      bgColor: 'bg-green-100'
-    },
-    {
-      title: 'AI Efficiency Score',
-      value: '87%',
-      change: '+5% this week',
-      icon: Zap,
       color: 'text-blue-600',
       bgColor: 'bg-blue-100'
     },
     {
-      title: 'Maintenance Alerts',
-      value: '3',
-      change: 'Due within 7 days',
+      title: 'Active Now',
+      value: loading ? '...' : activeVehicles.toString(),
+      change: 'Engines running',
+      icon: Zap,
+      color: 'text-green-600',
+      bgColor: 'bg-green-100'
+    },
+    {
+      title: 'Maintenance',
+      value: loading ? '...' : maintenanceVehicles.toString(),
+      change: 'Scheduled',
       icon: Settings,
       color: 'text-yellow-600',
       bgColor: 'bg-yellow-100'
     },
     {
-      title: 'Geofence Events',
-      value: '12',
-      change: 'Today',
+      title: 'GPS Coverage',
+      value: loading ? '...' : `${Math.round((vehiclesWithGPS / Math.max(totalVehicles, 1)) * 100)}%`,
+      change: 'Real-time tracking',
       icon: Shield,
       color: 'text-purple-600',
       bgColor: 'bg-purple-100'

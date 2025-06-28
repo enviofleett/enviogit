@@ -109,7 +109,7 @@ serve(async (req) => {
     const gps51Positions: GPS51Position[] = await positionsResponse.json();
     console.log(`Found ${gps51Positions.length} position updates`);
 
-    // Store positions (we'll create this table in the SQL migration)
+    // Store positions in the new vehicle_positions table
     const positionData = gps51Positions.map(pos => ({
       vehicle_id: pos.vehicleId,
       latitude: pos.latitude,
@@ -120,7 +120,6 @@ serve(async (req) => {
       ignition_status: pos.ignition,
       fuel_level: pos.fuel,
       engine_temperature: pos.temperature,
-      recorded_at: new Date().toISOString(),
     }));
 
     if (positionData.length > 0) {
@@ -130,6 +129,7 @@ serve(async (req) => {
 
       if (positionError) {
         console.error('Error storing positions:', positionError);
+        // Don't throw here - we still want to report success for vehicle sync
       }
     }
 
@@ -167,17 +167,17 @@ function mapVehicleType(gps51Type: string): string {
   const typeMap: Record<string, string> = {
     'car': 'sedan',
     'truck': 'truck',
-    'van': 'van',
-    'motorcycle': 'motorcycle',
+    'van': 'van', 
+    'motorcycle': 'bike',
   };
-  return typeMap[gps51Type] || 'other';
+  return typeMap[gps51Type] || 'sedan';
 }
 
 function mapVehicleStatus(gps51Status: string): string {
   const statusMap: Record<string, string> = {
     'active': 'available',
-    'inactive': 'unavailable',
+    'inactive': 'inactive',
     'maintenance': 'maintenance',
   };
-  return statusMap[gps51Status] || 'unavailable';
+  return statusMap[gps51Status] || 'inactive';
 }
