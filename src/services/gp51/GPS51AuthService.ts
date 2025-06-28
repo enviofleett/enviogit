@@ -117,7 +117,7 @@ export class GPS51AuthService {
   }
 
   isAuthenticated(): boolean {
-    return this.token !== null && new Date() < this.token.expires_at;
+    return this.token !== null && new Date().getTime() < this.token.expires_at.getTime();
   }
 
   getTokenInfo(): GPS51AuthToken | null {

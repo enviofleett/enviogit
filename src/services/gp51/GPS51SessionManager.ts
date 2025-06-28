@@ -25,7 +25,7 @@ export class GPS51SessionManager {
     this.token = accessToken;
     
     // Generate session ID using MD5 hash
-    const sessionId = md5.hex(`${accessToken}_${Date.now()}`);
+    const sessionId = md5(`${accessToken}_${Date.now()}`);
     
     this.sessionData = {
       sessionId,
@@ -42,7 +42,7 @@ export class GPS51SessionManager {
   }
 
   async syncData(): Promise<void> {
-    if (!this.isConnected()) {
+    if (!await this.isConnected()) {
       throw new Error('Session not connected');
     }
 

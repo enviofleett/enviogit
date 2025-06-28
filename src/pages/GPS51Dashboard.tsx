@@ -27,10 +27,6 @@ const GPS51Dashboard: React.FC = () => {
     await connect(credentials);
   };
 
-  const getStatusColor = (isConnected: boolean) => {
-    return isConnected ? 'bg-green-500' : 'bg-red-500';
-  };
-
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
