@@ -140,8 +140,8 @@ export class GPS51ConfigService {
               license_plate: device.devicename,
               brand: 'GPS51',
               model: device.devicetype.toString(),
-              type: this.mapDeviceTypeToVehicleType(device.devicetype) as 'sedan' | 'truck' | 'van' | 'motorcycle' | 'other',
-              status: device.isfree === 1 ? 'available' : 'assigned' as 'available' | 'inactive' | 'maintenance' | 'assigned',
+              type: this.mapDeviceTypeToVehicleType(device.devicetype),
+              status: (device.isfree === 1 ? 'available' : 'assigned') as 'available' | 'inactive' | 'maintenance' | 'assigned',
               notes: `Device ID: ${device.deviceid}, SIM: ${device.simnum}`,
               updated_at: new Date().toISOString()
             }, {

@@ -2476,7 +2476,7 @@ export type Database = {
       user_role: "admin" | "manager" | "staff" | "dispatch_rider"
       user_status: "active" | "inactive" | "pending"
       vehicle_status: "available" | "assigned" | "maintenance" | "inactive"
-      vehicle_type: "bike" | "van" | "truck"
+      vehicle_type: "bike" | "van" | "truck" | "sedan" | "motorcycle" | "other"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2657,7 +2657,7 @@ export const Constants = {
       user_role: ["admin", "manager", "staff", "dispatch_rider"],
       user_status: ["active", "inactive", "pending"],
       vehicle_status: ["available", "assigned", "maintenance", "inactive"],
-      vehicle_type: ["bike", "van", "truck"],
+      vehicle_type: ["bike", "van", "truck", "sedan", "motorcycle", "other"],
     },
   },
 } as const

@@ -3,9 +3,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface GPS51Position {
-  deviceid: string; // Fixed from deviceId
-  callat: number; // Latitude (fixed from lat)
-  callon: number; // Longitude (fixed from lon)
+  deviceid: string; // Fixed property name
+  callat: number; // Latitude (fixed property name)
+  callon: number; // Longitude (fixed property name)
   updatetime: number;
   speed: number;
   moving: number; // 0: stop, 1: moving
@@ -25,9 +25,9 @@ export interface LiveDataOptions {
 export interface FleetMetrics {
   totalDevices: number; // Added missing property
   activeDevices: number; // Added missing property
-  movingVehicles: number; // Fixed from movingDevices
+  movingVehicles: number; // Fixed property name
   parkedDevices: number; // Added missing property
-  offlineVehicles: number; // Fixed from offlineDevices
+  offlineVehicles: number; // Fixed property name
   totalDistance: number;
   averageSpeed: number;
 }
