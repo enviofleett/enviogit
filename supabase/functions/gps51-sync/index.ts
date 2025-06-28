@@ -41,7 +41,14 @@ serve(async (req) => {
     console.log('Starting GPS51 sync process...');
 
     // Accept configuration from request body
-    const { apiUrl, accessToken }: GPS51SyncRequest = await req.json();
+    const requestBody = await req.text();
+    console.log('Request body length:', requestBody.length);
+    
+    if (!requestBody) {
+      throw new Error('Empty request body received');
+    }
+
+    const { apiUrl, accessToken }: GPS51SyncRequest = JSON.parse(requestBody);
 
     if (!apiUrl || !accessToken) {
       throw new Error('Missing required parameters: apiUrl and accessToken are required');
@@ -63,11 +70,26 @@ serve(async (req) => {
       },
     });
 
+    console.log(`Vehicles API Response Status: ${vehiclesResponse.status}`);
+    const vehiclesResponseText = await vehiclesResponse.text();
+    console.log(`Vehicles API Raw Response: ${vehiclesResponseText}`);
+
     if (!vehiclesResponse.ok) {
-      throw new Error(`GPS51 API error: ${vehiclesResponse.status} - ${await vehiclesResponse.text()}`);
+      throw new Error(`GPS51 API error: ${vehiclesResponse.status} - ${vehiclesResponseText}`);
     }
 
-    const gps51Vehicles: GPS51Vehicle[] = await vehiclesResponse.json();
+    let gps51Vehicles: GPS51Vehicle[] = [];
+    if (vehiclesResponseText.trim()) {
+      try {
+        gps51Vehicles = JSON.parse(vehiclesResponseText);
+      } catch (parseError) {
+        console.error('Failed to parse vehicles response as JSON:', parseError);
+        console.log('Attempting to handle non-JSON response...');
+        // Handle case where API returns success but not JSON
+        gps51Vehicles = [];
+      }
+    }
+
     console.log(`Found ${gps51Vehicles.length} vehicles in GPS51`);
 
     // Sync vehicles to database
@@ -101,27 +123,40 @@ serve(async (req) => {
       },
     });
 
+    console.log(`Positions API Response Status: ${positionsResponse.status}`);
+    const positionsResponseText = await positionsResponse.text();
+    console.log(`Positions API Raw Response: ${positionsResponseText}`);
+
     if (!positionsResponse.ok) {
-      throw new Error(`GPS51 positions API error: ${positionsResponse.status}`);
+      console.warn(`GPS51 positions API returned ${positionsResponse.status}, continuing without positions`);
     }
 
-    const gps51Positions: GPS51Position[] = await positionsResponse.json();
+    let gps51Positions: GPS51Position[] = [];
+    if (positionsResponse.ok && positionsResponseText.trim()) {
+      try {
+        gps51Positions = JSON.parse(positionsResponseText);
+      } catch (parseError) {
+        console.error('Failed to parse positions response as JSON:', parseError);
+        gps51Positions = [];
+      }
+    }
+
     console.log(`Found ${gps51Positions.length} position updates`);
 
     // Store positions in the vehicle_positions table
-    const positionData = gps51Positions.map(pos => ({
-      vehicle_id: pos.vehicleId,
-      latitude: pos.latitude,
-      longitude: pos.longitude,
-      speed: pos.speed,
-      heading: pos.heading,
-      timestamp: new Date(pos.timestamp).toISOString(),
-      ignition_status: pos.ignition,
-      fuel_level: pos.fuel,
-      engine_temperature: pos.temperature,
-    }));
+    if (gps51Positions.length > 0) {
+      const positionData = gps51Positions.map(pos => ({
+        vehicle_id: pos.vehicleId,
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+        speed: pos.speed,
+        heading: pos.heading,
+        timestamp: new Date(pos.timestamp).toISOString(),
+        ignition_status: pos.ignition,
+        fuel_level: pos.fuel,
+        engine_temperature: pos.temperature,
+      }));
 
-    if (positionData.length > 0) {
       const { error: positionError } = await supabase
         .from('vehicle_positions')
         .insert(positionData);
