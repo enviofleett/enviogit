@@ -3,7 +3,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { map-pin, zap, settings, shield } from 'lucide-react';
+import { MapPin, Zap, Settings, Shield } from 'lucide-react';
 
 interface VehicleCardProps {
   vehicle: {
@@ -55,7 +55,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle }) => {
         <div className="space-y-4">
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center space-x-2">
-              <map-pin className="w-4 h-4 text-slate-400" />
+              <MapPin className="w-4 h-4 text-slate-400" />
               <span className="text-slate-600">{vehicle.location}</span>
             </div>
             <span className="font-medium">{vehicle.speed} km/h</span>
@@ -78,7 +78,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle }) => {
             <div className="space-y-1">
               <div className="text-xs text-slate-500">AI Efficiency</div>
               <div className="flex items-center space-x-2">
-                <zap className="w-4 h-4 text-blue-500" />
+                <Zap className="w-4 h-4 text-blue-500" />
                 <span className="text-sm font-medium text-blue-600">{vehicle.aiScore}/100</span>
               </div>
             </div>
@@ -86,11 +86,11 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle }) => {
           
           <div className="flex space-x-2 pt-2">
             <Button size="sm" variant="outline" className="flex-1">
-              <map-pin className="w-4 h-4 mr-1" />
+              <MapPin className="w-4 h-4 mr-1" />
               Track
             </Button>
             <Button size="sm" variant="outline" className="flex-1">
-              <settings className="w-4 h-4 mr-1" />
+              <Settings className="w-4 h-4 mr-1" />
               Control
             </Button>
           </div>

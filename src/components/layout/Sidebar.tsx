@@ -2,25 +2,25 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
-  monitor, 
-  map-pin, 
-  settings, 
-  bell, 
-  database, 
-  zap,
-  shield,
-  users
+  Monitor, 
+  MapPin, 
+  Settings, 
+  Bell, 
+  Database, 
+  Zap,
+  Shield,
+  Users
 } from 'lucide-react';
 
 const navigation = [
-  { name: 'Fleet Overview', href: '/', icon: monitor },
-  { name: 'Live Tracking', href: '/tracking', icon: map-pin },
-  { name: 'Maintenance', href: '/maintenance', icon: settings },
-  { name: 'Geofencing', href: '/geofencing', icon: shield },
-  { name: 'Analytics', href: '/analytics', icon: database },
-  { name: 'Alerts', href: '/alerts', icon: bell },
-  { name: 'Drivers', href: '/drivers', icon: users },
-  { name: 'AI Insights', href: '/insights', icon: zap },
+  { name: 'Fleet Overview', href: '/', icon: Monitor },
+  { name: 'Live Tracking', href: '/tracking', icon: MapPin },
+  { name: 'Maintenance', href: '/maintenance', icon: Settings },
+  { name: 'Geofencing', href: '/geofencing', icon: Shield },
+  { name: 'Analytics', href: '/analytics', icon: Database },
+  { name: 'Alerts', href: '/alerts', icon: Bell },
+  { name: 'Drivers', href: '/drivers', icon: Users },
+  { name: 'AI Insights', href: '/insights', icon: Zap },
 ];
 
 const Sidebar = () => {
@@ -32,7 +32,7 @@ const Sidebar = () => {
         <div className="flex items-center flex-shrink-0 px-4">
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <zap className="w-5 h-5 text-white" />
+              <Zap className="w-5 h-5 text-white" />
             </div>
             <h1 className="text-xl font-bold text-white">FleetSense AI</h1>
           </div>
