@@ -35,33 +35,29 @@ export const useGPS51Data = () => {
     try {
       setLoading(true);
       
-      // Fetch vehicles with their latest positions using a JOIN query
+      // Fetch vehicles from the vehicles table
       const { data: vehiclesData, error: vehiclesError } = await supabase
         .from('vehicles')
-        .select(`
-          *,
-          vehicle_positions!inner(
-            vehicle_id,
-            latitude,
-            longitude,
-            speed,
-            heading,
-            timestamp,
-            ignition_status,
-            fuel_level,
-            engine_temperature
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (vehiclesError) throw vehiclesError;
 
-      // Transform the data to match our interface
+      // Fetch latest positions separately
+      const { data: positionsData, error: positionsError } = await supabase
+        .from('vehicle_positions')
+        .select('*')
+        .order('timestamp', { ascending: false })
+        .limit(100);
+
+      if (positionsError) {
+        console.warn('Error fetching positions:', positionsError);
+      }
+
+      // Transform vehicles data
       const transformedVehicles: VehicleData[] = vehiclesData?.map(vehicle => {
-        // Get the latest position (assuming they're ordered by timestamp DESC in the query)
-        const latestPositionData = Array.isArray(vehicle.vehicle_positions) 
-          ? vehicle.vehicle_positions[0] 
-          : vehicle.vehicle_positions;
+        // Find latest position for this vehicle
+        const latestPositionData = positionsData?.find(pos => pos.vehicle_id === vehicle.id);
 
         let latest_position: VehiclePosition | undefined;
         if (latestPositionData) {
@@ -89,29 +85,21 @@ export const useGPS51Data = () => {
         };
       }) || [];
 
-      // Also fetch all recent positions for the positions array
-      const { data: positionsData, error: positionsError } = await supabase
-        .from('vehicle_positions')
-        .select('*')
-        .order('timestamp', { ascending: false })
-        .limit(100);
-
-      if (!positionsError && positionsData) {
-        const transformedPositions: VehiclePosition[] = positionsData.map(pos => ({
-          vehicle_id: pos.vehicle_id,
-          latitude: Number(pos.latitude),
-          longitude: Number(pos.longitude),
-          speed: Number(pos.speed || 0),
-          heading: Number(pos.heading || 0),
-          timestamp: pos.timestamp,
-          ignition_status: pos.ignition_status || false,
-          fuel_level: pos.fuel_level ? Number(pos.fuel_level) : undefined,
-          engine_temperature: pos.engine_temperature ? Number(pos.engine_temperature) : undefined,
-        }));
-        setPositions(transformedPositions);
-      }
+      // Transform positions data
+      const transformedPositions: VehiclePosition[] = positionsData?.map(pos => ({
+        vehicle_id: pos.vehicle_id,
+        latitude: Number(pos.latitude),
+        longitude: Number(pos.longitude),
+        speed: Number(pos.speed || 0),
+        heading: Number(pos.heading || 0),
+        timestamp: pos.timestamp,
+        ignition_status: pos.ignition_status || false,
+        fuel_level: pos.fuel_level ? Number(pos.fuel_level) : undefined,
+        engine_temperature: pos.engine_temperature ? Number(pos.engine_temperature) : undefined,
+      })) || [];
 
       setVehicles(transformedVehicles);
+      setPositions(transformedPositions);
       setError(null);
     } catch (err) {
       console.error('Error fetching GPS51 data:', err);
@@ -124,7 +112,13 @@ export const useGPS51Data = () => {
   // Trigger GPS51 sync
   const triggerSync = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('gps51-sync');
+      const { data, error } = await supabase.functions.invoke('gps51-sync', {
+        body: {
+          apiUrl: 'https://api.gps51.com', // Default API URL
+          accessToken: 'demo-token' // This should come from authentication
+        }
+      });
+      
       if (error) throw error;
       
       console.log('GPS51 sync triggered:', data);
