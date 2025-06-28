@@ -21,6 +21,7 @@ const navigation = [
   { name: 'Alerts', href: '/alerts', icon: Bell },
   { name: 'Drivers', href: '/drivers', icon: Users },
   { name: 'AI Insights', href: '/insights', icon: Zap },
+  { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
 const Sidebar = () => {
