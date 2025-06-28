@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4';
 
@@ -103,32 +102,28 @@ serve(async (req) => {
     const { username, password, apiUrl } = requestBody;
     const baseUrl = apiUrl.replace(/\/$/, '');
 
-    // Step 1: Authenticate with GPS51 API
-    const loginPayload = {
-      action: "login",
-      username: username,
-      password: password, // Should already be MD5 hashed from client
-      from: "WEB",
-      type: "USER"
-    };
+    // Step 1: Authenticate with GPS51 API using GET request with query parameters
+    const loginUrl = new URL(baseUrl);
+    loginUrl.searchParams.append('action', 'login');
+    loginUrl.searchParams.append('token', crypto.randomUUID().replace(/-/g, '').substring(0, 32));
+    loginUrl.searchParams.append('username', username);
+    loginUrl.searchParams.append('password', password); // Should already be MD5 hashed from client
+    loginUrl.searchParams.append('from', 'WEB');
+    loginUrl.searchParams.append('type', 'USER');
 
     console.log("GPS51 Login Request Debug:", {
-      action: loginPayload.action,
-      username: loginPayload.username,
-      passwordLength: loginPayload.password.length,
-      isValidMD5: /^[a-f0-9]{32}$/.test(loginPayload.password),
-      from: loginPayload.from,
-      type: loginPayload.type,
-      apiUrl: baseUrl
+      url: loginUrl.toString(),
+      username: username,
+      passwordLength: password.length,
+      isValidMD5: /^[a-f0-9]{32}$/.test(password),
     });
 
     console.log("Sending GPS51 login request...");
-    const loginResponse = await fetch(baseUrl, {
-      method: 'POST',
+    const loginResponse = await fetch(loginUrl.toString(), {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
-      body: JSON.stringify(loginPayload),
     });
 
     const loginResponseText = await loginResponse.text();
@@ -174,7 +169,7 @@ serve(async (req) => {
       
       let errorMessage = loginData.message || `Login failed with status: ${loginData.status}`;
       if (loginData.status === 8901) {
-        errorMessage += ' (Status 8901: Authentication parameter error - verify username, password MD5 hash, from, and type parameters)';
+        errorMessage += ' (Status 8901: Action not found - API endpoint or parameter format issue)';
       }
       
       throw new Error(errorMessage);
@@ -183,19 +178,17 @@ serve(async (req) => {
     const token = loginData.token;
     console.log('GPS51 login successful, token received');
 
-    // Step 2: Fetch device list
-    const deviceListPayload = {
-      action: "querymonitorlist",
-      token: token
-    };
+    // Step 2: Fetch device list using query parameters
+    const deviceListUrl = new URL(baseUrl);
+    deviceListUrl.searchParams.append('action', 'querymonitorlist');
+    deviceListUrl.searchParams.append('token', token);
 
     console.log("Fetching device list...");
-    const deviceResponse = await fetch(baseUrl, {
-      method: 'POST',
+    const deviceResponse = await fetch(deviceListUrl.toString(), {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
-      body: JSON.stringify(deviceListPayload),
     });
 
     const deviceResponseText = await deviceResponse.text();
@@ -215,23 +208,21 @@ serve(async (req) => {
 
     console.log(`Found ${devices.length} devices`);
 
-    // Step 3: Fetch positions for devices
+    // Step 3: Fetch positions for devices using query parameters
     let positions: GPS51Position[] = [];
     if (devices.length > 0) {
       const deviceIds = devices.map(d => d.deviceid).join(',');
-      const positionPayload = {
-        action: "lastposition",
-        token: token,
-        deviceids: deviceIds
-      };
+      const positionUrl = new URL(baseUrl);
+      positionUrl.searchParams.append('action', 'lastposition');
+      positionUrl.searchParams.append('token', token);
+      positionUrl.searchParams.append('deviceids', deviceIds);
 
       console.log("Fetching positions...");
-      const positionResponse = await fetch(baseUrl, {
-        method: 'POST',
+      const positionResponse = await fetch(positionUrl.toString(), {
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
-        body: JSON.stringify(positionPayload),
       });
 
       const positionResponseText = await positionResponse.text();

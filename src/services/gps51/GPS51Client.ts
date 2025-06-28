@@ -116,16 +116,25 @@ export class GPS51Client {
   ): Promise<GPS51ApiResponse> {
     const requestToken = this.token || this.generateToken();
     
-    const requestData = {
-      action,
-      token: requestToken,
-      ...params
-    };
+    // Build URL with action and token as query parameters
+    const url = new URL(this.baseURL);
+    url.searchParams.append('action', action);
+    url.searchParams.append('token', requestToken);
+    
+    // For login, also add parameters to URL query string (GPS51 specific requirement)
+    if (action === 'login') {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          url.searchParams.append(key, String(value));
+        }
+      });
+    }
 
     try {
       console.log(`GPS51 API Request: ${action}`, { 
-        url: this.baseURL, 
-        data: requestData,
+        url: url.toString(), 
+        method,
+        params,
         // Log password validation for login requests
         ...(action === 'login' && params.password ? {
           passwordValidation: {
@@ -139,14 +148,23 @@ export class GPS51Client {
         } : {})
       });
       
-      const response = await fetch(this.baseURL, {
-        method: 'POST',
+      const requestOptions: RequestInit = {
+        method: method,
         headers: {
-          'Content-Type': 'application/json',
           'Accept': 'application/json',
-        },
-        body: JSON.stringify(requestData)
-      });
+        }
+      };
+
+      // For non-login actions or if we need POST body
+      if (action !== 'login' && Object.keys(params).length > 0) {
+        requestOptions.headers = {
+          ...requestOptions.headers,
+          'Content-Type': 'application/json',
+        };
+        requestOptions.body = JSON.stringify(params);
+      }
+      
+      const response = await fetch(url.toString(), requestOptions);
       
       const responseText = await response.text();
       console.log(`GPS51 API Raw Response (${action}):`, {
@@ -190,7 +208,8 @@ export class GPS51Client {
     } catch (error) {
       console.error(`GPS51 API Error (${action}):`, {
         error: error.message,
-        requestData,
+        url: url.toString(),
+        params,
         retryCount: this.retryCount,
         maxRetries: this.maxRetries
       });
@@ -245,8 +264,9 @@ export class GPS51Client {
       };
 
       console.log('Sending login request with parameters:', loginParams);
+      console.log('Request will be sent to URL with query parameters');
 
-      const response = await this.makeRequest('login', loginParams);
+      const response = await this.makeRequest('login', loginParams, 'GET');
 
       console.log('GPS51 Login Response Analysis:', {
         status: response.status,
@@ -290,7 +310,7 @@ export class GPS51Client {
         
         // Provide specific guidance for common error statuses
         if (response.status === 8901) {
-          errorMessage += ' (Status 8901 typically indicates authentication parameter issues - check username, password MD5 hash, from, and type parameters)';
+          errorMessage += ' (Status 8901: Action not found - this might indicate API endpoint or parameter format issues)';
         }
         
         return {
