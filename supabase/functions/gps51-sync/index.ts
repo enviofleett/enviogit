@@ -100,30 +100,55 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { username, password, apiUrl } = requestBody;
-    const baseUrl = apiUrl.replace(/\/$/, '');
+    
+    // Ensure we use the correct GPS51 API URL
+    let correctedApiUrl = apiUrl.replace(/\/$/, '');
+    if (correctedApiUrl.includes('www.gps51.com')) {
+      console.log('Correcting API URL from www.gps51.com to api.gps51.com');
+      correctedApiUrl = correctedApiUrl.replace('www.gps51.com', 'api.gps51.com');
+    }
 
-    // Step 1: Authenticate with GPS51 API using GET request with query parameters
-    const loginUrl = new URL(baseUrl);
+    // Generate a proper random token for the login request
+    const generateToken = () => {
+      const array = new Uint8Array(16);
+      crypto.getRandomValues(array);
+      return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+    };
+
+    // Step 1: Authenticate with GPS51 API using POST request with JSON body
+    const loginToken = generateToken();
+    const loginUrl = new URL(correctedApiUrl);
     loginUrl.searchParams.append('action', 'login');
-    loginUrl.searchParams.append('token', crypto.randomUUID().replace(/-/g, '').substring(0, 32));
-    loginUrl.searchParams.append('username', username);
-    loginUrl.searchParams.append('password', password); // Should already be MD5 hashed from client
-    loginUrl.searchParams.append('from', 'WEB');
-    loginUrl.searchParams.append('type', 'USER');
+    loginUrl.searchParams.append('token', loginToken);
+
+    const loginPayload = {
+      username: username,
+      password: password, // Should already be MD5 hashed from client
+      from: 'WEB',
+      type: 'USER'
+    };
 
     console.log("GPS51 Login Request Debug:", {
       url: loginUrl.toString(),
-      username: username,
-      passwordLength: password.length,
-      isValidMD5: /^[a-f0-9]{32}$/.test(password),
+      method: 'POST',
+      payload: {
+        username: loginPayload.username,
+        passwordLength: loginPayload.password.length,
+        isValidMD5: /^[a-f0-9]{32}$/.test(loginPayload.password),
+        from: loginPayload.from,
+        type: loginPayload.type
+      },
+      correctedApiUrl
     });
 
-    console.log("Sending GPS51 login request...");
+    console.log("Sending GPS51 login request with POST method and JSON body...");
     const loginResponse = await fetch(loginUrl.toString(), {
-      method: 'GET',
+      method: 'POST',
       headers: {
         'Accept': 'application/json',
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify(loginPayload)
     });
 
     const loginResponseText = await loginResponse.text();
@@ -169,7 +194,9 @@ serve(async (req) => {
       
       let errorMessage = loginData.message || `Login failed with status: ${loginData.status}`;
       if (loginData.status === 8901) {
-        errorMessage += ' (Status 8901: Action not found - API endpoint or parameter format issue)';
+        errorMessage += ' (Status 8901: Authentication parameter validation failed - check username, password hash, from, and type parameters)';
+      } else if (loginData.status === 1) {
+        errorMessage += ' (Status 1: Login failed - verify credentials and account status)';
       }
       
       throw new Error(errorMessage);
@@ -179,7 +206,7 @@ serve(async (req) => {
     console.log('GPS51 login successful, token received');
 
     // Step 2: Fetch device list using query parameters
-    const deviceListUrl = new URL(baseUrl);
+    const deviceListUrl = new URL(correctedApiUrl);
     deviceListUrl.searchParams.append('action', 'querymonitorlist');
     deviceListUrl.searchParams.append('token', token);
 
@@ -212,7 +239,7 @@ serve(async (req) => {
     let positions: GPS51Position[] = [];
     if (devices.length > 0) {
       const deviceIds = devices.map(d => d.deviceid).join(',');
-      const positionUrl = new URL(baseUrl);
+      const positionUrl = new URL(correctedApiUrl);
       positionUrl.searchParams.append('action', 'lastposition');
       positionUrl.searchParams.append('token', token);
       positionUrl.searchParams.append('deviceids', deviceIds);

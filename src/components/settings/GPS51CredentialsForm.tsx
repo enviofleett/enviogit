@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +10,7 @@ import { useGPS51SessionBridge } from '@/hooks/useGPS51SessionBridge';
 
 export const GPS51CredentialsForm = () => {
   const [formData, setFormData] = useState({
-    apiUrl: 'https://www.gps51.com/webapi',
+    apiUrl: 'https://api.gps51.com/webapi',
     username: '',
     password: '',
     apiKey: '',
@@ -30,7 +29,7 @@ export const GPS51CredentialsForm = () => {
   useEffect(() => {
     const loadConfiguration = () => {
       const savedConfig = {
-        apiUrl: localStorage.getItem('gps51_api_url') || 'https://www.gps51.com/webapi',
+        apiUrl: localStorage.getItem('gps51_api_url') || 'https://api.gps51.com/webapi',
         username: localStorage.getItem('gps51_username') || '',
         from: (localStorage.getItem('gps51_from') as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN') || 'WEB',
         type: (localStorage.getItem('gps51_type') as 'USER' | 'DEVICE') || 'USER',
@@ -70,6 +69,16 @@ export const GPS51CredentialsForm = () => {
       toast({
         title: "Invalid API URL",
         description: "Please enter a valid API URL.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    // Validate correct API URL
+    if (!formData.apiUrl.includes('api.gps51.com')) {
+      toast({
+        title: "Incorrect API URL",
+        description: "GPS51 API URL should use 'api.gps51.com' subdomain, not 'www.gps51.com'",
         variant: "destructive",
       });
       return false;
@@ -176,7 +185,7 @@ export const GPS51CredentialsForm = () => {
   const handleClearConfiguration = () => {
     disconnect();
     setFormData({
-      apiUrl: 'https://www.gps51.com/webapi',
+      apiUrl: 'https://api.gps51.com/webapi',
       username: '',
       password: '',
       apiKey: '',
@@ -221,12 +230,12 @@ export const GPS51CredentialsForm = () => {
           <Input
             id="apiUrl"
             type="url"
-            placeholder="https://www.gps51.com/webapi"
+            placeholder="https://api.gps51.com/webapi"
             value={formData.apiUrl}
             onChange={(e) => handleInputChange('apiUrl', e.target.value)}
           />
           <p className="text-xs text-gray-500">
-            The base URL for your GPS51 API endpoint
+            ⚠️ Must use <strong>api.gps51.com</strong> subdomain (not www.gps51.com)
           </p>
         </div>
 
@@ -238,12 +247,15 @@ export const GPS51CredentialsForm = () => {
                 <SelectValue placeholder="Select platform" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="WEB">Web</SelectItem>
-                <SelectItem value="ANDROID">Android</SelectItem>
-                <SelectItem value="IPHONE">iPhone</SelectItem>
-                <SelectItem value="WEIXIN">WeChat</SelectItem>
+                <SelectItem value="WEB">WEB</SelectItem>
+                <SelectItem value="ANDROID">ANDROID</SelectItem>
+                <SelectItem value="IPHONE">IPHONE</SelectItem>
+                <SelectItem value="WEIXIN">WEIXIN</SelectItem>
               </SelectContent>
             </Select>
+            <p className="text-xs text-gray-500">
+              Case-sensitive: must be exact values
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -253,10 +265,13 @@ export const GPS51CredentialsForm = () => {
                 <SelectValue placeholder="Select type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="USER">User Account</SelectItem>
-                <SelectItem value="DEVICE">Device Login</SelectItem>
+                <SelectItem value="USER">USER</SelectItem>
+                <SelectItem value="DEVICE">DEVICE</SelectItem>
               </SelectContent>
             </Select>
+            <p className="text-xs text-gray-500">
+              Case-sensitive: must be exact values
+            </p>
           </div>
         </div>
 
@@ -296,8 +311,19 @@ export const GPS51CredentialsForm = () => {
             </Button>
           </div>
           <p className="text-xs text-gray-500">
-            Password will be automatically encrypted using MD5
+            Will be automatically encrypted using MD5 (32-char lowercase)
           </p>
+        </div>
+
+        {/* Critical Configuration Notes */}
+        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+          <h4 className="text-sm font-semibold text-yellow-800 mb-2">⚠️ Critical Configuration Requirements</h4>
+          <ul className="text-xs text-yellow-700 space-y-1">
+            <li>• API URL must use <strong>api.gps51.com</strong> (not www.gps51.com)</li>
+            <li>• Platform and Login Type values are case-sensitive</li>
+            <li>• Password will be MD5 encrypted automatically</li>
+            <li>• Authentication uses POST method with JSON body</li>
+          </ul>
         </div>
 
         <div className="flex gap-2 pt-4">
