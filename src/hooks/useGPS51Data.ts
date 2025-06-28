@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { gps51ConfigService } from '@/services/gp51/GPS51ConfigService';
 
 interface VehiclePosition {
   vehicle_id: string;
@@ -12,6 +13,8 @@ interface VehiclePosition {
   ignition_status: boolean;
   fuel_level?: number;
   engine_temperature?: number;
+  battery_level?: number;
+  address?: string;
 }
 
 interface VehicleData {
@@ -22,6 +25,9 @@ interface VehicleData {
   type: string;
   status: string;
   latest_position?: VehiclePosition;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export const useGPS51Data = () => {
@@ -29,6 +35,7 @@ export const useGPS51Data = () => {
   const [positions, setPositions] = useState<VehiclePosition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
   // Fetch vehicles and their latest positions
   const fetchVehicleData = async () => {
@@ -71,6 +78,8 @@ export const useGPS51Data = () => {
             ignition_status: latestPositionData.ignition_status || false,
             fuel_level: latestPositionData.fuel_level ? Number(latestPositionData.fuel_level) : undefined,
             engine_temperature: latestPositionData.engine_temperature ? Number(latestPositionData.engine_temperature) : undefined,
+            battery_level: latestPositionData.battery_level ? Number(latestPositionData.battery_level) : undefined,
+            address: latestPositionData.address,
           };
         }
 
@@ -82,6 +91,9 @@ export const useGPS51Data = () => {
           type: vehicle.type,
           status: vehicle.status,
           latest_position,
+          notes: vehicle.notes,
+          created_at: vehicle.created_at,
+          updated_at: vehicle.updated_at,
         };
       }) || [];
 
@@ -96,6 +108,8 @@ export const useGPS51Data = () => {
         ignition_status: pos.ignition_status || false,
         fuel_level: pos.fuel_level ? Number(pos.fuel_level) : undefined,
         engine_temperature: pos.engine_temperature ? Number(pos.engine_temperature) : undefined,
+        battery_level: pos.battery_level ? Number(pos.battery_level) : undefined,
+        address: pos.address,
       })) || [];
 
       setVehicles(transformedVehicles);
@@ -109,27 +123,35 @@ export const useGPS51Data = () => {
     }
   };
 
-  // Trigger GPS51 sync
+  // Trigger GPS51 sync using the new configuration service
   const triggerSync = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('gps51-sync', {
-        body: {
-          apiUrl: 'https://api.gps51.com', // Default API URL
-          accessToken: 'demo-token' // This should come from authentication
-        }
-      });
+      if (!gps51ConfigService.isConfigured()) {
+        throw new Error('GPS51 is not configured. Please configure credentials first.');
+      }
+
+      setLoading(true);
+      console.log('Triggering GPS51 sync...');
       
-      if (error) throw error;
+      const result = await gps51ConfigService.syncData();
       
-      console.log('GPS51 sync triggered:', data);
-      
-      // Refresh data after sync
-      setTimeout(fetchVehicleData, 2000);
-      
-      return data;
+      if (result.success) {
+        console.log('GPS51 sync completed:', result);
+        setLastSyncTime(new Date());
+        
+        // Refresh local data after successful sync
+        setTimeout(fetchVehicleData, 2000);
+        
+        return result;
+      } else {
+        throw new Error(result.error || 'Sync failed');
+      }
     } catch (err) {
       console.error('Error triggering GPS51 sync:', err);
+      setError(err instanceof Error ? err.message : 'Sync failed');
       throw err;
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -161,16 +183,21 @@ export const useGPS51Data = () => {
       )
       .subscribe();
 
-    // Set up periodic sync every 30 seconds
-    const syncInterval = setInterval(() => {
-      console.log('Triggering periodic GPS51 sync...');
-      triggerSync().catch(err => console.error('Periodic sync failed:', err));
-    }, 30000);
+    // Set up periodic sync every 2 minutes if configured
+    let syncInterval: NodeJS.Timeout | null = null;
+    if (gps51ConfigService.isConfigured()) {
+      syncInterval = setInterval(() => {
+        console.log('Triggering periodic GPS51 sync...');
+        triggerSync().catch(err => console.error('Periodic sync failed:', err));
+      }, 120000); // 2 minutes
+    }
 
     return () => {
       supabase.removeChannel(vehicleSubscription);
       supabase.removeChannel(positionSubscription);
-      clearInterval(syncInterval);
+      if (syncInterval) {
+        clearInterval(syncInterval);
+      }
     };
   }, []);
 
@@ -179,7 +206,9 @@ export const useGPS51Data = () => {
     positions,
     loading,
     error,
+    lastSyncTime,
     refetch: fetchVehicleData,
     triggerSync,
+    isConfigured: gps51ConfigService.isConfigured(),
   };
 };

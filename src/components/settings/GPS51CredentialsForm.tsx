@@ -3,18 +3,22 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Eye, EyeOff, Save, TestTube, Trash2 } from 'lucide-react';
+import { Eye, EyeOff, Save, TestTube, Trash2, CheckCircle } from 'lucide-react';
 import { gps51ConfigService, GPS51Config } from '@/services/gp51/GPS51ConfigService';
 
 export const GPS51CredentialsForm = () => {
   const [formData, setFormData] = useState<GPS51Config>({
-    apiUrl: '',
+    apiUrl: 'https://api.gps51.com/webapi',
     username: '',
     password: '',
-    apiKey: ''
+    apiKey: '',
+    from: 'WEB',
+    type: 'USER'
   });
+  
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -23,7 +27,9 @@ export const GPS51CredentialsForm = () => {
     isConnected: boolean;
     error?: string;
     lastTest?: Date;
+    userInfo?: any;
   }>({ isConnected: false });
+  
   const { toast } = useToast();
 
   // Load existing configuration on component mount
@@ -89,13 +95,18 @@ export const GPS51CredentialsForm = () => {
       const success = await gps51ConfigService.testConnection(formData);
       
       if (success) {
+        const authService = gps51ConfigService['authService'];
+        const userInfo = authService.getUser();
+        
         setConnectionStatus({
           isConnected: true,
-          lastTest: new Date()
+          lastTest: new Date(),
+          userInfo
         });
+        
         toast({
           title: "Connection Successful",
-          description: "Successfully connected to GPS51 API.",
+          description: `Successfully connected to GPS51 API${userInfo ? ` as ${userInfo.showname || userInfo.username}` : ''}.`,
         });
       }
     } catch (error) {
@@ -118,10 +129,12 @@ export const GPS51CredentialsForm = () => {
   const handleClearConfiguration = () => {
     gps51ConfigService.clearConfiguration();
     setFormData({
-      apiUrl: '',
+      apiUrl: 'https://api.gps51.com/webapi',
       username: '',
       password: '',
-      apiKey: ''
+      apiKey: '',
+      from: 'WEB',
+      type: 'USER'
     });
     setIsConfigured(false);
     setConnectionStatus({ isConnected: false });
@@ -135,9 +148,14 @@ export const GPS51CredentialsForm = () => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>GPS51 API Configuration</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          GPS51 API Configuration
+          {isConfigured && connectionStatus.isConnected && (
+            <CheckCircle className="h-5 w-5 text-green-600" />
+          )}
+        </CardTitle>
         <CardDescription>
-          Configure your GPS51 API credentials to enable fleet tracking and data synchronization.
+          Configure your GPS51 API credentials to enable real-time fleet tracking and data synchronization.
           {isConfigured && (
             <span className="block mt-2 text-green-600 text-sm">
               ✅ Configuration saved and ready to use
@@ -151,7 +169,7 @@ export const GPS51CredentialsForm = () => {
           <Input
             id="apiUrl"
             type="url"
-            placeholder="https://api.gps51.com"
+            placeholder="https://api.gps51.com/webapi"
             value={formData.apiUrl}
             onChange={(e) => handleInputChange('apiUrl', e.target.value)}
           />
@@ -160,15 +178,48 @@ export const GPS51CredentialsForm = () => {
           </p>
         </div>
 
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="from">Platform *</Label>
+            <Select value={formData.from} onValueChange={(value: 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN') => handleInputChange('from', value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select platform" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="WEB">Web</SelectItem>
+                <SelectItem value="ANDROID">Android</SelectItem>
+                <SelectItem value="IPHONE">iPhone</SelectItem>
+                <SelectItem value="WEIXIN">WeChat</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="type">Login Type *</Label>
+            <Select value={formData.type} onValueChange={(value: 'USER' | 'DEVICE') => handleInputChange('type', value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="USER">User Account</SelectItem>
+                <SelectItem value="DEVICE">Device Login</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
         <div className="space-y-2">
           <Label htmlFor="username">Username *</Label>
           <Input
             id="username"
             type="text"
-            placeholder="Your GPS51 username"
+            placeholder="Your GPS51 username or device ID"
             value={formData.username}
             onChange={(e) => handleInputChange('username', e.target.value)}
           />
+          <p className="text-xs text-gray-500">
+            Supports Chinese/English characters, username or device ID
+          </p>
         </div>
 
         <div className="space-y-2">
@@ -195,15 +246,18 @@ export const GPS51CredentialsForm = () => {
               )}
             </Button>
           </div>
+          <p className="text-xs text-gray-500">
+            Password will be automatically encrypted using MD5
+          </p>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="apiKey">API Key</Label>
+          <Label htmlFor="apiKey">API Key (Optional)</Label>
           <Input
             id="apiKey"
             type="text"
-            placeholder="Your GPS51 API key (optional)"
-            value={formData.apiKey}
+            placeholder="Your GPS51 API key if required"
+            value={formData.apiKey || ''}
             onChange={(e) => handleInputChange('apiKey', e.target.value)}
           />
           <p className="text-xs text-gray-500">
@@ -256,6 +310,12 @@ export const GPS51CredentialsForm = () => {
               {connectionStatus.isConnected ? (
                 <>
                   ✅ Connected to GPS51 API
+                  {connectionStatus.userInfo && (
+                    <span className="block text-xs mt-1">
+                      Logged in as: {connectionStatus.userInfo.showname || connectionStatus.userInfo.username}
+                      {connectionStatus.userInfo.companyname && ` (${connectionStatus.userInfo.companyname})`}
+                    </span>
+                  )}
                   <span className="block text-xs mt-1">
                     Last tested: {connectionStatus.lastTest.toLocaleString()}
                   </span>
@@ -280,6 +340,9 @@ export const GPS51CredentialsForm = () => {
             <p className="text-sm text-blue-800">
               📡 GPS51 integration is configured and ready
               <span className="block text-xs text-blue-600 mt-1">
+                Platform: {formData.from} | Type: {formData.type}
+              </span>
+              <span className="block text-xs text-blue-600">
                 You can now use GPS51 features throughout the application
               </span>
             </p>

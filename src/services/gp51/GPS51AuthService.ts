@@ -1,5 +1,5 @@
 
-import { supabase } from '@/integrations/supabase/client';
+import { gps51Client, GPS51AuthCredentials } from './GPS51Client';
 
 export interface GPS51AuthToken {
   access_token: string;
@@ -11,8 +11,10 @@ export interface GPS51AuthToken {
 export interface GPS51Credentials {
   username: string;
   password: string;
-  apiKey: string;
-  apiUrl: string; // Added apiUrl to credentials
+  apiKey?: string;
+  apiUrl: string;
+  from?: 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN';
+  type?: 'USER' | 'DEVICE';
 }
 
 export class GPS51AuthService {
@@ -29,29 +31,27 @@ export class GPS51AuthService {
 
   async authenticate(credentials: GPS51Credentials): Promise<GPS51AuthToken> {
     try {
-      console.log('Authenticating with GPS51 using dynamic configuration...');
+      console.log('Authenticating with GPS51 using enhanced client...');
       
-      // Call our edge function for authentication with dynamic config
-      const { data, error } = await supabase.functions.invoke('gps51-auth', {
-        body: {
-          username: credentials.username,
-          password: credentials.password,
-          apiKey: credentials.apiKey,
-          apiUrl: credentials.apiUrl
-        }
-      });
+      const authCredentials: GPS51AuthCredentials = {
+        username: credentials.username,
+        password: credentials.password,
+        apiUrl: credentials.apiUrl,
+        from: credentials.from || 'WEB',
+        type: credentials.type || 'USER'
+      };
 
-      if (error) throw error;
+      const result = await gps51Client.authenticate(authCredentials);
 
-      if (!data.success) {
-        throw new Error(data.error || 'Authentication failed');
+      if (!result.success) {
+        throw new Error(result.error || 'Authentication failed');
       }
 
       const token: GPS51AuthToken = {
-        access_token: data.access_token,
-        token_type: data.token_type || 'Bearer',
-        expires_in: data.expires_in || 3600,
-        expires_at: new Date(Date.now() + (data.expires_in || 3600) * 1000)
+        access_token: gps51Client.getToken() || '',
+        token_type: 'Bearer',
+        expires_in: 24 * 60 * 60, // 24 hours
+        expires_at: new Date(Date.now() + (24 * 60 * 60 * 1000))
       };
 
       this.token = token;
@@ -61,9 +61,9 @@ export class GPS51AuthService {
       localStorage.setItem('gps51_token', JSON.stringify(token));
       localStorage.setItem('gps51_credentials', JSON.stringify({
         username: credentials.username,
-        apiKey: credentials.apiKey,
-        apiUrl: credentials.apiUrl
-        // Note: We don't store password for security
+        apiUrl: credentials.apiUrl,
+        from: credentials.from,
+        type: credentials.type
       }));
       
       console.log('GPS51 authentication successful');
@@ -95,8 +95,8 @@ export class GPS51AuthService {
 
     // Check if token exists and is still valid
     if (this.token) {
-      const currentTime = new Date().getTime(); // Fixed: use getTime() method
-      const expiryTime = this.token.expires_at.getTime(); // Fixed: use getTime() method
+      const currentTime = new Date().getTime();
+      const expiryTime = this.token.expires_at.getTime();
       
       if (currentTime >= expiryTime) {
         console.log('GPS51 token expired, attempting refresh...');
@@ -118,7 +118,7 @@ export class GPS51AuthService {
     // Try to load credentials from localStorage if not in memory
     if (!this.credentials) {
       const storedCreds = localStorage.getItem('gps51_credentials');
-      const storedPassword = localStorage.getItem('gps51_password'); // We'll need password for refresh
+      const storedPassword = localStorage.getItem('gps51_password');
       
       if (storedCreds && storedPassword) {
         try {
@@ -140,7 +140,14 @@ export class GPS51AuthService {
     }
 
     try {
-      return await this.authenticate(this.credentials);
+      // Try to refresh using the GPS51 client
+      const refreshSuccess = await gps51Client.refreshToken();
+      if (refreshSuccess) {
+        return await this.authenticate(this.credentials);
+      } else {
+        // If refresh failed, try full re-authentication
+        return await this.authenticate(this.credentials);
+      }
     } catch (error) {
       console.error('Failed to refresh GPS51 token:', error);
       return null;
@@ -150,6 +157,7 @@ export class GPS51AuthService {
   logout(): void {
     this.token = null;
     this.credentials = null;
+    gps51Client.logout();
     localStorage.removeItem('gps51_token');
     localStorage.removeItem('gps51_credentials');
     localStorage.removeItem('gps51_password');
@@ -157,31 +165,20 @@ export class GPS51AuthService {
   }
 
   isAuthenticated(): boolean {
-    return this.token !== null && new Date().getTime() < this.token.expires_at.getTime(); // Fixed: use getTime() method
+    return this.token !== null && new Date().getTime() < this.token.expires_at.getTime();
   }
 
   getTokenInfo(): GPS51AuthToken | null {
     return this.token;
   }
 
-  // Helper method to get stored credentials for sync operations
-  getStoredCredentials(): GPS51Credentials | null {
-    const storedCreds = localStorage.getItem('gps51_credentials');
-    const storedPassword = localStorage.getItem('gps51_password');
-    
-    if (storedCreds && storedPassword) {
-      try {
-        const creds = JSON.parse(storedCreds);
-        return {
-          ...creds,
-          password: storedPassword
-        };
-      } catch (e) {
-        console.warn('Failed to parse stored GPS51 credentials');
-      }
-    }
-    
-    return null;
+  getUser() {
+    return gps51Client.getUser();
+  }
+
+  // Helper method to get GPS51 client instance
+  getClient() {
+    return gps51Client;
   }
 }
 
