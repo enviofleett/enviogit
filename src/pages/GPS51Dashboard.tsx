@@ -22,7 +22,8 @@ const GPS51Dashboard: React.FC = () => {
     const credentials = {
       username: 'demo',
       password: 'demo',
-      apiKey: 'demo-key'
+      apiKey: 'demo-key',
+      apiUrl: 'https://api.gps51.com' // Added missing apiUrl property
     };
     await connect(credentials);
   };
