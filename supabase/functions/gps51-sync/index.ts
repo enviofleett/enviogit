@@ -63,16 +63,25 @@ serve(async (req) => {
     let requestBody: GPS51SyncRequest;
     try {
       const requestText = await req.text();
-      console.log('Request body length:', requestText.length);
+      console.log('Request body received:', {
+        length: requestText.length,
+        preview: requestText.substring(0, 200) + (requestText.length > 200 ? '...' : '')
+      });
       
       if (!requestText || requestText.trim() === '') {
         throw new Error('Empty request body received');
       }
 
       requestBody = JSON.parse(requestText);
-      console.log("Incoming Edge Function Request Body:", requestBody);
+      console.log("GPS51 Sync Request Debug:", {
+        hasUsername: !!requestBody.username,
+        hasPassword: !!requestBody.password,
+        hasApiUrl: !!requestBody.apiUrl,
+        passwordLength: requestBody.password?.length || 0,
+        apiUrl: requestBody.apiUrl
+      });
     } catch (e) {
-      console.error("Error parsing incoming request body:", e);
+      console.error("Error parsing request body:", e);
       return new Response(JSON.stringify({ error: 'Invalid or empty request body. Expected JSON.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
@@ -98,12 +107,22 @@ serve(async (req) => {
     const loginPayload = {
       action: "login",
       username: username,
-      password: password,
+      password: password, // Should already be MD5 hashed from client
       from: "WEB",
       type: "USER"
     };
 
-    console.log("Attempting GPS51 login...");
+    console.log("GPS51 Login Request Debug:", {
+      action: loginPayload.action,
+      username: loginPayload.username,
+      passwordLength: loginPayload.password.length,
+      isValidMD5: /^[a-f0-9]{32}$/.test(loginPayload.password),
+      from: loginPayload.from,
+      type: loginPayload.type,
+      apiUrl: baseUrl
+    });
+
+    console.log("Sending GPS51 login request...");
     const loginResponse = await fetch(baseUrl, {
       method: 'POST',
       headers: {
@@ -113,21 +132,52 @@ serve(async (req) => {
     });
 
     const loginResponseText = await loginResponse.text();
-    console.log(`GPS51 Login Response: ${loginResponse.status} - ${loginResponseText}`);
+    console.log(`GPS51 Login Response Debug:`, {
+      status: loginResponse.status,
+      statusText: loginResponse.statusText,
+      contentType: loginResponse.headers.get('content-type'),
+      contentLength: loginResponse.headers.get('content-length'),
+      bodyLength: loginResponseText.length,
+      bodyPreview: loginResponseText.substring(0, 500),
+      isJSON: loginResponseText.trim().startsWith('{') || loginResponseText.trim().startsWith('[')
+    });
 
     if (!loginResponse.ok) {
-      throw new Error(`GPS51 login failed: ${loginResponse.status} - ${loginResponseText}`);
+      throw new Error(`GPS51 login HTTP error: ${loginResponse.status} ${loginResponse.statusText} - ${loginResponseText}`);
     }
 
     let loginData: GPS51ApiResponse;
     try {
       loginData = JSON.parse(loginResponseText);
-    } catch (e) {
+      console.log('GPS51 Login Parsed Response:', {
+        status: loginData.status,
+        message: loginData.message,
+        hasToken: !!loginData.token,
+        tokenLength: loginData.token?.length || 0
+      });
+    } catch (parseError) {
+      console.error('Failed to parse GPS51 login response as JSON:', {
+        error: parseError.message,
+        responseText: loginResponseText
+      });
       throw new Error(`Failed to parse login response: ${loginResponseText}`);
     }
 
     if (loginData.status !== 0 || !loginData.token) {
-      throw new Error(`GPS51 login failed: ${loginData.message || 'No token received'}`);
+      const errorDetails = {
+        status: loginData.status,
+        message: loginData.message,
+        hasToken: !!loginData.token,
+        fullResponse: loginData
+      };
+      console.error('GPS51 login failed:', errorDetails);
+      
+      let errorMessage = loginData.message || `Login failed with status: ${loginData.status}`;
+      if (loginData.status === 8901) {
+        errorMessage += ' (Status 8901: Authentication parameter error - verify username, password MD5 hash, from, and type parameters)';
+      }
+      
+      throw new Error(errorMessage);
     }
 
     const token = loginData.token;
@@ -280,7 +330,12 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('GPS51 sync error:', error);
+    console.error('GPS51 sync error:', {
+      message: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString()
+    });
+    
     return new Response(
       JSON.stringify({
         success: false,

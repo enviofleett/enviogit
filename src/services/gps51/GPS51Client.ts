@@ -103,6 +103,12 @@ export class GPS51Client {
     return md5(`${timestamp}_${random}`).toString();
   }
 
+  private validateMD5Hash(password: string): boolean {
+    // Check if password is a valid MD5 hash (32 lowercase hex characters)
+    const md5Regex = /^[a-f0-9]{32}$/;
+    return md5Regex.test(password);
+  }
+
   private async makeRequest(
     action: string, 
     params: Record<string, any> = {}, 
@@ -117,7 +123,21 @@ export class GPS51Client {
     };
 
     try {
-      console.log(`GPS51 API Request: ${action}`, { url: this.baseURL, data: requestData });
+      console.log(`GPS51 API Request: ${action}`, { 
+        url: this.baseURL, 
+        data: requestData,
+        // Log password validation for login requests
+        ...(action === 'login' && params.password ? {
+          passwordValidation: {
+            isValidMD5: this.validateMD5Hash(params.password),
+            passwordLength: params.password.length,
+            hasUppercase: /[A-Z]/.test(params.password),
+            hasLowercase: /[a-z]/.test(params.password),
+            hasNumbers: /[0-9]/.test(params.password),
+            hasSpecialChars: /[^a-zA-Z0-9]/.test(params.password)
+          }
+        } : {})
+      });
       
       const response = await fetch(this.baseURL, {
         method: 'POST',
@@ -129,21 +149,32 @@ export class GPS51Client {
       });
       
       const responseText = await response.text();
-      console.log(`GPS51 API Response (${action}):`, {
+      console.log(`GPS51 API Raw Response (${action}):`, {
         status: response.status,
+        statusText: response.statusText,
         contentType: response.headers.get('Content-Type'),
-        body: responseText
+        contentLength: response.headers.get('Content-Length'),
+        rawBody: responseText,
+        bodyLength: responseText.length
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${responseText}`);
+        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${responseText}`);
       }
 
       let data: GPS51ApiResponse;
       try {
         data = JSON.parse(responseText);
+        console.log(`GPS51 API Parsed Response (${action}):`, {
+          status: data.status,
+          message: data.message,
+          hasToken: !!data.token,
+          hasUser: !!data.user,
+          hasData: !!data.data,
+          dataType: Array.isArray(data.data) ? 'array' : typeof data.data,
+          dataLength: Array.isArray(data.data) ? data.data.length : undefined
+        });
       } catch (parseError) {
-        // Handle non-JSON responses
         console.warn('Non-JSON response received:', responseText);
         data = {
           status: GPS51_STATUS.SUCCESS,
@@ -157,7 +188,12 @@ export class GPS51Client {
 
       return data;
     } catch (error) {
-      console.error(`GPS51 API Error (${action}):`, error);
+      console.error(`GPS51 API Error (${action}):`, {
+        error: error.message,
+        requestData,
+        retryCount: this.retryCount,
+        maxRetries: this.maxRetries
+      });
       
       if (this.retryCount < this.maxRetries) {
         this.retryCount++;
@@ -175,26 +211,55 @@ export class GPS51Client {
 
   async authenticate(credentials: GPS51AuthCredentials): Promise<{ success: boolean; user?: GPS51User; error?: string }> {
     try {
-      console.log('Authenticating with GPS51...', { 
+      console.log('GPS51 Authentication Debug Info:', { 
         username: credentials.username,
+        passwordProvided: !!credentials.password,
+        passwordLength: credentials.password?.length || 0,
+        isPasswordMD5: this.validateMD5Hash(credentials.password || ''),
         apiUrl: credentials.apiUrl,
         from: credentials.from,
         type: credentials.type 
       });
+
+      // Validate that password is already MD5 hashed
+      if (!this.validateMD5Hash(credentials.password)) {
+        console.warn('Password does not appear to be a valid MD5 hash. Expected 32 lowercase hex characters.');
+        console.log('Password validation details:', {
+          provided: credentials.password,
+          length: credentials.password.length,
+          isHex: /^[a-fA-F0-9]+$/.test(credentials.password),
+          isLowercase: credentials.password === credentials.password.toLowerCase()
+        });
+      }
 
       // Update base URL if provided
       if (credentials.apiUrl) {
         this.baseURL = credentials.apiUrl;
       }
 
-      const response = await this.makeRequest('login', {
+      const loginParams = {
         username: credentials.username,
         password: credentials.password, // Should already be MD5 hashed
         from: credentials.from,
         type: credentials.type
-      });
+      };
 
-      console.log('GPS51 Login Response:', response);
+      console.log('Sending login request with parameters:', loginParams);
+
+      const response = await this.makeRequest('login', loginParams);
+
+      console.log('GPS51 Login Response Analysis:', {
+        status: response.status,
+        message: response.message,
+        hasToken: !!response.token,
+        hasUser: !!response.user,
+        tokenLength: response.token?.length || 0,
+        userInfo: response.user ? {
+          username: response.user.username,
+          usertype: response.user.usertype,
+          companyname: response.user.companyname
+        } : null
+      });
 
       if (response.status === GPS51_STATUS.SUCCESS && response.token) {
         this.token = response.token;
@@ -211,15 +276,41 @@ export class GPS51Client {
           user: this.user || undefined
         };
       } else {
-        const error = response.message || `Authentication failed with status: ${response.status}`;
-        console.error('GPS51 Authentication failed:', error);
+        const errorDetails = {
+          status: response.status,
+          message: response.message,
+          expectedStatus: GPS51_STATUS.SUCCESS,
+          hasToken: !!response.token,
+          rawResponse: response
+        };
+        
+        console.error('GPS51 Authentication failed - detailed analysis:', errorDetails);
+        
+        let errorMessage = response.message || `Authentication failed with status: ${response.status}`;
+        
+        // Provide specific guidance for common error statuses
+        if (response.status === 8901) {
+          errorMessage += ' (Status 8901 typically indicates authentication parameter issues - check username, password MD5 hash, from, and type parameters)';
+        }
+        
         return {
           success: false,
-          error
+          error: errorMessage
         };
       }
     } catch (error) {
-      console.error('GPS51 Authentication error:', error);
+      console.error('GPS51 Authentication exception:', {
+        error: error.message,
+        stack: error.stack,
+        credentials: {
+          username: credentials.username,
+          hasPassword: !!credentials.password,
+          apiUrl: credentials.apiUrl,
+          from: credentials.from,
+          type: credentials.type
+        }
+      });
+      
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown authentication error'
