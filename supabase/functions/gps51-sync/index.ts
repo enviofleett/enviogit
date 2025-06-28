@@ -7,9 +7,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface GPS51Config {
-  baseUrl: string;
-  apiKey: string;
+interface GPS51SyncRequest {
+  apiUrl: string;
+  accessToken: string;
 }
 
 interface GPS51Vehicle {
@@ -40,32 +40,31 @@ serve(async (req) => {
   try {
     console.log('Starting GPS51 sync process...');
 
+    // Accept configuration from request body
+    const { apiUrl, accessToken }: GPS51SyncRequest = await req.json();
+
+    if (!apiUrl || !accessToken) {
+      throw new Error('Missing required parameters: apiUrl and accessToken are required');
+    }
+
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // GPS51 API configuration
-    const gps51Config: GPS51Config = {
-      baseUrl: Deno.env.get('GPS51_API_URL') || 'https://api.gps51.com/v1',
-      apiKey: Deno.env.get('GPS51_API_KEY')!,
-    };
-
-    if (!gps51Config.apiKey) {
-      throw new Error('GPS51_API_KEY environment variable is required');
-    }
+    const baseUrl = apiUrl.replace(/\/$/, '');
 
     // Fetch vehicles from GPS51
     console.log('Fetching vehicles from GPS51...');
-    const vehiclesResponse = await fetch(`${gps51Config.baseUrl}/vehicles`, {
+    const vehiclesResponse = await fetch(`${baseUrl}/v1/vehicles`, {
       headers: {
-        'Authorization': `Bearer ${gps51Config.apiKey}`,
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
     });
 
     if (!vehiclesResponse.ok) {
-      throw new Error(`GPS51 API error: ${vehiclesResponse.status}`);
+      throw new Error(`GPS51 API error: ${vehiclesResponse.status} - ${await vehiclesResponse.text()}`);
     }
 
     const gps51Vehicles: GPS51Vehicle[] = await vehiclesResponse.json();
@@ -95,9 +94,9 @@ serve(async (req) => {
 
     // Fetch latest positions from GPS51
     console.log('Fetching latest positions from GPS51...');
-    const positionsResponse = await fetch(`${gps51Config.baseUrl}/positions/latest`, {
+    const positionsResponse = await fetch(`${baseUrl}/v1/positions/latest`, {
       headers: {
-        'Authorization': `Bearer ${gps51Config.apiKey}`,
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
     });
@@ -109,7 +108,7 @@ serve(async (req) => {
     const gps51Positions: GPS51Position[] = await positionsResponse.json();
     console.log(`Found ${gps51Positions.length} position updates`);
 
-    // Store positions in the new vehicle_positions table
+    // Store positions in the vehicle_positions table
     const positionData = gps51Positions.map(pos => ({
       vehicle_id: pos.vehicleId,
       latitude: pos.latitude,
@@ -129,7 +128,6 @@ serve(async (req) => {
 
       if (positionError) {
         console.error('Error storing positions:', positionError);
-        // Don't throw here - we still want to report success for vehicle sync
       }
     }
 

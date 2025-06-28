@@ -10,6 +10,7 @@ interface GPS51AuthRequest {
   username: string;
   password: string;
   apiKey: string;
+  apiUrl: string; // Now accepting dynamic API URL
 }
 
 interface GPS51AuthResponse {
@@ -27,16 +28,16 @@ serve(async (req) => {
   try {
     console.log('GPS51 authentication request received');
 
-    const { username, password, apiKey }: GPS51AuthRequest = await req.json();
+    const { username, password, apiKey, apiUrl }: GPS51AuthRequest = await req.json();
 
-    if (!username || !password || !apiKey) {
-      throw new Error('Missing required authentication parameters');
+    if (!username || !password || !apiKey || !apiUrl) {
+      throw new Error('Missing required authentication parameters: username, password, apiKey, and apiUrl are required');
     }
 
-    // GPS51 API authentication endpoint
-    const gps51AuthUrl = Deno.env.get('GPS51_AUTH_URL') || 'https://api.gps51.com/oauth/token';
+    // Use the provided API URL instead of environment variable
+    const gps51AuthUrl = `${apiUrl.replace(/\/$/, '')}/oauth/token`;
     
-    console.log('Authenticating with GPS51 API...');
+    console.log('Authenticating with GPS51 API at:', gps51AuthUrl);
 
     const authResponse = await fetch(gps51AuthUrl, {
       method: 'POST',
@@ -55,7 +56,7 @@ serve(async (req) => {
     if (!authResponse.ok) {
       const errorText = await authResponse.text();
       console.error('GPS51 auth failed:', authResponse.status, errorText);
-      throw new Error(`GPS51 authentication failed: ${authResponse.status}`);
+      throw new Error(`GPS51 authentication failed: ${authResponse.status} - ${errorText}`);
     }
 
     const authData: GPS51AuthResponse = await authResponse.json();

@@ -12,6 +12,7 @@ export interface GPS51Credentials {
   username: string;
   password: string;
   apiKey: string;
+  apiUrl: string; // Added apiUrl to credentials
 }
 
 export class GPS51AuthService {
@@ -28,14 +29,23 @@ export class GPS51AuthService {
 
   async authenticate(credentials: GPS51Credentials): Promise<GPS51AuthToken> {
     try {
-      console.log('Authenticating with GPS51...');
+      console.log('Authenticating with GPS51 using dynamic configuration...');
       
-      // Call our edge function for authentication
+      // Call our edge function for authentication with dynamic config
       const { data, error } = await supabase.functions.invoke('gps51-auth', {
-        body: credentials
+        body: {
+          username: credentials.username,
+          password: credentials.password,
+          apiKey: credentials.apiKey,
+          apiUrl: credentials.apiUrl
+        }
       });
 
       if (error) throw error;
+
+      if (!data.success) {
+        throw new Error(data.error || 'Authentication failed');
+      }
 
       const token: GPS51AuthToken = {
         access_token: data.access_token,
@@ -47,8 +57,14 @@ export class GPS51AuthService {
       this.token = token;
       this.credentials = credentials;
       
-      // Store token in localStorage for persistence
+      // Store token and credentials in localStorage for persistence
       localStorage.setItem('gps51_token', JSON.stringify(token));
+      localStorage.setItem('gps51_credentials', JSON.stringify({
+        username: credentials.username,
+        apiKey: credentials.apiKey,
+        apiUrl: credentials.apiUrl
+        // Note: We don't store password for security
+      }));
       
       console.log('GPS51 authentication successful');
       return token;
@@ -83,10 +99,13 @@ export class GPS51AuthService {
       const expiryTime = this.token.expires_at.getTime();
       
       if (currentTime >= expiryTime) {
-        console.log('GPS51 token expired, clearing...');
+        console.log('GPS51 token expired, attempting refresh...');
         this.token = null;
         localStorage.removeItem('gps51_token');
-        return null;
+        
+        // Try to refresh if we have stored credentials
+        const refreshed = await this.refreshToken();
+        return refreshed ? refreshed.access_token : null;
       }
 
       return this.token.access_token;
@@ -96,6 +115,25 @@ export class GPS51AuthService {
   }
 
   async refreshToken(): Promise<GPS51AuthToken | null> {
+    // Try to load credentials from localStorage if not in memory
+    if (!this.credentials) {
+      const storedCreds = localStorage.getItem('gps51_credentials');
+      const storedPassword = localStorage.getItem('gps51_password'); // We'll need password for refresh
+      
+      if (storedCreds && storedPassword) {
+        try {
+          const creds = JSON.parse(storedCreds);
+          this.credentials = {
+            ...creds,
+            password: storedPassword
+          };
+        } catch (e) {
+          console.warn('Failed to parse stored GPS51 credentials');
+          return null;
+        }
+      }
+    }
+
     if (!this.credentials) {
       console.warn('No stored credentials for GPS51 token refresh');
       return null;
@@ -113,6 +151,8 @@ export class GPS51AuthService {
     this.token = null;
     this.credentials = null;
     localStorage.removeItem('gps51_token');
+    localStorage.removeItem('gps51_credentials');
+    localStorage.removeItem('gps51_password');
     console.log('GPS51 session logged out');
   }
 
@@ -122,6 +162,26 @@ export class GPS51AuthService {
 
   getTokenInfo(): GPS51AuthToken | null {
     return this.token;
+  }
+
+  // Helper method to get stored credentials for sync operations
+  getStoredCredentials(): GPS51Credentials | null {
+    const storedCreds = localStorage.getItem('gps51_credentials');
+    const storedPassword = localStorage.getItem('gps51_password');
+    
+    if (storedCreds && storedPassword) {
+      try {
+        const creds = JSON.parse(storedCreds);
+        return {
+          ...creds,
+          password: storedPassword
+        };
+      } catch (e) {
+        console.warn('Failed to parse stored GPS51 credentials');
+      }
+    }
+    
+    return null;
   }
 }
 
