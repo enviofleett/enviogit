@@ -24,7 +24,27 @@ export const GPS51CredentialsForm = () => {
   const [isTesting, setIsTesting] = useState(false);
   
   const { toast } = useToast();
-  const { status, connect, disconnect } = useGPS51SessionBridge();
+  const { status, connect, disconnect, refresh } = useGPS51SessionBridge();
+
+  // Load saved configuration on component mount
+  useEffect(() => {
+    const loadConfiguration = () => {
+      const savedConfig = {
+        apiUrl: localStorage.getItem('gps51_api_url') || 'https://www.gps51.com/webapi',
+        username: localStorage.getItem('gps51_username') || '',
+        from: (localStorage.getItem('gps51_from') as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN') || 'WEB',
+        type: (localStorage.getItem('gps51_type') as 'USER' | 'DEVICE') || 'USER',
+        apiKey: localStorage.getItem('gps51_api_key') || ''
+      };
+      
+      setFormData(prev => ({
+        ...prev,
+        ...savedConfig
+      }));
+    };
+
+    loadConfiguration();
+  }, []);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
@@ -33,18 +53,37 @@ export const GPS51CredentialsForm = () => {
     }));
   };
 
-  const handleSave = async () => {
+  const validateForm = () => {
     if (!formData.apiUrl || !formData.username || !formData.password) {
       toast({
         title: "Missing Information",
         description: "Please fill in API URL, username, and password.",
         variant: "destructive",
       });
-      return;
+      return false;
     }
+
+    // Basic URL validation
+    try {
+      new URL(formData.apiUrl);
+    } catch {
+      toast({
+        title: "Invalid API URL",
+        description: "Please enter a valid API URL.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSave = async () => {
+    if (!validateForm()) return;
 
     setIsLoading(true);
     try {
+      console.log('Saving GPS51 credentials...');
       const success = await connect(formData);
       
       if (success) {
@@ -52,6 +91,9 @@ export const GPS51CredentialsForm = () => {
           title: "Settings Saved",
           description: "GPS51 credentials have been saved and authenticated successfully.",
         });
+        
+        // Clear password field for security
+        setFormData(prev => ({ ...prev, password: '' }));
       } else {
         toast({
           title: "Connection Failed",
@@ -60,6 +102,7 @@ export const GPS51CredentialsForm = () => {
         });
       }
     } catch (error) {
+      console.error('Save credentials error:', error);
       toast({
         title: "Error",
         description: "Failed to save credentials. Please try again.",
@@ -71,17 +114,11 @@ export const GPS51CredentialsForm = () => {
   };
 
   const handleTestConnection = async () => {
-    if (!formData.apiUrl || !formData.username || !formData.password) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in all required fields before testing.",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (!validateForm()) return;
 
     setIsTesting(true);
     try {
+      console.log('Testing GPS51 connection...');
       const success = await connect(formData);
       
       if (success) {
@@ -97,6 +134,7 @@ export const GPS51CredentialsForm = () => {
         });
       }
     } catch (error) {
+      console.error('Test connection error:', error);
       toast({
         title: "Connection Failed",
         description: error instanceof Error ? error.message : 'Connection failed',
@@ -104,6 +142,34 @@ export const GPS51CredentialsForm = () => {
       });
     } finally {
       setIsTesting(false);
+    }
+  };
+
+  const handleSyncData = async () => {
+    if (!status.isAuthenticated) {
+      toast({
+        title: "Not Authenticated",
+        description: "Please save and connect first before syncing data.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      console.log('Syncing GPS51 data...');
+      const result = await refresh();
+      
+      toast({
+        title: "Sync Successful",
+        description: `Synced ${result.vehiclesSynced} vehicles and ${result.positionsStored} positions.`,
+      });
+    } catch (error) {
+      console.error('Sync data error:', error);
+      toast({
+        title: "Sync Failed",
+        description: error instanceof Error ? error.message : 'Data sync failed',
+        variant: "destructive",
+      });
     }
   };
 
@@ -254,6 +320,18 @@ export const GPS51CredentialsForm = () => {
             {isTesting ? 'Testing...' : 'Test Connection'}
           </Button>
 
+          {status.isAuthenticated && (
+            <Button 
+              onClick={handleSyncData}
+              disabled={status.syncStatus === 'syncing'}
+              variant="secondary"
+              className="flex items-center gap-2"
+            >
+              <Save className="h-4 w-4" />
+              {status.syncStatus === 'syncing' ? 'Syncing...' : 'Sync Data'}
+            </Button>
+          )}
+
           {status.isConfigured && (
             <Button 
               onClick={handleClearConfiguration}
@@ -266,7 +344,7 @@ export const GPS51CredentialsForm = () => {
           )}
         </div>
 
-        {/* Connection Status Display */}
+        {/* Enhanced Status Display */}
         {status.error && (
           <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
             <p className="text-sm text-red-800">
@@ -282,11 +360,22 @@ export const GPS51CredentialsForm = () => {
               <span className="block text-xs mt-1">
                 Connection Health: {status.connectionHealth.toUpperCase()}
               </span>
+              <span className="block text-xs mt-1">
+                Sync Status: {status.syncStatus.toUpperCase()}
+              </span>
               {status.lastSync && (
                 <span className="block text-xs mt-1">
                   Last sync: {status.lastSync.toLocaleString()}
                 </span>
               )}
+            </p>
+          </div>
+        )}
+
+        {status.syncStatus === 'syncing' && (
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+            <p className="text-sm text-blue-800">
+              🔄 Syncing data from GPS51...
             </p>
           </div>
         )}

@@ -1,7 +1,8 @@
 
 import { useState, useEffect } from 'react';
 import { gps51ConfigService } from '@/services/gp51/GPS51ConfigService';
-import { GPS51AuthService } from '@/services/gp51/GPS51AuthService'; // Fixed: consistent casing
+import { GPS51AuthService } from '@/services/gp51/GPS51AuthService';
+import { md5 } from 'js-md5';
 
 export interface SessionStatus {
   isConnected: boolean;
@@ -42,6 +43,7 @@ export const useGPS51SessionBridge = () => {
           connectionHealth: token ? 'good' : 'lost'
         }));
       } catch (error) {
+        console.error('GPS51 status check failed:', error);
         setStatus(prev => ({
           ...prev,
           error: error instanceof Error ? error.message : 'Unknown error',
@@ -53,7 +55,7 @@ export const useGPS51SessionBridge = () => {
     };
 
     checkStatus();
-    const interval = setInterval(checkStatus, 30000);
+    const interval = setInterval(checkStatus, 30000); // Check every 30 seconds
 
     return () => clearInterval(interval);
   }, [authService]);
@@ -62,8 +64,9 @@ export const useGPS51SessionBridge = () => {
     try {
       setStatus(prev => ({ ...prev, error: null, syncStatus: 'syncing' }));
       
-      // Hash password with MD5 for GPS51 API
-      const { md5 } = await import('js-md5');
+      console.log('Connecting to GPS51 with credentials...');
+      
+      // Hash password with MD5 for GPS51 API (client-side hashing)
       const hashedPassword = md5(credentials.password).toLowerCase();
       
       // Save configuration first
@@ -78,6 +81,8 @@ export const useGPS51SessionBridge = () => {
         password: hashedPassword
       });
       
+      console.log('GPS51 authentication successful');
+      
       setStatus(prev => ({ 
         ...prev, 
         isAuthenticated: true, 
@@ -85,11 +90,13 @@ export const useGPS51SessionBridge = () => {
         isConfigured: true,
         lastSync: new Date(),
         syncStatus: 'success',
-        connectionHealth: 'good'
+        connectionHealth: 'good',
+        error: null
       }));
       
       return true;
     } catch (error) {
+      console.error('GPS51 connection failed:', error);
       setStatus(prev => ({
         ...prev,
         error: error instanceof Error ? error.message : 'Connection failed',
@@ -103,6 +110,7 @@ export const useGPS51SessionBridge = () => {
   };
 
   const disconnect = () => {
+    authService.logout();
     gps51ConfigService.clearConfiguration();
     setStatus({
       isConnected: false,
@@ -117,9 +125,13 @@ export const useGPS51SessionBridge = () => {
 
   const refresh = async () => {
     try {
-      setStatus(prev => ({ ...prev, syncStatus: 'syncing' }));
+      setStatus(prev => ({ ...prev, syncStatus: 'syncing', error: null }));
+      console.log('Starting GPS51 data refresh...');
+      
       const result = await gps51ConfigService.syncData();
+      
       if (result.success) {
+        console.log('GPS51 data refresh successful:', result);
         setStatus(prev => ({
           ...prev,
           lastSync: new Date(),
@@ -132,6 +144,7 @@ export const useGPS51SessionBridge = () => {
       }
       return result;
     } catch (error) {
+      console.error('GPS51 refresh failed:', error);
       setStatus(prev => ({
         ...prev,
         error: error instanceof Error ? error.message : 'Sync failed',

@@ -61,6 +61,7 @@ export interface GPS51Position {
   radius?: number;
   gotsrc?: string;
   rxlevel?: number;
+  voltagepercent?: number;
 }
 
 export interface GPS51ApiResponse {
@@ -92,18 +93,14 @@ export class GPS51Client {
   private maxRetries = 3;
   private retryDelay = 1000;
 
-  constructor(baseURL = 'https://api.gps51.com/webapi') {
+  constructor(baseURL = 'https://www.gps51.com/webapi') {
     this.baseURL = baseURL;
   }
 
   private generateToken(): string {
     const timestamp = Date.now();
     const random = Math.random().toString(36).substring(7);
-    return md5(`${timestamp}_${random}`).toString(); // Fixed: ensure md5 returns string
-  }
-
-  private encryptPassword(password: string): string {
-    return md5(password).toString().toLowerCase(); // Fixed: ensure md5 returns string
+    return md5(`${timestamp}_${random}`).toString();
   }
 
   private async makeRequest(
@@ -112,33 +109,26 @@ export class GPS51Client {
     method: 'GET' | 'POST' = 'POST'
   ): Promise<GPS51ApiResponse> {
     const requestToken = this.token || this.generateToken();
-    const url = new URL(this.baseURL);
     
-    url.searchParams.set('action', action);
-    url.searchParams.set('token', requestToken);
-    
-    const requestOptions: RequestInit = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
+    const requestData = {
+      action,
+      token: requestToken,
+      ...params
     };
 
-    if (method === 'POST' && Object.keys(params).length > 0) {
-      requestOptions.body = JSON.stringify(params);
-    } else if (method === 'GET') {
-      Object.entries(params).forEach(([key, value]) => {
-        url.searchParams.set(key, String(value));
-      });
-    }
-
     try {
-      console.log(`GPS51 API Request: ${action}`, { url: url.toString(), params });
+      console.log(`GPS51 API Request: ${action}`, { url: this.baseURL, data: requestData });
       
-      const response = await fetch(url.toString(), requestOptions);
+      const response = await fetch(this.baseURL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(requestData)
+      });
+      
       const responseText = await response.text();
-      
       console.log(`GPS51 API Response (${action}):`, {
         status: response.status,
         contentType: response.headers.get('Content-Type'),
@@ -153,6 +143,8 @@ export class GPS51Client {
       try {
         data = JSON.parse(responseText);
       } catch (parseError) {
+        // Handle non-JSON responses
+        console.warn('Non-JSON response received:', responseText);
         data = {
           status: GPS51_STATUS.SUCCESS,
           message: responseText,
@@ -183,18 +175,31 @@ export class GPS51Client {
 
   async authenticate(credentials: GPS51AuthCredentials): Promise<{ success: boolean; user?: GPS51User; error?: string }> {
     try {
-      // Password should already be MD5 hashed
+      console.log('Authenticating with GPS51...', { 
+        username: credentials.username,
+        apiUrl: credentials.apiUrl,
+        from: credentials.from,
+        type: credentials.type 
+      });
+
+      // Update base URL if provided
+      if (credentials.apiUrl) {
+        this.baseURL = credentials.apiUrl;
+      }
+
       const response = await this.makeRequest('login', {
         username: credentials.username,
-        password: credentials.password,
+        password: credentials.password, // Should already be MD5 hashed
         from: credentials.from,
         type: credentials.type
       });
 
+      console.log('GPS51 Login Response:', response);
+
       if (response.status === GPS51_STATUS.SUCCESS && response.token) {
         this.token = response.token;
         this.user = response.user || null;
-        this.tokenExpiry = Date.now() + (24 * 60 * 60 * 1000);
+        this.tokenExpiry = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
         
         console.log('GPS51 Authentication successful:', {
           token: this.token,
@@ -206,9 +211,11 @@ export class GPS51Client {
           user: this.user || undefined
         };
       } else {
+        const error = response.message || `Authentication failed with status: ${response.status}`;
+        console.error('GPS51 Authentication failed:', error);
         return {
           success: false,
-          error: response.message || 'Authentication failed'
+          error
         };
       }
     } catch (error) {
@@ -223,32 +230,48 @@ export class GPS51Client {
   async getDeviceList(): Promise<GPS51Device[]> {
     this.ensureAuthenticated();
     
-    const response = await this.makeRequest('querymonitorlist');
+    try {
+      const response = await this.makeRequest('querymonitorlist');
+      console.log('GPS51 Device List Response:', response);
 
-    if (response.status === GPS51_STATUS.SUCCESS) {
-      return response.devices || response.data || [];
-    } else {
-      throw new Error(response.message || 'Failed to fetch device list');
+      if (response.status === GPS51_STATUS.SUCCESS) {
+        const devices = response.data || response.devices || [];
+        console.log(`Retrieved ${devices.length} devices from GPS51`);
+        return Array.isArray(devices) ? devices : [];
+      } else {
+        throw new Error(response.message || 'Failed to fetch device list');
+      }
+    } catch (error) {
+      console.error('Failed to get device list:', error);
+      throw error;
     }
   }
 
   async getRealtimePositions(deviceids: string[] = [], lastQueryTime?: number): Promise<GPS51Position[]> {
     this.ensureAuthenticated();
     
-    const params: any = {};
-    if (deviceids.length > 0) {
-      params.deviceids = deviceids.join(',');
-    }
-    if (lastQueryTime) {
-      params.lastquerypositiontime = lastQueryTime;
-    }
+    try {
+      const params: any = {};
+      if (deviceids.length > 0) {
+        params.deviceids = deviceids.join(',');
+      }
+      if (lastQueryTime) {
+        params.lastquerypositiontime = lastQueryTime;
+      }
 
-    const response = await this.makeRequest('lastposition', params);
+      const response = await this.makeRequest('lastposition', params);
+      console.log('GPS51 Position Response:', response);
 
-    if (response.status === GPS51_STATUS.SUCCESS) {
-      return response.positions || response.data || [];
-    } else {
-      throw new Error(response.message || 'Failed to fetch realtime positions');
+      if (response.status === GPS51_STATUS.SUCCESS) {
+        const positions = response.data || response.positions || [];
+        console.log(`Retrieved ${positions.length} positions from GPS51`);
+        return Array.isArray(positions) ? positions : [];
+      } else {
+        throw new Error(response.message || 'Failed to fetch realtime positions');
+      }
+    } catch (error) {
+      console.error('Failed to get realtime positions:', error);
+      throw error;
     }
   }
 
@@ -258,6 +281,7 @@ export class GPS51Client {
     }
 
     try {
+      // Try a simple API call to check if token is still valid
       const response = await this.makeRequest('querymonitorlist');
       
       if (response.status === GPS51_STATUS.SUCCESS) {

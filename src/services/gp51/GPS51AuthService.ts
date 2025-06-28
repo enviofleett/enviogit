@@ -1,3 +1,4 @@
+
 import { gps51Client, GPS51AuthCredentials } from '../gps51/GPS51Client';
 
 export interface GPS51AuthToken {
@@ -30,11 +31,11 @@ export class GPS51AuthService {
 
   async authenticate(credentials: GPS51Credentials): Promise<GPS51AuthToken> {
     try {
-      console.log('Authenticating with GPS51 using enhanced client...');
+      console.log('GPS51AuthService: Starting authentication...');
       
       const authCredentials: GPS51AuthCredentials = {
         username: credentials.username,
-        password: credentials.password,
+        password: credentials.password, // Should already be MD5 hashed
         apiUrl: credentials.apiUrl,
         from: credentials.from || 'WEB',
         type: credentials.type || 'USER'
@@ -56,20 +57,31 @@ export class GPS51AuthService {
       this.token = token;
       this.credentials = credentials;
       
-      // Store token and credentials in localStorage for persistence
-      localStorage.setItem('gps51_token', JSON.stringify(token));
-      localStorage.setItem('gps51_credentials', JSON.stringify({
+      // Store token securely (without sensitive data)
+      const tokenData = {
+        access_token: token.access_token,
+        token_type: token.token_type,
+        expires_in: token.expires_in,
+        expires_at: token.expires_at.toISOString()
+      };
+      
+      localStorage.setItem('gps51_token', JSON.stringify(tokenData));
+      
+      // Store non-sensitive credentials
+      const safeCredentials = {
         username: credentials.username,
         apiUrl: credentials.apiUrl,
         from: credentials.from,
         type: credentials.type
-      }));
+      };
+      localStorage.setItem('gps51_credentials', JSON.stringify(safeCredentials));
       
-      console.log('GPS51 authentication successful');
+      console.log('GPS51AuthService: Authentication successful');
       return token;
 
     } catch (error) {
-      console.error('GPS51 authentication failed:', error);
+      console.error('GPS51AuthService: Authentication failed:', error);
+      this.logout();
       throw new Error(`Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -80,11 +92,13 @@ export class GPS51AuthService {
       const storedToken = localStorage.getItem('gps51_token');
       if (storedToken) {
         try {
-          this.token = JSON.parse(storedToken);
-          // Convert expires_at string back to Date object
-          if (this.token) {
-            this.token.expires_at = new Date(this.token.expires_at);
-          }
+          const tokenData = JSON.parse(storedToken);
+          this.token = {
+            access_token: tokenData.access_token,
+            token_type: tokenData.token_type,
+            expires_in: tokenData.expires_in,
+            expires_at: new Date(tokenData.expires_at)
+          };
         } catch (e) {
           console.warn('Failed to parse stored GPS51 token');
           localStorage.removeItem('gps51_token');
@@ -94,8 +108,8 @@ export class GPS51AuthService {
 
     // Check if token exists and is still valid
     if (this.token) {
-      const currentTime = new Date().getTime(); // Fixed: convert to number
-      const expiryTime = this.token.expires_at.getTime(); // Fixed: convert to number
+      const currentTime = Date.now();
+      const expiryTime = this.token.expires_at.getTime();
       
       if (currentTime >= expiryTime) {
         console.log('GPS51 token expired, attempting refresh...');
@@ -117,15 +131,14 @@ export class GPS51AuthService {
     // Try to load credentials from localStorage if not in memory
     if (!this.credentials) {
       const storedCreds = localStorage.getItem('gps51_credentials');
-      const storedPassword = localStorage.getItem('gps51_password');
       
-      if (storedCreds && storedPassword) {
+      if (storedCreds) {
         try {
           const creds = JSON.parse(storedCreds);
-          this.credentials = {
-            ...creds,
-            password: storedPassword
-          };
+          // Note: We don't store passwords, so refresh might not be possible
+          // without re-authentication
+          console.warn('GPS51AuthService: Cannot refresh token without stored password');
+          return null;
         } catch (e) {
           console.warn('Failed to parse stored GPS51 credentials');
           return null;
@@ -142,10 +155,26 @@ export class GPS51AuthService {
       // Try to refresh using the GPS51 client
       const refreshSuccess = await gps51Client.refreshToken();
       if (refreshSuccess) {
-        return await this.authenticate(this.credentials);
+        // Token is still valid, update expiry
+        const token: GPS51AuthToken = {
+          access_token: gps51Client.getToken() || '',
+          token_type: 'Bearer',
+          expires_in: 24 * 60 * 60,
+          expires_at: new Date(Date.now() + (24 * 60 * 60 * 1000))
+        };
+        
+        this.token = token;
+        localStorage.setItem('gps51_token', JSON.stringify({
+          access_token: token.access_token,
+          token_type: token.token_type,
+          expires_in: token.expires_in,
+          expires_at: token.expires_at.toISOString()
+        }));
+        
+        return token;
       } else {
-        // If refresh failed, try full re-authentication
-        return await this.authenticate(this.credentials);
+        // Need full re-authentication
+        return null;
       }
     } catch (error) {
       console.error('Failed to refresh GPS51 token:', error);
@@ -159,12 +188,17 @@ export class GPS51AuthService {
     gps51Client.logout();
     localStorage.removeItem('gps51_token');
     localStorage.removeItem('gps51_credentials');
-    localStorage.removeItem('gps51_password');
-    console.log('GPS51 session logged out');
+    console.log('GPS51AuthService: Session logged out');
   }
 
   isAuthenticated(): boolean {
-    return this.token !== null && new Date().getTime() < this.token.expires_at.getTime(); // Fixed: convert to numbers
+    if (!this.token) {
+      return false;
+    }
+    
+    const currentTime = Date.now();
+    const expiryTime = this.token.expires_at.getTime();
+    return currentTime < expiryTime;
   }
 
   getTokenInfo(): GPS51AuthToken | null {

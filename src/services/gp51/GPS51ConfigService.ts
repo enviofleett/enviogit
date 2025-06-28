@@ -33,17 +33,15 @@ export class GPS51ConfigService {
 
   async saveConfiguration(config: GPS51Config): Promise<void> {
     try {
-      // Store configuration in localStorage
+      // Store configuration in localStorage (without password)
       localStorage.setItem('gps51_api_url', config.apiUrl);
       localStorage.setItem('gps51_username', config.username);
-      localStorage.setItem('gps51_password', config.password);
-      
+      localStorage.setItem('gps51_from', config.from || 'WEB');
+      localStorage.setItem('gps51_type', config.type || 'USER');
+
       if (config.apiKey) {
         localStorage.setItem('gps51_api_key', config.apiKey);
       }
-      
-      localStorage.setItem('gps51_from', config.from || 'WEB');
-      localStorage.setItem('gps51_type', config.type || 'USER');
 
       // Store credentials for auth service (without password for security)
       localStorage.setItem('gps51_credentials', JSON.stringify({
@@ -64,16 +62,15 @@ export class GPS51ConfigService {
     try {
       const apiUrl = localStorage.getItem('gps51_api_url');
       const username = localStorage.getItem('gps51_username');
-      const password = localStorage.getItem('gps51_password');
       const apiKey = localStorage.getItem('gps51_api_key');
       const from = localStorage.getItem('gps51_from') as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN';
       const type = localStorage.getItem('gps51_type') as 'USER' | 'DEVICE';
 
-      if (apiUrl && username && password) {
+      if (apiUrl && username) {
         return {
           apiUrl,
           username,
-          password,
+          password: '', // Never store passwords
           apiKey: apiKey || undefined,
           from: from || 'WEB',
           type: type || 'USER'
@@ -107,19 +104,13 @@ export class GPS51ConfigService {
 
   async syncData(): Promise<GPS51SyncResult> {
     try {
+      console.log('Starting GPS51 data sync...');
+
       // Get valid token
       const token = await this.authService.getValidToken();
       if (!token) {
         throw new Error('No valid authentication token available');
       }
-
-      // Get configuration
-      const config = this.getConfiguration();
-      if (!config) {
-        throw new Error('No GPS51 configuration found');
-      }
-
-      console.log('Starting GPS51 data sync...');
 
       // Fetch devices using the GPS51 client
       const devices = await gps51Client.getDeviceList();
@@ -134,17 +125,19 @@ export class GPS51ConfigService {
       let vehiclesSynced = 0;
       for (const device of devices) {
         try {
+          const vehicleData = {
+            license_plate: device.devicename,
+            brand: 'GPS51',
+            model: `Device ${device.devicetype}`,
+            type: this.mapDeviceTypeToVehicleType(device.devicetype),
+            status: (device.isfree === 1 ? 'available' : 'assigned') as 'available' | 'inactive' | 'maintenance' | 'assigned',
+            notes: `Device ID: ${device.deviceid}, SIM: ${device.simnum}`,
+            updated_at: new Date().toISOString()
+          };
+
           const { error } = await supabase
             .from('vehicles')
-            .upsert({
-              license_plate: device.devicename,
-              brand: 'GPS51',
-              model: device.devicetype.toString(),
-              type: this.mapDeviceTypeToVehicleType(device.devicetype),
-              status: (device.isfree === 1 ? 'available' : 'assigned') as 'available' | 'inactive' | 'maintenance' | 'assigned',
-              notes: `Device ID: ${device.deviceid}, SIM: ${device.simnum}`,
-              updated_at: new Date().toISOString()
-            }, {
+            .upsert(vehicleData, {
               onConflict: 'license_plate'
             });
 
@@ -170,23 +163,25 @@ export class GPS51ConfigService {
             .single();
 
           if (vehicle) {
+            const positionData = {
+              vehicle_id: vehicle.id,
+              latitude: position.callat,
+              longitude: position.callon,
+              speed: position.speed,
+              heading: position.course,
+              altitude: position.altitude,
+              timestamp: new Date(position.updatetime).toISOString(),
+              ignition_status: position.moving === 1,
+              fuel_level: position.voltagepercent,
+              engine_temperature: position.temp1,
+              battery_level: position.voltage,
+              address: position.strstatus,
+              recorded_at: new Date().toISOString()
+            };
+
             const { error } = await supabase
               .from('vehicle_positions')
-              .insert({
-                vehicle_id: vehicle.id,
-                latitude: position.callat,
-                longitude: position.callon,
-                speed: position.speed,
-                heading: position.course,
-                altitude: position.altitude,
-                timestamp: new Date(position.updatetime).toISOString(),
-                ignition_status: position.moving === 1,
-                fuel_level: position.fuel,
-                engine_temperature: position.temp1,
-                battery_level: position.voltage,
-                address: position.strstatus,
-                recorded_at: new Date().toISOString()
-              });
+              .insert(positionData);
 
             if (!error) {
               positionsStored++;
@@ -198,6 +193,8 @@ export class GPS51ConfigService {
           console.warn(`Error storing position for ${position.deviceid}:`, err);
         }
       }
+
+      console.log(`GPS51 sync completed: ${vehiclesSynced} vehicles, ${positionsStored} positions`);
 
       return {
         success: true,
@@ -218,7 +215,7 @@ export class GPS51ConfigService {
     }
   }
 
-  private mapDeviceTypeToVehicleType(deviceType: number): 'sedan' | 'truck' | 'van' | 'motorcycle' | 'other' {
+  private mapDeviceTypeToVehicleType(deviceType: number): 'sedan' | 'truck' | 'van' | 'motorcycle' | 'bike' | 'other' {
     // Map GPS51 device types to our vehicle types
     switch (deviceType) {
       case 1:
@@ -231,6 +228,8 @@ export class GPS51ConfigService {
         return 'van';
       case 6:
         return 'motorcycle';
+      case 7:
+        return 'bike';
       default:
         return 'other';
     }
@@ -238,13 +237,12 @@ export class GPS51ConfigService {
 
   isConfigured(): boolean {
     const config = this.getConfiguration();
-    return !!(config?.apiUrl && config?.username && config?.password);
+    return !!(config?.apiUrl && config?.username);
   }
 
   clearConfiguration(): void {
     localStorage.removeItem('gps51_api_url');
     localStorage.removeItem('gps51_username');
-    localStorage.removeItem('gps51_password');
     localStorage.removeItem('gps51_api_key');
     localStorage.removeItem('gps51_from');
     localStorage.removeItem('gps51_type');
