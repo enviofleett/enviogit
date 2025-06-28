@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -17,14 +16,14 @@ export interface VehiclePosition {
   engine_temperature?: number;
 }
 
-// Define the VehicleData type
+// Define the VehicleData type - updated to include 'bike'
 export interface VehicleData {
   id: string;
   brand: string;
   model: string;
   license_plate: string;
   status: 'inactive' | 'available' | 'assigned' | 'maintenance';
-  type: 'sedan' | 'truck' | 'van' | 'motorcycle' | 'other';
+  type: 'bike' | 'sedan' | 'truck' | 'van' | 'motorcycle' | 'other'; // Fixed: moved 'bike' first to match database enum order
   created_at: string;
   updated_at: string;
   notes: string;
