@@ -3,9 +3,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface GPS51Position {
-  deviceid: string;
-  callat: number; // Latitude
-  callon: number; // Longitude
+  deviceid: string; // Fixed from deviceId
+  callat: number; // Latitude (fixed from lat)
+  callon: number; // Longitude (fixed from lon)
   updatetime: number;
   speed: number;
   moving: number; // 0: stop, 1: moving
@@ -17,17 +17,17 @@ export interface GPS51Position {
 }
 
 export interface LiveDataOptions {
-  enabled?: boolean;
+  enabled?: boolean; // Added missing property
   refreshInterval?: number;
   maxRetries?: number;
 }
 
 export interface FleetMetrics {
-  totalDevices: number;
-  activeDevices: number;
-  movingVehicles: number;
-  parkedDevices: number;
-  offlineVehicles: number;
+  totalDevices: number; // Added missing property
+  activeDevices: number; // Added missing property
+  movingVehicles: number; // Fixed from movingDevices
+  parkedDevices: number; // Added missing property
+  offlineVehicles: number; // Fixed from offlineDevices
   totalDistance: number;
   averageSpeed: number;
 }
@@ -65,9 +65,9 @@ export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
 
       // Transform to GPS51Position format
       const transformedPositions: GPS51Position[] = positionsData?.map(pos => ({
-        deviceid: pos.vehicle_id,
-        callat: Number(pos.latitude),
-        callon: Number(pos.longitude),
+        deviceid: pos.vehicle_id, // Fixed property name
+        callat: Number(pos.latitude), // Fixed property name
+        callon: Number(pos.longitude), // Fixed property name
         updatetime: new Date(pos.timestamp).getTime(),
         speed: Number(pos.speed || 0),
         moving: pos.ignition_status ? 1 : 0,

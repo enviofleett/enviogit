@@ -1,5 +1,4 @@
-
-import md5 from 'js-md5';
+import * as md5 from 'js-md5';
 
 export interface SessionData {
   sessionId: string;
@@ -25,7 +24,7 @@ export class GPS51SessionManager {
     this.token = accessToken;
     
     // Generate session ID using MD5 hash
-    const sessionId = md5(`${accessToken}_${Date.now()}`);
+    const sessionId = md5.md5(`${accessToken}_${Date.now()}`);
     
     this.sessionData = {
       sessionId,
