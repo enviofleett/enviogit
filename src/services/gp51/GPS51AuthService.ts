@@ -1,5 +1,4 @@
-
-import { gps51Client, GPS51AuthCredentials } from './GPS51Client';
+import { gps51Client, GPS51AuthCredentials } from '../gps51/GPS51Client';
 
 export interface GPS51AuthToken {
   access_token: string;

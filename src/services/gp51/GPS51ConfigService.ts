@@ -1,6 +1,6 @@
 
 import { GPS51AuthService, GPS51Credentials } from './GPS51AuthService';
-import { gps51Client } from './GPS51Client';
+import { gps51Client } from '../gps51/GPS51Client';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface GPS51Config {
@@ -137,16 +137,15 @@ export class GPS51ConfigService {
           const { error } = await supabase
             .from('vehicles')
             .upsert({
-              id: device.deviceid,
               license_plate: device.devicename,
               brand: 'GPS51',
               model: device.devicetype.toString(),
-              type: this.mapDeviceTypeToVehicleType(device.devicetype),
-              status: device.isfree === 1 ? 'available' : 'assigned',
+              type: this.mapDeviceTypeToVehicleType(device.devicetype) as 'sedan' | 'truck' | 'van' | 'motorcycle' | 'other',
+              status: device.isfree === 1 ? 'available' : 'assigned' as 'available' | 'inactive' | 'maintenance' | 'assigned',
               notes: `Device ID: ${device.deviceid}, SIM: ${device.simnum}`,
               updated_at: new Date().toISOString()
             }, {
-              onConflict: 'id'
+              onConflict: 'license_plate'
             });
 
           if (!error) {
@@ -163,28 +162,37 @@ export class GPS51ConfigService {
       let positionsStored = 0;
       for (const position of positions) {
         try {
-          const { error } = await supabase
-            .from('vehicle_positions')
-            .insert({
-              vehicle_id: position.deviceid,
-              latitude: position.callat,
-              longitude: position.callon,
-              speed: position.speed,
-              heading: position.course,
-              altitude: position.altitude,
-              timestamp: new Date(position.updatetime).toISOString(),
-              ignition_status: position.moving === 1,
-              fuel_level: position.fuel,
-              engine_temperature: position.temp1,
-              battery_level: position.voltage,
-              address: position.strstatus,
-              recorded_at: new Date().toISOString()
-            });
+          // First, find the vehicle by device name/license plate
+          const { data: vehicle } = await supabase
+            .from('vehicles')
+            .select('id')
+            .eq('license_plate', position.deviceid)
+            .single();
 
-          if (!error) {
-            positionsStored++;
-          } else {
-            console.warn(`Failed to store position for ${position.deviceid}:`, error);
+          if (vehicle) {
+            const { error } = await supabase
+              .from('vehicle_positions')
+              .insert({
+                vehicle_id: vehicle.id,
+                latitude: position.callat,
+                longitude: position.callon,
+                speed: position.speed,
+                heading: position.course,
+                altitude: position.altitude,
+                timestamp: new Date(position.updatetime).toISOString(),
+                ignition_status: position.moving === 1,
+                fuel_level: position.fuel,
+                engine_temperature: position.temp1,
+                battery_level: position.voltage,
+                address: position.strstatus,
+                recorded_at: new Date().toISOString()
+              });
+
+            if (!error) {
+              positionsStored++;
+            } else {
+              console.warn(`Failed to store position for ${position.deviceid}:`, error);
+            }
           }
         } catch (err) {
           console.warn(`Error storing position for ${position.deviceid}:`, err);
@@ -212,7 +220,6 @@ export class GPS51ConfigService {
 
   private mapDeviceTypeToVehicleType(deviceType: number): 'sedan' | 'truck' | 'van' | 'motorcycle' | 'other' {
     // Map GPS51 device types to our vehicle types
-    // This mapping might need adjustment based on actual GPS51 device type codes
     switch (deviceType) {
       case 1:
       case 2:
