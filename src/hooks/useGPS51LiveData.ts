@@ -3,12 +3,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface GPS51Position {
-  deviceid: string; // Fixed property name
-  callat: number; // Latitude (fixed property name)
-  callon: number; // Longitude (fixed property name)
+  deviceid: string;
+  callat: number;
+  callon: number;
   updatetime: number;
   speed: number;
-  moving: number; // 0: stop, 1: moving
+  moving: number;
   strstatus: string;
   totaldistance: number;
   course: number;
@@ -17,17 +17,17 @@ export interface GPS51Position {
 }
 
 export interface LiveDataOptions {
-  enabled?: boolean; // Added missing property
+  enabled?: boolean;
   refreshInterval?: number;
   maxRetries?: number;
 }
 
 export interface FleetMetrics {
-  totalDevices: number; // Added missing property
-  activeDevices: number; // Added missing property
-  movingVehicles: number; // Fixed property name
-  parkedDevices: number; // Added missing property
-  offlineVehicles: number; // Fixed property name
+  totalDevices: number;
+  activeDevices: number;
+  movingVehicles: number;
+  parkedDevices: number;
+  offlineVehicles: number;
   totalDistance: number;
   averageSpeed: number;
 }
@@ -65,14 +65,14 @@ export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
 
       // Transform to GPS51Position format
       const transformedPositions: GPS51Position[] = positionsData?.map(pos => ({
-        deviceid: pos.vehicle_id, // Fixed property name
-        callat: Number(pos.latitude), // Fixed property name
-        callon: Number(pos.longitude), // Fixed property name
+        deviceid: pos.vehicle_id,
+        callat: Number(pos.latitude),
+        callon: Number(pos.longitude),
         updatetime: new Date(pos.timestamp).getTime(),
         speed: Number(pos.speed || 0),
         moving: pos.ignition_status ? 1 : 0,
         strstatus: pos.ignition_status ? 'Moving' : 'Stopped',
-        totaldistance: 0, // Would need to calculate from historical data
+        totaldistance: 0,
         course: Number(pos.heading || 0),
         altitude: Number(pos.altitude || 0),
         radius: Number(pos.accuracy || 0)
@@ -83,7 +83,7 @@ export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
       // Calculate fleet metrics
       const totalDevices = transformedPositions.length;
       const activeDevices = transformedPositions.filter(p => 
-        Date.now() - p.updatetime < 300000 // Active within 5 minutes
+        Date.now() - p.updatetime < 300000
       ).length;
       const movingVehicles = transformedPositions.filter(p => p.moving === 1).length;
       const parkedDevices = transformedPositions.filter(p => p.moving === 0).length;
@@ -110,7 +110,7 @@ export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
       
       if (retries < maxRetries) {
         setRetries(prev => prev + 1);
-        setTimeout(fetchLiveData, 5000); // Retry after 5 seconds
+        setTimeout(fetchLiveData, 5000);
       }
     } finally {
       setLoading(false);

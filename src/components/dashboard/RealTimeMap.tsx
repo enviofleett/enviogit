@@ -101,7 +101,7 @@ const RealTimeMap: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
                         <div className={`w-3 h-3 rounded-full ${
-                          vehicle.latest_position?.ignition_status
+                          vehicle.latest_position?.isMoving
                             ? 'bg-green-500 animate-pulse' 
                             : vehicle.latest_position
                               ? 'bg-yellow-500'
@@ -127,7 +127,7 @@ const RealTimeMap: React.FC = () => {
                           </span>
                         </div>
                         <p className="text-xs text-slate-400">
-                          {vehicle.latest_position?.ignition_status ? 'Running' : 'Stopped'}
+                          {vehicle.latest_position?.isMoving ? 'Running' : 'Stopped'}
                         </p>
                       </div>
                     </div>
@@ -146,7 +146,7 @@ const RealTimeMap: React.FC = () => {
                         </div>
                         <div>
                           <span className="text-slate-500">Direction:</span>
-                          <p>{Math.round(vehicle.latest_position.heading)}°</p>
+                          <p>{vehicle.latest_position.heading ? Math.round(vehicle.latest_position.heading) : 'N/A'}°</p>
                         </div>
                         <div>
                           <span className="text-slate-500">Last Update:</span>

@@ -11,6 +11,10 @@ export interface VehiclePosition {
   timestamp: string;
   status: string;
   isMoving: boolean;
+  ignition_status?: boolean;
+  heading?: number;
+  fuel_level?: number;
+  engine_temperature?: number;
 }
 
 // Define the VehicleData type
@@ -44,7 +48,7 @@ export const useGPS51Data = () => {
         .select(`
           *,
           vehicle_positions!inner(
-            vehicle_id, latitude, longitude, speed, timestamp, address, ignition_status
+            vehicle_id, latitude, longitude, speed, timestamp, address, ignition_status, heading, fuel_level, engine_temperature
           )
         `)
         .order('updated_at', { ascending: false });
@@ -68,6 +72,10 @@ export const useGPS51Data = () => {
               timestamp: rawLatestPosition.timestamp,
               status: rawLatestPosition.address || 'Unknown',
               isMoving: rawLatestPosition.ignition_status || false,
+              ignition_status: rawLatestPosition.ignition_status || false,
+              heading: rawLatestPosition.heading ? Number(rawLatestPosition.heading) : undefined,
+              fuel_level: rawLatestPosition.fuel_level ? Number(rawLatestPosition.fuel_level) : undefined,
+              engine_temperature: rawLatestPosition.engine_temperature ? Number(rawLatestPosition.engine_temperature) : undefined,
             };
           }
 

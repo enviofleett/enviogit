@@ -8,7 +8,7 @@ const FleetStats = () => {
   const { vehicles, loading } = useGPS51Data();
 
   // Calculate real-time fleet statistics
-  const activeVehicles = vehicles.filter(v => v.latest_position?.ignition_status).length;
+  const activeVehicles = vehicles.filter(v => v.latest_position?.isMoving).length;
   const totalVehicles = vehicles.length;
   const vehiclesWithGPS = vehicles.filter(v => v.latest_position).length;
   const maintenanceVehicles = vehicles.filter(v => v.status === 'maintenance').length;
