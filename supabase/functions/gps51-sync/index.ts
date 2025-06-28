@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4';
 
@@ -17,6 +18,8 @@ interface GPS51ApiResponse {
   message?: string;
   data?: any;
   token?: string;
+  groups?: any[];
+  records?: any[];
 }
 
 interface GPS51Device {
@@ -205,65 +208,104 @@ serve(async (req) => {
     const token = loginData.token;
     console.log('GPS51 login successful, token received');
 
-    // Step 2: Fetch device list using query parameters
+    // Step 2: Fetch device list using POST with username parameter
     const deviceListUrl = new URL(correctedApiUrl);
     deviceListUrl.searchParams.append('action', 'querymonitorlist');
     deviceListUrl.searchParams.append('token', token);
 
     console.log("Fetching device list...");
     const deviceResponse = await fetch(deviceListUrl.toString(), {
-      method: 'GET',
+      method: 'POST',
       headers: {
         'Accept': 'application/json',
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ username: username })
     });
 
     const deviceResponseText = await deviceResponse.text();
-    console.log(`Device List Response: ${deviceResponse.status} - ${deviceResponseText}`);
+    console.log(`Device List Response: ${deviceResponse.status} - ${deviceResponseText.substring(0, 1000)}...`);
 
     let devices: GPS51Device[] = [];
+    let deviceIds: string[] = [];
+    
     if (deviceResponse.ok && deviceResponseText.trim()) {
       try {
         const deviceData = JSON.parse(deviceResponseText);
-        if (deviceData.status === 0 && deviceData.data) {
-          devices = Array.isArray(deviceData.data) ? deviceData.data : [];
+        console.log('Device Data Structure:', {
+          status: deviceData.status,
+          hasGroups: !!deviceData.groups,
+          groupsLength: deviceData.groups?.length || 0
+        });
+        
+        if (deviceData.status === 0 && deviceData.groups) {
+          // Process groups format
+          deviceData.groups.forEach((group: any) => {
+            console.log(`Processing group: ${group.groupname}, devices: ${group.devices?.length || 0}`);
+            if (group.devices && Array.isArray(group.devices)) {
+              devices = devices.concat(group.devices);
+              group.devices.forEach((device: GPS51Device) => {
+                deviceIds.push(device.deviceid);
+              });
+            }
+          });
         }
       } catch (e) {
-        console.warn('Failed to parse device response, continuing with empty array');
+        console.warn('Failed to parse device response, continuing with empty array:', e);
       }
     }
 
-    console.log(`Found ${devices.length} devices`);
+    console.log(`Found ${devices.length} devices, device IDs: ${deviceIds.join(', ')}`);
 
-    // Step 3: Fetch positions for devices using query parameters
+    // Step 3: Fetch positions for devices using POST with deviceids parameter
     let positions: GPS51Position[] = [];
-    if (devices.length > 0) {
-      const deviceIds = devices.map(d => d.deviceid).join(',');
+    if (deviceIds.length > 0) {
       const positionUrl = new URL(correctedApiUrl);
       positionUrl.searchParams.append('action', 'lastposition');
       positionUrl.searchParams.append('token', token);
-      positionUrl.searchParams.append('deviceids', deviceIds);
 
-      console.log("Fetching positions...");
+      const positionPayload = {
+        deviceids: deviceIds,
+        lastquerypositiontime: 0
+      };
+
+      console.log("Fetching positions with payload:", positionPayload);
       const positionResponse = await fetch(positionUrl.toString(), {
-        method: 'GET',
+        method: 'POST',
         headers: {
           'Accept': 'application/json',
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify(positionPayload)
       });
 
       const positionResponseText = await positionResponse.text();
       console.log(`Position Response: ${positionResponse.status} - ${positionResponseText}`);
 
-      if (positionResponse.ok && positionResponseText.trim()) {
+      if (positionResponse.ok && positionResponseText.trim() && positionResponseText !== 'null') {
         try {
           const positionData = JSON.parse(positionResponseText);
-          if (positionData.status === 0 && positionData.data) {
-            positions = Array.isArray(positionData.data) ? positionData.data : [];
+          console.log('Position Data Structure:', {
+            status: positionData.status,
+            hasRecords: !!positionData.records,
+            hasData: !!positionData.data,
+            recordsLength: positionData.records?.length || 0,
+            dataLength: positionData.data?.length || 0
+          });
+          
+          if (positionData.status === 0) {
+            // Handle different response formats
+            if (positionData.records && Array.isArray(positionData.records)) {
+              positions = positionData.records;
+            } else if (positionData.data && Array.isArray(positionData.data)) {
+              positions = positionData.data;
+            }
           }
         } catch (e) {
-          console.warn('Failed to parse position response, continuing with empty array');
+          console.warn('Failed to parse position response, continuing with empty array:', e);
         }
+      } else {
+        console.log('No position data available or null response received');
       }
     }
 

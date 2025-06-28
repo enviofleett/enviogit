@@ -1,4 +1,3 @@
-
 import { md5 } from 'js-md5';
 
 export interface GPS51AuthCredentials {
@@ -28,13 +27,13 @@ export interface GPS51Device {
   isfree: number;
   allowedit: number;
   icon: number;
-  callat: number;
-  callon: number;
-  speed: number;
-  course: number;
-  updatetime: number;
-  status: number;
-  moving: number;
+  callat?: number;
+  callon?: number;
+  speed?: number;
+  course?: number;
+  updatetime?: number;
+  status?: number;
+  moving?: number;
   strstatus?: string;
   totaldistance?: number;
   altitude?: number;
@@ -72,6 +71,17 @@ export interface GPS51ApiResponse {
   user?: GPS51User;
   devices?: GPS51Device[];
   positions?: GPS51Position[];
+  groups?: GPS51Group[];
+  records?: GPS51Position[];
+  lastquerypositiontime?: number;
+}
+
+export interface GPS51Group {
+  groupid: number;
+  groupname: string;
+  remark?: string;
+  shared: number;
+  devices: GPS51Device[];
 }
 
 const GPS51_STATUS = {
@@ -191,8 +201,12 @@ export class GPS51Client {
           hasToken: !!data.token,
           hasUser: !!data.user,
           hasData: !!data.data,
+          hasGroups: !!data.groups,
+          hasRecords: !!data.records,
           dataType: Array.isArray(data.data) ? 'array' : typeof data.data,
-          dataLength: Array.isArray(data.data) ? data.data.length : undefined
+          dataLength: Array.isArray(data.data) ? data.data.length : undefined,
+          groupsLength: Array.isArray(data.groups) ? data.groups.length : undefined,
+          recordsLength: Array.isArray(data.records) ? data.records.length : undefined
         });
       } catch (parseError) {
         console.warn('Non-JSON response received:', responseText);
@@ -361,13 +375,30 @@ export class GPS51Client {
     this.ensureAuthenticated();
     
     try {
-      const response = await this.makeRequest('querymonitorlist');
+      const response = await this.makeRequest('querymonitorlist', { username: this.user?.username || 'octopus' });
       console.log('GPS51 Device List Response:', response);
 
       if (response.status === GPS51_STATUS.SUCCESS) {
-        const devices = response.data || response.devices || [];
-        console.log(`Retrieved ${devices.length} devices from GPS51`);
-        return Array.isArray(devices) ? devices : [];
+        // Handle the groups format from GPS51 API
+        let devices: GPS51Device[] = [];
+        
+        if (response.groups && Array.isArray(response.groups)) {
+          console.log(`Processing ${response.groups.length} device groups`);
+          
+          response.groups.forEach((group: GPS51Group) => {
+            console.log(`Group: ${group.groupname}, devices: ${group.devices?.length || 0}`);
+            
+            if (group.devices && Array.isArray(group.devices)) {
+              devices = devices.concat(group.devices);
+            }
+          });
+        } else if (response.data || response.devices) {
+          // Fallback to old format
+          devices = response.data || response.devices || [];
+        }
+        
+        console.log(`Retrieved ${devices.length} devices from GPS51 groups format`);
+        return devices;
       } else {
         throw new Error(response.message || 'Failed to fetch device list');
       }
@@ -381,21 +412,43 @@ export class GPS51Client {
     this.ensureAuthenticated();
     
     try {
-      const params: any = {};
-      if (deviceids.length > 0) {
-        params.deviceids = deviceids.join(',');
-      }
-      if (lastQueryTime) {
-        params.lastquerypositiontime = lastQueryTime;
-      }
+      const params: any = {
+        deviceids: deviceids.length > 0 ? deviceids : [], // Send empty array for all devices
+        lastquerypositiontime: lastQueryTime || 0
+      };
+
+      console.log('GPS51 Position Request Parameters:', {
+        deviceidsCount: params.deviceids.length,
+        deviceids: params.deviceids,
+        lastQueryTime: params.lastquerypositiontime
+      });
 
       const response = await this.makeRequest('lastposition', params);
       console.log('GPS51 Position Response:', response);
 
       if (response.status === GPS51_STATUS.SUCCESS) {
-        const positions = response.data || response.positions || [];
-        console.log(`Retrieved ${positions.length} positions from GPS51`);
-        return Array.isArray(positions) ? positions : [];
+        // Handle different response formats
+        let positions: GPS51Position[] = [];
+        
+        if (response.records && Array.isArray(response.records)) {
+          positions = response.records;
+          console.log(`Retrieved ${positions.length} positions from records field`);
+        } else if (response.data && Array.isArray(response.data)) {
+          positions = response.data;
+          console.log(`Retrieved ${positions.length} positions from data field`);
+        } else if (response.positions && Array.isArray(response.positions)) {
+          positions = response.positions;
+          console.log(`Retrieved ${positions.length} positions from positions field`);
+        } else {
+          console.warn('No position data found in response:', {
+            hasRecords: !!response.records,
+            hasData: !!response.data,
+            hasPositions: !!response.positions,
+            responseKeys: Object.keys(response)
+          });
+        }
+        
+        return positions;
       } else {
         throw new Error(response.message || 'Failed to fetch realtime positions');
       }
@@ -412,7 +465,7 @@ export class GPS51Client {
 
     try {
       // Try a simple API call to check if token is still valid
-      const response = await this.makeRequest('querymonitorlist');
+      const response = await this.makeRequest('querymonitorlist', { username: this.user.username });
       
       if (response.status === GPS51_STATUS.SUCCESS) {
         return true;
