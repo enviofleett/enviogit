@@ -35,7 +35,7 @@ export const useGPS51Data = () => {
     try {
       setLoading(true);
       
-      // Fetch vehicles
+      // Fetch vehicles from existing table
       const { data: vehiclesData, error: vehiclesError } = await supabase
         .from('vehicles')
         .select('*')
@@ -43,25 +43,20 @@ export const useGPS51Data = () => {
 
       if (vehiclesError) throw vehiclesError;
 
-      // Fetch latest positions for each vehicle
-      const { data: positionsData, error: positionsError } = await supabase
-        .from('vehicle_positions')
-        .select('*')
-        .order('recorded_at', { ascending: false });
-
-      if (positionsError) throw positionsError;
-
-      // Combine vehicles with their latest positions
-      const vehiclesWithPositions = vehiclesData?.map(vehicle => {
-        const latestPosition = positionsData?.find(pos => pos.vehicle_id === vehicle.id);
-        return {
-          ...vehicle,
-          latest_position: latestPosition,
-        };
-      }) || [];
+      // Since vehicle_positions table doesn't exist yet, we'll use mock data
+      // This will be replaced once we create the proper table structure
+      const vehiclesWithPositions = vehiclesData?.map(vehicle => ({
+        id: vehicle.id,
+        license_plate: vehicle.license_plate,
+        brand: vehicle.brand,
+        model: vehicle.model,
+        type: vehicle.type,
+        status: vehicle.status,
+        latest_position: undefined, // Will be populated after SQL migration
+      })) || [];
 
       setVehicles(vehiclesWithPositions);
-      setPositions(positionsData || []);
+      setPositions([]); // Empty until we have the proper table
       setError(null);
     } catch (err) {
       console.error('Error fetching GPS51 data:', err);
@@ -102,18 +97,8 @@ export const useGPS51Data = () => {
       )
       .subscribe();
 
-    // Subscribe to position changes
-    const positionSubscription = supabase
-      .channel('positions-changes')
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'vehicle_positions' },
-        () => fetchVehicleData()
-      )
-      .subscribe();
-
     return () => {
       supabase.removeChannel(vehicleSubscription);
-      supabase.removeChannel(positionSubscription);
     };
   }, []);
 
