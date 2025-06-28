@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { monitor, zap, shield, settings } from 'lucide-react';
+import { Monitor, Zap, Shield, Settings } from 'lucide-react';
 
 const FleetStats = () => {
   const stats = [
@@ -9,7 +9,7 @@ const FleetStats = () => {
       title: 'Active Vehicles',
       value: '24',
       change: '+2 from yesterday',
-      icon: monitor,
+      icon: Monitor,
       color: 'text-green-600',
       bgColor: 'bg-green-100'
     },
@@ -17,7 +17,7 @@ const FleetStats = () => {
       title: 'AI Efficiency Score',
       value: '87%',
       change: '+5% this week',
-      icon: zap,
+      icon: Zap,
       color: 'text-blue-600',
       bgColor: 'bg-blue-100'
     },
@@ -25,7 +25,7 @@ const FleetStats = () => {
       title: 'Maintenance Alerts',
       value: '3',
       change: 'Due within 7 days',
-      icon: settings,
+      icon: Settings,
       color: 'text-yellow-600',
       bgColor: 'bg-yellow-100'
     },
@@ -33,7 +33,7 @@ const FleetStats = () => {
       title: 'Geofence Events',
       value: '12',
       change: 'Today',
-      icon: shield,
+      icon: Shield,
       color: 'text-purple-600',
       bgColor: 'bg-purple-100'
     }

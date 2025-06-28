@@ -3,7 +3,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { zap, bell, settings } from 'lucide-react';
+import { Zap, Bell, Settings } from 'lucide-react';
 
 const AIInsights = () => {
   const insights = [
@@ -13,7 +13,7 @@ const AIInsights = () => {
       description: 'Vehicle VH-001 shows 85% probability of brake service needed within 30 days',
       priority: 'high',
       action: 'Schedule Service',
-      icon: settings
+      icon: Settings
     },
     {
       type: 'efficiency',
@@ -21,7 +21,7 @@ const AIInsights = () => {
       description: 'Route efficiency can be improved by 15% for delivery vehicles in Zone A',
       priority: 'medium',
       action: 'Optimize Routes',
-      icon: zap
+      icon: Zap
     },
     {
       type: 'behavior',
@@ -29,7 +29,7 @@ const AIInsights = () => {
       description: 'Driver performance improved by 12% after implementing eco-driving recommendations',
       priority: 'low',
       action: 'View Details',
-      icon: bell
+      icon: Bell
     }
   ];
 
@@ -46,7 +46,7 @@ const AIInsights = () => {
     <Card className="border-slate-200">
       <CardHeader>
         <CardTitle className="flex items-center space-x-2">
-          <zap className="w-5 h-5 text-blue-600" />
+          <Zap className="w-5 h-5 text-blue-600" />
           <span>AI Insights & Recommendations</span>
         </CardTitle>
       </CardHeader>
