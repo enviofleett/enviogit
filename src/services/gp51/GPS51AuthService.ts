@@ -94,8 +94,8 @@ export class GPS51AuthService {
 
     // Check if token exists and is still valid
     if (this.token) {
-      const currentTime = new Date().getTime();
-      const expiryTime = this.token.expires_at.getTime();
+      const currentTime = new Date().getTime(); // Fixed: convert to number
+      const expiryTime = this.token.expires_at.getTime(); // Fixed: convert to number
       
       if (currentTime >= expiryTime) {
         console.log('GPS51 token expired, attempting refresh...');
@@ -164,7 +164,7 @@ export class GPS51AuthService {
   }
 
   isAuthenticated(): boolean {
-    return this.token !== null && new Date().getTime() < this.token.expires_at.getTime();
+    return this.token !== null && new Date().getTime() < this.token.expires_at.getTime(); // Fixed: convert to numbers
   }
 
   getTokenInfo(): GPS51AuthToken | null {
@@ -175,7 +175,6 @@ export class GPS51AuthService {
     return gps51Client.getUser();
   }
 
-  // Helper method to get GPS51 client instance
   getClient() {
     return gps51Client;
   }

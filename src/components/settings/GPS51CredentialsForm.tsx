@@ -6,42 +6,27 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Eye, EyeOff, Save, TestTube, Trash2, CheckCircle } from 'lucide-react';
-import { gps51ConfigService, GPS51Config } from '@/services/gp51/GPS51ConfigService';
+import { Eye, EyeOff, Save, TestTube, Trash2, CheckCircle, AlertCircle } from 'lucide-react';
+import { useGPS51SessionBridge } from '@/hooks/useGPS51SessionBridge';
 
 export const GPS51CredentialsForm = () => {
-  const [formData, setFormData] = useState<GPS51Config>({
-    apiUrl: 'https://api.gps51.com/webapi',
+  const [formData, setFormData] = useState({
+    apiUrl: 'https://www.gps51.com/webapi',
     username: '',
     password: '',
     apiKey: '',
-    from: 'WEB',
-    type: 'USER'
+    from: 'WEB' as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN',
+    type: 'USER' as 'USER' | 'DEVICE'
   });
   
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
-  const [isConfigured, setIsConfigured] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<{
-    isConnected: boolean;
-    error?: string;
-    lastTest?: Date;
-    userInfo?: any;
-  }>({ isConnected: false });
   
   const { toast } = useToast();
+  const { status, connect, disconnect } = useGPS51SessionBridge();
 
-  // Load existing configuration on component mount
-  useEffect(() => {
-    const existingConfig = gps51ConfigService.getConfiguration();
-    if (existingConfig) {
-      setFormData(existingConfig);
-      setIsConfigured(true);
-    }
-  }, []);
-
-  const handleInputChange = (field: keyof GPS51Config, value: string) => {
+  const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -60,13 +45,20 @@ export const GPS51CredentialsForm = () => {
 
     setIsLoading(true);
     try {
-      await gps51ConfigService.saveConfiguration(formData);
-      setIsConfigured(true);
+      const success = await connect(formData);
       
-      toast({
-        title: "Settings Saved",
-        description: "GPS51 credentials have been saved successfully.",
-      });
+      if (success) {
+        toast({
+          title: "Settings Saved",
+          description: "GPS51 credentials have been saved and authenticated successfully.",
+        });
+      } else {
+        toast({
+          title: "Connection Failed",
+          description: status.error || "Failed to authenticate with GPS51.",
+          variant: "destructive",
+        });
+      }
     } catch (error) {
       toast({
         title: "Error",
@@ -89,36 +81,25 @@ export const GPS51CredentialsForm = () => {
     }
 
     setIsTesting(true);
-    setConnectionStatus({ isConnected: false });
-
     try {
-      const success = await gps51ConfigService.testConnection(formData);
+      const success = await connect(formData);
       
       if (success) {
-        const authService = gps51ConfigService['authService'];
-        const userInfo = authService.getUser();
-        
-        setConnectionStatus({
-          isConnected: true,
-          lastTest: new Date(),
-          userInfo
-        });
-        
         toast({
           title: "Connection Successful",
-          description: `Successfully connected to GPS51 API${userInfo ? ` as ${userInfo.showname || userInfo.username}` : ''}.`,
+          description: "Successfully connected to GPS51 API.",
+        });
+      } else {
+        toast({
+          title: "Connection Failed",
+          description: status.error || "Failed to connect to GPS51 API.",
+          variant: "destructive",
         });
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Connection failed';
-      setConnectionStatus({
-        isConnected: false,
-        error: errorMessage,
-        lastTest: new Date()
-      });
       toast({
         title: "Connection Failed",
-        description: errorMessage,
+        description: error instanceof Error ? error.message : 'Connection failed',
         variant: "destructive",
       });
     } finally {
@@ -127,17 +108,15 @@ export const GPS51CredentialsForm = () => {
   };
 
   const handleClearConfiguration = () => {
-    gps51ConfigService.clearConfiguration();
+    disconnect();
     setFormData({
-      apiUrl: 'https://api.gps51.com/webapi',
+      apiUrl: 'https://www.gps51.com/webapi',
       username: '',
       password: '',
       apiKey: '',
       from: 'WEB',
       type: 'USER'
     });
-    setIsConfigured(false);
-    setConnectionStatus({ isConnected: false });
     
     toast({
       title: "Configuration Cleared",
@@ -145,18 +124,25 @@ export const GPS51CredentialsForm = () => {
     });
   };
 
+  const getConnectionStatusIcon = () => {
+    if (status.isAuthenticated && status.connectionHealth === 'good') {
+      return <CheckCircle className="h-5 w-5 text-green-600" />;
+    } else if (status.error) {
+      return <AlertCircle className="h-5 w-5 text-red-600" />;
+    }
+    return null;
+  };
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           GPS51 API Configuration
-          {isConfigured && connectionStatus.isConnected && (
-            <CheckCircle className="h-5 w-5 text-green-600" />
-          )}
+          {getConnectionStatusIcon()}
         </CardTitle>
         <CardDescription>
           Configure your GPS51 API credentials to enable real-time fleet tracking and data synchronization.
-          {isConfigured && (
+          {status.isConfigured && (
             <span className="block mt-2 text-green-600 text-sm">
               ✅ Configuration saved and ready to use
             </span>
@@ -169,7 +155,7 @@ export const GPS51CredentialsForm = () => {
           <Input
             id="apiUrl"
             type="url"
-            placeholder="https://api.gps51.com/webapi"
+            placeholder="https://www.gps51.com/webapi"
             value={formData.apiUrl}
             onChange={(e) => handleInputChange('apiUrl', e.target.value)}
           />
@@ -213,13 +199,10 @@ export const GPS51CredentialsForm = () => {
           <Input
             id="username"
             type="text"
-            placeholder="Your GPS51 username or device ID"
+            placeholder="Your GPS51 username"
             value={formData.username}
             onChange={(e) => handleInputChange('username', e.target.value)}
           />
-          <p className="text-xs text-gray-500">
-            Supports Chinese/English characters, username or device ID
-          </p>
         </div>
 
         <div className="space-y-2">
@@ -251,33 +234,19 @@ export const GPS51CredentialsForm = () => {
           </p>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="apiKey">API Key (Optional)</Label>
-          <Input
-            id="apiKey"
-            type="text"
-            placeholder="Your GPS51 API key if required"
-            value={formData.apiKey || ''}
-            onChange={(e) => handleInputChange('apiKey', e.target.value)}
-          />
-          <p className="text-xs text-gray-500">
-            Optional API key if required by your GPS51 provider
-          </p>
-        </div>
-
         <div className="flex gap-2 pt-4">
           <Button 
             onClick={handleSave}
-            disabled={isLoading}
+            disabled={isLoading || isTesting}
             className="flex items-center gap-2"
           >
             <Save className="h-4 w-4" />
-            {isLoading ? 'Saving...' : 'Save Settings'}
+            {isLoading ? 'Saving...' : 'Save & Connect'}
           </Button>
           
           <Button 
             onClick={handleTestConnection}
-            disabled={isTesting || !formData.apiUrl || !formData.username || !formData.password}
+            disabled={isTesting || isLoading || !formData.apiUrl || !formData.username || !formData.password}
             variant="outline"
             className="flex items-center gap-2"
           >
@@ -285,7 +254,7 @@ export const GPS51CredentialsForm = () => {
             {isTesting ? 'Testing...' : 'Test Connection'}
           </Button>
 
-          {isConfigured && (
+          {status.isConfigured && (
             <Button 
               onClick={handleClearConfiguration}
               variant="destructive"
@@ -298,53 +267,26 @@ export const GPS51CredentialsForm = () => {
         </div>
 
         {/* Connection Status Display */}
-        {connectionStatus.lastTest && (
-          <div className={`mt-4 p-3 border rounded-md ${
-            connectionStatus.isConnected 
-              ? 'bg-green-50 border-green-200' 
-              : 'bg-red-50 border-red-200'
-          }`}>
-            <p className={`text-sm ${
-              connectionStatus.isConnected ? 'text-green-800' : 'text-red-800'
-            }`}>
-              {connectionStatus.isConnected ? (
-                <>
-                  ✅ Connected to GPS51 API
-                  {connectionStatus.userInfo && (
-                    <span className="block text-xs mt-1">
-                      Logged in as: {connectionStatus.userInfo.showname || connectionStatus.userInfo.username}
-                      {connectionStatus.userInfo.companyname && ` (${connectionStatus.userInfo.companyname})`}
-                    </span>
-                  )}
-                  <span className="block text-xs mt-1">
-                    Last tested: {connectionStatus.lastTest.toLocaleString()}
-                  </span>
-                </>
-              ) : (
-                <>
-                  ❌ Connection failed
-                  {connectionStatus.error && (
-                    <span className="block text-xs mt-1">
-                      Error: {connectionStatus.error}
-                    </span>
-                  )}
-                </>
-              )}
+        {status.error && (
+          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
+            <p className="text-sm text-red-800">
+              ❌ Connection failed: {status.error}
             </p>
           </div>
         )}
 
-        {/* Configuration Status */}
-        {isConfigured && (
-          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-            <p className="text-sm text-blue-800">
-              📡 GPS51 integration is configured and ready
-              <span className="block text-xs text-blue-600 mt-1">
-                Platform: {formData.from} | Type: {formData.type}
+        {status.isAuthenticated && (
+          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
+            <p className="text-sm text-green-800">
+              ✅ Connected to GPS51 API
+              <span className="block text-xs mt-1">
+                Connection Health: {status.connectionHealth.toUpperCase()}
               </span>
-              <span className="block text-xs text-blue-600">
-                You can now use GPS51 features throughout the application
-              </span>
+              {status.lastSync && (
+                <span className="block text-xs mt-1">
+                  Last sync: {status.lastSync.toLocaleString()}
+                </span>
+              )}
             </p>
           </div>
         )}

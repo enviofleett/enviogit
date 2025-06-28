@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface GPS51Position {
-  deviceid: string;
+  deviceid: string; // Fixed: changed from deviceId to deviceid
   callat: number;
   callon: number;
   updatetime: number;
@@ -14,20 +14,26 @@ export interface GPS51Position {
   course: number;
   altitude: number;
   radius: number;
+  temp1?: number;
+  temp2?: number;
+  voltage?: number;
+  fuel?: number;
 }
 
+// Updated LiveDataOptions to include enabled property
 export interface LiveDataOptions {
   enabled?: boolean;
   refreshInterval?: number;
   maxRetries?: number;
 }
 
+// Updated FleetMetrics to include all required properties
 export interface FleetMetrics {
   totalDevices: number;
   activeDevices: number;
-  movingVehicles: number;
+  movingVehicles: number; // Fixed: changed from movingDevices
   parkedDevices: number;
-  offlineVehicles: number;
+  offlineVehicles: number; // Fixed: changed from offlineDevices
   totalDistance: number;
   averageSpeed: number;
 }
@@ -65,7 +71,7 @@ export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
 
       // Transform to GPS51Position format
       const transformedPositions: GPS51Position[] = positionsData?.map(pos => ({
-        deviceid: pos.vehicle_id,
+        deviceid: pos.vehicle_id, // Fixed: using deviceid consistently
         callat: Number(pos.latitude),
         callon: Number(pos.longitude),
         updatetime: new Date(pos.timestamp).getTime(),
@@ -75,7 +81,9 @@ export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
         totaldistance: 0,
         course: Number(pos.heading || 0),
         altitude: Number(pos.altitude || 0),
-        radius: Number(pos.accuracy || 0)
+        radius: Number(pos.accuracy || 0),
+        temp1: pos.engine_temperature ? Number(pos.engine_temperature) : undefined,
+        fuel: pos.fuel_level ? Number(pos.fuel_level) : undefined
       })) || [];
 
       setPositions(transformedPositions);

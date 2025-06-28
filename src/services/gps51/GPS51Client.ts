@@ -28,9 +28,8 @@ export interface GPS51Device {
   isfree: number;
   allowedit: number;
   icon: number;
-  // Real-time location data
-  callat: number; // latitude
-  callon: number; // longitude
+  callat: number;
+  callon: number;
   speed: number;
   course: number;
   updatetime: number;
@@ -45,8 +44,8 @@ export interface GPS51Device {
 export interface GPS51Position {
   deviceid: string;
   devicetime: number;
-  callat: number; // calculated latitude
-  callon: number; // calculated longitude
+  callat: number;
+  callon: number;
   altitude: number;
   speed: number;
   course: number;
@@ -55,7 +54,6 @@ export interface GPS51Position {
   moving: number;
   strstatus: string;
   updatetime: number;
-  // Additional sensor data
   temp1?: number;
   temp2?: number;
   voltage?: number;
@@ -92,21 +90,20 @@ export class GPS51Client {
   private user: GPS51User | null = null;
   private retryCount = 0;
   private maxRetries = 3;
-  private retryDelay = 1000; // Start with 1 second
+  private retryDelay = 1000;
 
   constructor(baseURL = 'https://api.gps51.com/webapi') {
     this.baseURL = baseURL;
   }
 
   private generateToken(): string {
-    // Generate a unique token for the request
     const timestamp = Date.now();
     const random = Math.random().toString(36).substring(7);
-    return md5(`${timestamp}_${random}`);
+    return md5(`${timestamp}_${random}`).toString(); // Fixed: ensure md5 returns string
   }
 
   private encryptPassword(password: string): string {
-    return md5(password).toLowerCase();
+    return md5(password).toString().toLowerCase(); // Fixed: ensure md5 returns string
   }
 
   private async makeRequest(
@@ -117,7 +114,6 @@ export class GPS51Client {
     const requestToken = this.token || this.generateToken();
     const url = new URL(this.baseURL);
     
-    // Add action and token to URL parameters
     url.searchParams.set('action', action);
     url.searchParams.set('token', requestToken);
     
@@ -132,7 +128,6 @@ export class GPS51Client {
     if (method === 'POST' && Object.keys(params).length > 0) {
       requestOptions.body = JSON.stringify(params);
     } else if (method === 'GET') {
-      // Add params to URL for GET requests
       Object.entries(params).forEach(([key, value]) => {
         url.searchParams.set(key, String(value));
       });
@@ -154,12 +149,10 @@ export class GPS51Client {
         throw new Error(`HTTP ${response.status}: ${responseText}`);
       }
 
-      // Try to parse as JSON
       let data: GPS51ApiResponse;
       try {
         data = JSON.parse(responseText);
       } catch (parseError) {
-        // If not JSON, wrap in our response format
         data = {
           status: GPS51_STATUS.SUCCESS,
           message: responseText,
@@ -167,7 +160,6 @@ export class GPS51Client {
         };
       }
 
-      // Reset retry count on successful request
       this.retryCount = 0;
       this.retryDelay = 1000;
 
@@ -175,7 +167,6 @@ export class GPS51Client {
     } catch (error) {
       console.error(`GPS51 API Error (${action}):`, error);
       
-      // Implement exponential backoff retry logic
       if (this.retryCount < this.maxRetries) {
         this.retryCount++;
         const delay = this.retryDelay * Math.pow(2, this.retryCount - 1);
@@ -192,11 +183,10 @@ export class GPS51Client {
 
   async authenticate(credentials: GPS51AuthCredentials): Promise<{ success: boolean; user?: GPS51User; error?: string }> {
     try {
-      const encryptedPassword = this.encryptPassword(credentials.password);
-      
+      // Password should already be MD5 hashed
       const response = await this.makeRequest('login', {
         username: credentials.username,
-        password: encryptedPassword,
+        password: credentials.password,
         from: credentials.from,
         type: credentials.type
       });
@@ -204,8 +194,6 @@ export class GPS51Client {
       if (response.status === GPS51_STATUS.SUCCESS && response.token) {
         this.token = response.token;
         this.user = response.user || null;
-        
-        // Set token expiry (assuming 24 hours if not provided)
         this.tokenExpiry = Date.now() + (24 * 60 * 60 * 1000);
         
         console.log('GPS51 Authentication successful:', {
@@ -229,21 +217,6 @@ export class GPS51Client {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown authentication error'
       };
-    }
-  }
-
-  async getDeviceTree(extend = 'self', serverid = 0): Promise<GPS51Device[]> {
-    this.ensureAuthenticated();
-    
-    const response = await this.makeRequest('querydevicestree', {
-      extend,
-      serverid
-    }, 'GET');
-
-    if (response.status === GPS51_STATUS.SUCCESS) {
-      return response.devices || response.data || [];
-    } else {
-      throw new Error(response.message || 'Failed to fetch device tree');
     }
   }
 
@@ -285,7 +258,6 @@ export class GPS51Client {
     }
 
     try {
-      // Attempt to refresh by making a simple API call
       const response = await this.makeRequest('querymonitorlist');
       
       if (response.status === GPS51_STATUS.SUCCESS) {
@@ -308,7 +280,6 @@ export class GPS51Client {
       throw new Error('Not authenticated. Please call authenticate() first.');
     }
 
-    // Check if token is expired
     if (this.tokenExpiry && Date.now() >= this.tokenExpiry) {
       throw new Error('Token expired. Please re-authenticate.');
     }
