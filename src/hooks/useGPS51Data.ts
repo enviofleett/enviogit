@@ -67,14 +67,14 @@ export const useGPS51Data = () => {
         if (latestPositionData) {
           latest_position = {
             vehicle_id: vehicle.id,
-            latitude: parseFloat(latestPositionData.latitude),
-            longitude: parseFloat(latestPositionData.longitude),
-            speed: parseFloat(latestPositionData.speed || '0'),
-            heading: parseFloat(latestPositionData.heading || '0'),
+            latitude: Number(latestPositionData.latitude),
+            longitude: Number(latestPositionData.longitude),
+            speed: Number(latestPositionData.speed || 0),
+            heading: Number(latestPositionData.heading || 0),
             timestamp: latestPositionData.timestamp,
             ignition_status: latestPositionData.ignition_status || false,
-            fuel_level: latestPositionData.fuel_level ? parseFloat(latestPositionData.fuel_level) : undefined,
-            engine_temperature: latestPositionData.engine_temperature ? parseFloat(latestPositionData.engine_temperature) : undefined,
+            fuel_level: latestPositionData.fuel_level ? Number(latestPositionData.fuel_level) : undefined,
+            engine_temperature: latestPositionData.engine_temperature ? Number(latestPositionData.engine_temperature) : undefined,
           };
         }
 
@@ -99,14 +99,14 @@ export const useGPS51Data = () => {
       if (!positionsError && positionsData) {
         const transformedPositions: VehiclePosition[] = positionsData.map(pos => ({
           vehicle_id: pos.vehicle_id,
-          latitude: parseFloat(pos.latitude),
-          longitude: parseFloat(pos.longitude),
-          speed: parseFloat(pos.speed || '0'),
-          heading: parseFloat(pos.heading || '0'),
+          latitude: Number(pos.latitude),
+          longitude: Number(pos.longitude),
+          speed: Number(pos.speed || 0),
+          heading: Number(pos.heading || 0),
           timestamp: pos.timestamp,
           ignition_status: pos.ignition_status || false,
-          fuel_level: pos.fuel_level ? parseFloat(pos.fuel_level) : undefined,
-          engine_temperature: pos.engine_temperature ? parseFloat(pos.engine_temperature) : undefined,
+          fuel_level: pos.fuel_level ? Number(pos.fuel_level) : undefined,
+          engine_temperature: pos.engine_temperature ? Number(pos.engine_temperature) : undefined,
         }));
         setPositions(transformedPositions);
       }
