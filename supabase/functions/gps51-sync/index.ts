@@ -24,6 +24,7 @@ interface GPS51ApiResponse {
   groups?: any[];
   records?: any[];
   user?: any;
+  lastquerypositiontime?: number;
 }
 
 interface GPS51Device {
@@ -35,17 +36,6 @@ interface GPS51Device {
   isfree: number;
   allowedit: number;
   icon: number;
-  callat?: number;
-  callon?: number;
-  speed?: number;
-  course?: number;
-  updatetime?: number;
-  status?: number;
-  moving?: number;
-  strstatus?: string;
-  totaldistance?: number;
-  altitude?: number;
-  radius?: number;
 }
 
 interface GPS51Position {
@@ -66,6 +56,7 @@ interface GPS51Position {
   voltage?: number;
   fuel?: number;
   radius?: number;
+  voltagepercent?: number;
 }
 
 serve(async (req) => {
@@ -100,7 +91,6 @@ serve(async (req) => {
       }
     } catch (e) {
       console.error("Request parsing error:", e);
-      // Continue with empty request body for environment variable fallback
     }
 
     console.log("GPS51 Sync Request validation:", {
@@ -170,21 +160,19 @@ serve(async (req) => {
 
     // Step 1: Authenticate with GPS51 API
     const loginToken = generateToken();
-    const loginUrl = new URL(correctedApiUrl);
-    loginUrl.searchParams.append('action', 'login');
-    loginUrl.searchParams.append('token', loginToken);
+    const loginUrl = `${correctedApiUrl}?action=login&token=${loginToken}`;
 
     const loginPayload = {
       username: finalUsername,
-      password: finalPassword, // Should already be MD5 hashed
+      password: finalPassword,
       from: 'WEB',
       type: 'USER'
     };
 
     console.log("=== GPS51 LOGIN ATTEMPT ===");
-    console.log("Login URL:", loginUrl.toString());
+    console.log("Login URL:", loginUrl);
 
-    const loginResponse = await fetch(loginUrl.toString(), {
+    const loginResponse = await fetch(loginUrl, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
@@ -230,16 +218,14 @@ serve(async (req) => {
 
     // Step 2: Get device list
     const deviceListToken = generateToken();
-    const deviceListUrl = new URL(correctedApiUrl);
-    deviceListUrl.searchParams.append('action', 'querymonitorlist');
-    deviceListUrl.searchParams.append('token', deviceListToken);
+    const deviceListUrl = `${correctedApiUrl}?action=querymonitorlist&token=${deviceListToken}`;
 
     const deviceListPayload = {
       username: finalUsername
     };
 
     console.log("=== GPS51 DEVICE LIST REQUEST ===");
-    const deviceListResponse = await fetch(deviceListUrl.toString(), {
+    const deviceListResponse = await fetch(deviceListUrl, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
@@ -266,7 +252,6 @@ serve(async (req) => {
         });
 
         if (deviceListData.status === 0 && deviceListData.groups) {
-          // Extract devices from groups
           deviceListData.groups.forEach((group: any) => {
             if (group.devices && Array.isArray(group.devices)) {
               devices = devices.concat(group.devices);
@@ -279,24 +264,36 @@ serve(async (req) => {
       }
     }
 
-    // Step 3: Get real-time positions if we have devices
+    // Step 3: Get last query position time from database
+    const { data: lastSyncData } = await supabase
+      .from('gps51_sync_jobs')
+      .select('*')
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    let lastQueryPositionTime = 0;
+    if (lastSyncData && lastSyncData.execution_time_seconds) {
+      // Use timestamp from last successful sync
+      lastQueryPositionTime = new Date(lastSyncData.started_at).getTime();
+    }
+
+    // Step 4: Get real-time positions if we have devices
     let positions: GPS51Position[] = [];
     if (devices.length > 0) {
       const positionToken = generateToken();
-      const positionUrl = new URL(correctedApiUrl);
-      positionUrl.searchParams.append('action', 'lastposition');
-      positionUrl.searchParams.append('token', positionToken);
+      const positionUrl = `${correctedApiUrl}?action=lastposition&token=${positionToken}`;
 
       const deviceIds = devices.map(d => d.deviceid);
       const positionPayload = {
         deviceids: deviceIds,
-        lastquerypositiontime: 0
+        lastquerypositiontime: lastQueryPositionTime
       };
 
       console.log("=== GPS51 POSITION REQUEST ===");
-      console.log(`Requesting positions for ${deviceIds.length} devices`);
+      console.log(`Requesting positions for ${deviceIds.length} devices with lastquerypositiontime: ${lastQueryPositionTime}`);
 
-      const positionResponse = await fetch(positionUrl.toString(), {
+      const positionResponse = await fetch(positionUrl, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -318,6 +315,11 @@ serve(async (req) => {
           if (positionData.status === 0 && positionData.records) {
             positions = positionData.records;
             console.log(`Retrieved ${positions.length} positions`);
+            
+            // Update last query position time for next sync
+            if (positionData.lastquerypositiontime) {
+              lastQueryPositionTime = positionData.lastquerypositiontime;
+            }
           }
         } catch (e) {
           console.error('Failed to parse position response:', e);
@@ -325,9 +327,21 @@ serve(async (req) => {
       }
     }
 
-    // Step 4: Store data in Supabase
+    // Step 5: Store data in Supabase
     let vehiclesSynced = 0;
     let positionsStored = 0;
+
+    // Create sync job record
+    const { data: syncJob } = await supabase
+      .from('gps51_sync_jobs')
+      .insert({
+        priority: requestBody.priority || 2,
+        vehicles_processed: devices.length,
+        positions_stored: 0,
+        success: false
+      })
+      .select()
+      .single();
 
     if (devices.length > 0) {
       // Update or insert vehicles
@@ -384,9 +398,10 @@ serve(async (req) => {
                 timestamp: new Date(position.updatetime).toISOString(),
                 address: position.strstatus || 'Unknown',
                 ignition_status: position.moving === 1,
-                fuel_level: position.fuel,
-                engine_temperature: position.temp1,
+                fuel_level: position.voltagepercent,
+                engine_temperature: position.temp1 ? position.temp1 / 10 : null,
                 battery_level: position.voltage,
+                recorded_at: new Date().toISOString()
               }, {
                 onConflict: 'vehicle_id,timestamp'
               });
@@ -403,6 +418,20 @@ serve(async (req) => {
       }
     }
 
+    // Update sync job with results
+    if (syncJob) {
+      await supabase
+        .from('gps51_sync_jobs')
+        .update({
+          completed_at: new Date().toISOString(),
+          success: true,
+          vehicles_processed: vehiclesSynced,
+          positions_stored: positionsStored,
+          execution_time_seconds: Math.round((Date.now() - startTime) / 1000)
+        })
+        .eq('id', syncJob.id);
+    }
+
     // Return success response
     const executionTime = (Date.now() - startTime) / 1000;
     const result = {
@@ -413,7 +442,8 @@ serve(async (req) => {
       vehiclesSynced,
       positionsStored,
       devicesFound: devices.length,
-      positionsRetrieved: positions.length
+      positionsRetrieved: positions.length,
+      lastQueryPositionTime
     };
 
     console.log('GPS51 sync completed:', result);

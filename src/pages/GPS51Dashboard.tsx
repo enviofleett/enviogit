@@ -1,42 +1,69 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useGPS51LiveData } from '@/hooks/useGPS51LiveData';
+import { useGPS51EnhancedLiveData } from '@/hooks/useGPS51EnhancedLiveData';
+import { GPS51LiveDataStatus } from '@/components/gps51/GPS51LiveDataStatus';
+import { gps51PollingService } from '@/services/gps51/GPS51PollingService';
 import { Activity, Car, Navigation, Zap } from 'lucide-react';
 
 const GPS51Dashboard = () => {
-  const { positions, metrics, loading, error, lastSyncTime } = useGPS51LiveData({
+  const [pollingEnabled, setPollingEnabled] = useState(true);
+  
+  const { 
+    positions, 
+    metrics, 
+    loading, 
+    error, 
+    lastSyncTime,
+    refresh,
+    pollingActive
+  } = useGPS51EnhancedLiveData({
     enabled: true,
-    refreshInterval: 30000,
-    enableWebSocket: true,
-    enableIntelligentFiltering: true
+    refreshInterval: 10000,
+    enablePolling: pollingEnabled,
+    priority: 1
   });
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-        <h3 className="font-semibold">Connection Error</h3>
-        <p>{error}</p>
-      </div>
-    );
-  }
+  const handleTogglePolling = () => {
+    const newEnabled = !pollingEnabled;
+    setPollingEnabled(newEnabled);
+    
+    if (newEnabled) {
+      gps51PollingService.startPolling({
+        interval: 10000,
+        enabled: true,
+        priority: 1
+      });
+    } else {
+      gps51PollingService.stopPolling();
+    }
+  };
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">GPS51 Fleet Dashboard</h1>
         <p className="text-muted-foreground">
-          Real-time tracking and fleet management dashboard
+          Enhanced real-time tracking and fleet management dashboard
         </p>
       </div>
+
+      {/* Live Data Status */}
+      <GPS51LiveDataStatus
+        isConnected={!error && positions.length > 0}
+        isPolling={pollingActive}
+        lastSyncTime={lastSyncTime}
+        error={error}
+        loading={loading}
+        onRefresh={refresh}
+        onTogglePolling={handleTogglePolling}
+        metrics={{
+          totalDevices: metrics.totalDevices,
+          activeDevices: metrics.activeDevices,
+          movingVehicles: metrics.movingVehicles,
+          offlineVehicles: metrics.offlineVehicles
+        }}
+      />
 
       {/* Fleet Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -93,54 +120,25 @@ const GPS51Dashboard = () => {
         </Card>
       </div>
 
-      {/* Connection Status */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Connection Status</CardTitle>
-          <CardDescription>
-            GPS51 API connection and data synchronization status
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span>Real-time Connection:</span>
-              <span className={`px-2 py-1 rounded text-xs ${
-                metrics.realTimeConnected 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-red-100 text-red-800'
-              }`}>
-                {metrics.realTimeConnected ? 'Connected' : 'Disconnected'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>Offline Vehicles:</span>
-              <span>{metrics.offlineVehicles}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>Last Update:</span>
-              <span>{lastSyncTime ? lastSyncTime.toLocaleTimeString() : 'Never'}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Recent Positions */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Vehicle Positions</CardTitle>
+          <CardTitle>Live Vehicle Positions</CardTitle>
           <CardDescription>
-            Latest position updates from GPS51 devices
+            Real-time GPS tracking data from GPS51 devices
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-96 overflow-y-auto">
             {positions.slice(0, 10).map((position) => (
-              <div key={position.deviceid} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+              <div key={position.deviceid} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div>
                   <div className="font-medium">{position.deviceid}</div>
                   <div className="text-sm text-gray-600">
                     {position.callat.toFixed(6)}, {position.callon.toFixed(6)}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {position.strstatus || 'No status available'}
                   </div>
                 </div>
                 <div className="text-right">
@@ -150,12 +148,17 @@ const GPS51Dashboard = () => {
                   }`}>
                     {position.moving ? 'Moving' : 'Stopped'}
                   </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {new Date(position.updatetime).toLocaleTimeString()}
+                  </div>
                 </div>
               </div>
             ))}
             {positions.length === 0 && (
               <div className="text-center py-8 text-gray-500">
-                No vehicle positions available
+                <Car className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                <p>No vehicle positions available</p>
+                <p className="text-sm">Check your GPS51 connection and try refreshing</p>
               </div>
             )}
           </div>
