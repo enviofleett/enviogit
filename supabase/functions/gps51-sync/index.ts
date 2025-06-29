@@ -63,7 +63,7 @@ serve(async (req) => {
       });
     }
 
-    let requestBody: GPS51SyncRequest;
+    let requestBody: any;
     try {
       const requestText = await req.text();
       console.log('Request received:', {
@@ -81,7 +81,9 @@ serve(async (req) => {
         hasPassword: !!requestBody.password,
         hasApiUrl: !!requestBody.apiUrl,
         passwordLength: requestBody.password?.length || 0,
-        apiUrl: requestBody.apiUrl
+        apiUrl: requestBody.apiUrl,
+        priority: requestBody.priority,
+        batchMode: requestBody.batchMode
       });
     } catch (e) {
       console.error("Request parsing error:", e);
@@ -103,7 +105,7 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { username, password, apiUrl } = requestBody;
+    const { username, password, apiUrl, priority, batchMode } = requestBody;
     
     // Ensure we use the correct GPS51 API URL
     let correctedApiUrl = apiUrl.replace(/\/$/, '');
@@ -113,6 +115,9 @@ serve(async (req) => {
     }
 
     console.log('Using API URL:', correctedApiUrl);
+    if (batchMode && priority) {
+      console.log(`BATCH MODE: Processing Priority ${priority} vehicles`);
+    }
 
     // Generate a proper random token for the login request
     const generateToken = () => {
@@ -165,7 +170,7 @@ serve(async (req) => {
       throw new Error(`GPS51 login HTTP error: ${loginResponse.status} ${loginResponse.statusText} - ${loginResponseText}`);
     }
 
-    let loginData: GPS51ApiResponse;
+    let loginData: any;
     try {
       loginData = JSON.parse(loginResponseText);
       console.log('GPS51 Login Success:', {
@@ -210,7 +215,7 @@ serve(async (req) => {
       bodyPreview: deviceResponseText.substring(0, 300)
     });
 
-    let devices: GPS51Device[] = [];
+    let devices: any[] = [];
     let deviceIds: string[] = [];
     
     if (deviceResponse.ok && deviceResponseText.trim()) {
@@ -228,7 +233,7 @@ serve(async (req) => {
             console.log(`Processing group: ${group.groupname}, devices: ${group.devices?.length || 0}`);
             if (group.devices && Array.isArray(group.devices)) {
               devices = devices.concat(group.devices);
-              group.devices.forEach((device: GPS51Device) => {
+              group.devices.forEach((device: any) => {
                 deviceIds.push(device.deviceid);
               });
             }
@@ -241,8 +246,77 @@ serve(async (req) => {
 
     console.log(`Device Summary: Found ${devices.length} devices, IDs: ${deviceIds.slice(0, 5).join(', ')}${deviceIds.length > 5 ? '...' : ''}`);
 
-    // Step 3: Fetch positions for devices - CRITICAL FIX
-    let positions: GPS51Position[] = [];
+    // BATCH MODE: Filter devices by priority if specified
+    let filteredDevices = devices;
+    if (batchMode && priority) {
+      console.log(`=== BATCH MODE: FILTERING BY PRIORITY ${priority} ===`);
+      
+      // Get vehicle data from database to determine priorities
+      const { data: dbVehicles, error: dbError } = await supabase
+        .from('vehicles')
+        .select(`
+          gps51_device_id,
+          status,
+          updated_at,
+          vehicle_positions!left(
+            timestamp,
+            ignition_status,
+            speed
+          )
+        `);
+
+      if (dbError) {
+        console.error('Error fetching vehicles for priority filtering:', dbError);
+      } else {
+        const now = new Date();
+        const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+        const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+        const priorityDeviceIds = new Set<string>();
+
+        dbVehicles?.forEach(vehicle => {
+          if (!vehicle.gps51_device_id) return;
+
+          const latestPosition = Array.isArray(vehicle.vehicle_positions) 
+            ? vehicle.vehicle_positions.sort((a, b) => 
+                new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+              )[0]
+            : vehicle.vehicle_positions;
+
+          const lastPositionTime = latestPosition ? new Date(latestPosition.timestamp) : null;
+          const isRecentlyActive = lastPositionTime && lastPositionTime > oneHourAgo;
+          const isMoving = latestPosition?.ignition_status || (latestPosition?.speed || 0) > 0;
+          const hasRecentPosition = lastPositionTime && lastPositionTime > oneDayAgo;
+
+          let vehiclePriority = 4; // Default to inactive
+
+          if (isRecentlyActive && isMoving) {
+            vehiclePriority = 1; // Active/Moving
+          } else if (vehicle.status === 'assigned' && hasRecentPosition) {
+            vehiclePriority = 2; // Assigned with recent activity
+          } else if (vehicle.status === 'available' && hasRecentPosition) {
+            vehiclePriority = 3; // Available with recent activity
+          }
+
+          if (vehiclePriority === priority) {
+            priorityDeviceIds.add(vehicle.gps51_device_id);
+          }
+        });
+
+        // Filter devices by priority
+        filteredDevices = devices.filter(device => priorityDeviceIds.has(device.deviceid));
+        deviceIds = filteredDevices.map(d => d.deviceid);
+
+        console.log(`Priority ${priority} filtering result:`, {
+          originalDeviceCount: devices.length,
+          filteredDeviceCount: filteredDevices.length,
+          priorityDeviceIds: Array.from(priorityDeviceIds).slice(0, 5)
+        });
+      }
+    }
+
+    // Step 3: Fetch positions for filtered devices
+    let positions: any[] = [];
     if (deviceIds.length > 0) {
       const positionUrl = new URL(correctedApiUrl);
       positionUrl.searchParams.append('action', 'lastposition');
@@ -311,7 +385,7 @@ serve(async (req) => {
         console.log('⚠️ No valid position data received or null response');
       }
     } else {
-      console.log('⚠️ No devices found, skipping position fetch');
+      console.log('⚠️ No devices found for the specified priority, skipping position fetch');
     }
 
     console.log(`Position Summary: Found ${positions.length} positions for ${deviceIds.length} devices`);
@@ -322,7 +396,7 @@ serve(async (req) => {
     
     console.log("=== SYNCING VEHICLES ===");
     
-    for (const device of devices) {
+    for (const device of filteredDevices) {
       try {
         const vehicleData = {
           license_plate: device.devicename,
@@ -358,7 +432,7 @@ serve(async (req) => {
       }
     }
 
-    console.log(`Vehicle Sync Summary: ${vehiclesSynced}/${devices.length} vehicles synced successfully`);
+    console.log(`Vehicle Sync Summary: ${vehiclesSynced}/${filteredDevices.length} vehicles synced successfully`);
     if (vehicleSyncErrors.length > 0) {
       console.log('Vehicle Sync Errors:', vehicleSyncErrors.slice(0, 5));
     }
@@ -463,8 +537,11 @@ serve(async (req) => {
     const summary = {
       success: true,
       timestamp: new Date().toISOString(),
+      priority: priority || null,
+      batchMode: batchMode || false,
       statistics: {
         devicesFound: devices.length,
+        devicesFiltered: filteredDevices.length,
         positionsRetrieved: positions.length,
         vehiclesSynced,
         positionsStored,
@@ -473,9 +550,9 @@ serve(async (req) => {
         skippedPositions: skippedPositions.length
       },
       details: {
-        vehicleSyncSuccessRate: devices.length > 0 ? Math.round((vehiclesSynced / devices.length) * 100) : 0,
+        vehicleSyncSuccessRate: filteredDevices.length > 0 ? Math.round((vehiclesSynced / filteredDevices.length) * 100) : 0,
         positionStorageSuccessRate: positions.length > 0 ? Math.round((positionsStored / positions.length) * 100) : 0,
-        positionsPerVehicleRatio: devices.length > 0 ? Math.round((positions.length / devices.length) * 100) / 100 : 0
+        positionsPerVehicleRatio: filteredDevices.length > 0 ? Math.round((positions.length / filteredDevices.length) * 100) / 100 : 0
       }
     };
 
