@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { gps51ConfigService } from '@/services/gp51/GPS51ConfigService';
 import { GPS51AuthService } from '@/services/gp51/GPS51AuthService';
@@ -28,7 +29,7 @@ export const useGPS51SessionBridge = () => {
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const isConfigured = gps51ConfigService.isConfigured();
+        const isConfigured = await gps51ConfigService.isConfigured();
         const isAuthenticated = isConfigured && authService.isAuthenticated();
         const token = isAuthenticated ? await authService.getValidToken() : null;
         
