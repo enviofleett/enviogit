@@ -2,35 +2,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-// Define raw GPS51 position data type as per API document
-interface GPS51PositionRaw {
-  deviceid: string;
-  callat: number; // Latitude
-  callon: number; // Longitude
-  updatetime: number; // UTC format, long (timestamp in milliseconds)
-  validpoistiontime: number; // Last valid location time, UTC format, long
-  radius: number; // Accuracy radius, meter
-  speed: number; // Speed, m/h
-  altitude: number; // Altitude, meter
-  course: number; // Direction, 0~360 degree
-  totaldistance: number; // Total mileage, meter
-  status: number; // Status code
-  strstatus: string; // Status description
-  alarm: number; // Alarm code
-  stralarm: string; // Alarm description
-  gotsrc: string; // Location type (LBS, wifi, gps)
-  rxlevel: number; // Signal percentage
-  voltagev?: number; // Voltage, V, some device don't have voltage.
-  voltagepercent?: number; // Volume percentage
-  gpsvalidnum?: number; // Satellite numbers
-  iostatus?: number; // I/O Status
-  rotatestatus?: number; // Rotation sensor
-  reportmode?: number; // Upload mode
-  moving: number; // 0: stop, 1: moving
-  parkduration?: number; // Parking duration, ms
-  temp1?: number; // Temperature 1, 1/10 degree C
-}
-
 // Define the VehiclePosition type
 export interface VehiclePosition {
   vehicle_id: string;
@@ -46,7 +17,7 @@ export interface VehiclePosition {
   engine_temperature?: number;
 }
 
-// Define the VehicleData type - updated to include all vehicle types
+// Define the VehicleData type - updated to include 'bike'
 export interface VehicleData {
   id: string;
   brand: string;
@@ -59,21 +30,6 @@ export interface VehicleData {
   notes: string;
   gps51_device_id?: string;
   latest_position: VehiclePosition | null;
-}
-
-// Define the raw Supabase vehicle row type
-interface SupabaseVehicleRow {
-  id: string;
-  brand: string;
-  model: string;
-  license_plate: string;
-  status: 'inactive' | 'available' | 'assigned' | 'maintenance';
-  type: 'bike' | 'sedan' | 'truck' | 'van' | 'motorcycle' | 'other';
-  created_at: string;
-  updated_at: string;
-  notes: string;
-  gps51_device_id?: string;
-  vehicle_positions: any[] | any | null; // Using any for now since we're dealing with Supabase position data
 }
 
 export const useGPS51Data = () => {
@@ -98,7 +54,7 @@ export const useGPS51Data = () => {
             vehicle_id, latitude, longitude, speed, timestamp, address, ignition_status, heading, fuel_level, engine_temperature
           )
         `)
-        .order('updated_at', { ascending: false }) as { data: SupabaseVehicleRow[] | null, error: any };
+        .order('updated_at', { ascending: false });
 
       if (vehiclesError) {
         console.error('Error fetching vehicles:', vehiclesError);
@@ -132,7 +88,7 @@ export const useGPS51Data = () => {
               timestamp: latestPositionRaw.timestamp,
               status: latestPositionRaw.address || 'Unknown location',
               isMoving: latestPositionRaw.ignition_status || false,
-              ignition_status: latestPositionRaw.ignition_status,
+              ignition_status: latestPositionRaw.ignition_status || false,
               heading: latestPositionRaw.heading ? Number(latestPositionRaw.heading) : undefined,
               fuel_level: latestPositionRaw.fuel_level ? Number(latestPositionRaw.fuel_level) : undefined,
               engine_temperature: latestPositionRaw.engine_temperature ? Number(latestPositionRaw.engine_temperature) : undefined,

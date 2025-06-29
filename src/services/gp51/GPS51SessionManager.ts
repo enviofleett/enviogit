@@ -1,24 +1,18 @@
 
-import * as md5 from 'js-md5';
+import { md5 } from 'js-md5';
 
-interface SessionData {
-  token: string;
-  expires_at: Date;
-  user_data?: any;
-}
-
-interface LoginCredentials {
-  username: string;
-  password: string;
-  apiUrl: string;
+export interface SessionData {
+  sessionId: string;
+  userId: string;
+  lastActivity: Date;
+  isActive: boolean;
 }
 
 export class GPS51SessionManager {
   private static instance: GPS51SessionManager;
   private sessionData: SessionData | null = null;
-  private readonly SESSION_KEY = 'gps51_session';
-
-  private constructor() {}
+  private token: string | null = null;
+  private lastSyncTime: Date | null = null;
 
   static getInstance(): GPS51SessionManager {
     if (!GPS51SessionManager.instance) {
@@ -27,98 +21,57 @@ export class GPS51SessionManager {
     return GPS51SessionManager.instance;
   }
 
-  async createSession(credentials: LoginCredentials): Promise<boolean> {
-    try {
-      // Ensure password is properly MD5 hashed
-      const hashedPassword = this.ensurePasswordHash(credentials.password);
-      
-      const loginData = {
-        username: credentials.username,
-        password: hashedPassword,
-        apiUrl: credentials.apiUrl
-      };
-
-      // Store session data
-      this.sessionData = {
-        token: this.generateSessionToken(),
-        expires_at: new Date(Date.now() + (24 * 60 * 60 * 1000)), // 24 hours
-        user_data: loginData
-      };
-
-      // Persist to localStorage
-      localStorage.setItem(this.SESSION_KEY, JSON.stringify(this.sessionData));
-      
-      return true;
-    } catch (error) {
-      console.error('Failed to create GPS51 session:', error);
-      return false;
-    }
-  }
-
-  private ensurePasswordHash(password: string): string {
-    // Check if password is already MD5 hashed (32 character hex string)
-    if (password.length === 32 && /^[a-f0-9]+$/i.test(password)) {
-      return password.toLowerCase();
-    }
+  async initialize(accessToken: string): Promise<void> {
+    this.token = accessToken;
     
-    // Hash the password using MD5
-    return md5.md5(password);
+    // Generate session ID using MD5 hash
+    const sessionId = md5(`${accessToken}_${Date.now()}`);
+    
+    this.sessionData = {
+      sessionId,
+      userId: 'gps51_user', // Would be dynamic in real implementation
+      lastActivity: new Date(),
+      isActive: true
+    };
+
+    console.log('GPS51 Session Manager initialized');
   }
 
-  private generateSessionToken(): string {
-    return md5.md5(Date.now().toString() + Math.random().toString());
+  async isConnected(): Promise<boolean> {
+    return this.sessionData?.isActive && this.token !== null;
   }
 
-  getSession(): SessionData | null {
-    if (this.sessionData) {
-      // Check if session is still valid
-      if (new Date().getTime() >= this.sessionData.expires_at.getTime()) {
-        this.clearSession();
-        return null;
-      }
-      return this.sessionData;
+  async syncData(): Promise<void> {
+    if (!await this.isConnected()) {
+      throw new Error('Session not connected');
     }
 
-    // Try to load from localStorage
     try {
-      const stored = localStorage.getItem(this.SESSION_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        parsed.expires_at = new Date(parsed.expires_at);
-        
-        if (new Date().getTime() >= parsed.expires_at.getTime()) {
-          this.clearSession();
-          return null;
-        }
-        
-        this.sessionData = parsed;
-        return this.sessionData;
+      // In a real implementation, this would sync with GPS51 API
+      console.log('Syncing GPS51 data...');
+      this.lastSyncTime = new Date();
+      
+      if (this.sessionData) {
+        this.sessionData.lastActivity = new Date();
       }
     } catch (error) {
-      console.error('Failed to load GPS51 session:', error);
+      console.error('GPS51 sync failed:', error);
+      throw error;
     }
-
-    return null;
   }
 
-  isSessionValid(): boolean {
-    const session = this.getSession();
-    return session !== null;
+  getLastSyncTime(): Date | null {
+    return this.lastSyncTime;
   }
 
-  clearSession(): void {
+  getSessionData(): SessionData | null {
+    return this.sessionData;
+  }
+
+  cleanup(): void {
     this.sessionData = null;
-    localStorage.removeItem(this.SESSION_KEY);
-  }
-
-  refreshSession(): boolean {
-    if (this.sessionData) {
-      this.sessionData.expires_at = new Date(Date.now() + (24 * 60 * 60 * 1000));
-      localStorage.setItem(this.SESSION_KEY, JSON.stringify(this.sessionData));
-      return true;
-    }
-    return false;
+    this.token = null;
+    this.lastSyncTime = null;
+    console.log('GPS51 Session Manager cleaned up');
   }
 }
-
-export const gps51SessionManager = GPS51SessionManager.getInstance();

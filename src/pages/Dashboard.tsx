@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
@@ -9,7 +10,6 @@ import GPS51SyncButton from '@/components/dashboard/GPS51SyncButton';
 import RealTimeMap from '@/components/dashboard/RealTimeMap';
 import MonitoringAlertsPanel from '@/components/dashboard/MonitoringAlertsPanel';
 import RealTimeConnectionStatus from '@/components/dashboard/RealTimeConnectionStatus';
-import RealTimeGPS51Status from '@/components/dashboard/RealTimeGPS51Status';
 import { useGPS51Data } from '@/hooks/useGPS51Data';
 import { useGPS51LiveData } from '@/hooks/useGPS51LiveData';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -17,7 +17,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 const Dashboard = () => {
   const { vehicles: gps51Vehicles, loading: gps51Loading } = useGPS51Data();
   const [enableRealTime, setEnableRealTime] = useState(true);
-  const [enableGPS51RealTime, setEnableGPS51RealTime] = useState(true);
   
   // Use the enhanced live data hook with Phase 4 features
   const { 
@@ -65,10 +64,6 @@ const Dashboard = () => {
     setEnableRealTime(prev => !prev);
   };
 
-  const handleToggleGPS51RealTime = () => {
-    setEnableGPS51RealTime(prev => !prev);
-  };
-
   const handlePrioritySync = () => {
     const movingVehicleIds = vehiclesWithGPS
       .filter(v => v.speed > 0)
@@ -96,20 +91,14 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* Real-time Status Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <RealTimeGPS51Status 
-                enabled={enableGPS51RealTime} 
-                onToggle={handleToggleGPS51RealTime} 
-              />
-              <RealTimeConnectionStatus
-                connected={liveMetrics.realTimeConnected}
-                lastUpdateTime={liveMetrics.lastUpdateTime}
-                onRefresh={refreshLiveData}
-                onToggleRealTime={handleToggleRealTime}
-                vehicleCount={liveMetrics.activeDevices}
-              />
-            </div>
+            {/* Real-time Connection Status */}
+            <RealTimeConnectionStatus
+              connected={liveMetrics.realTimeConnected}
+              lastUpdateTime={liveMetrics.lastUpdateTime}
+              onRefresh={refreshLiveData}
+              onToggleRealTime={handleToggleRealTime}
+              vehicleCount={liveMetrics.activeDevices}
+            />
 
             {/* Enhanced Dashboard Tabs */}
             <Tabs defaultValue="overview" className="space-y-6">

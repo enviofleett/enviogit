@@ -11,8 +11,7 @@ const GPS51SyncButton: React.FC = () => {
 
   const handleSync = async () => {
     // Check if GPS51 is configured
-    const isConfigured = await gps51ConfigService.isConfigured();
-    if (!isConfigured) {
+    if (!gps51ConfigService.isConfigured()) {
       toast({
         title: 'Configuration Required',
         description: 'Please configure GPS51 credentials in Settings before syncing.',
@@ -44,16 +43,7 @@ const GPS51SyncButton: React.FC = () => {
     }
   };
 
-  const [isConfigured, setIsConfigured] = useState(false);
-
-  // Check configuration status
-  React.useEffect(() => {
-    const checkConfig = async () => {
-      const configured = await gps51ConfigService.isConfigured();
-      setIsConfigured(configured);
-    };
-    checkConfig();
-  }, []);
+  const isConfigured = gps51ConfigService.isConfigured();
 
   return (
     <Button 

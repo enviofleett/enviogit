@@ -1,48 +1,31 @@
 
-export interface GPS51Config {
-  apiUrl: string;
-  username: string;
-  password: string;
-  from: 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN';
-  type: 'USER' | 'DEVICE';
-}
-
-export interface GPS51Credentials {
-  username: string;
-  password: string;
-  from: 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN';
-  type: 'USER' | 'DEVICE';
-  apiUrl: string;
-  apiKey?: string;
-}
-
-// Re-export from GPS51Client for backward compatibility
-export type { GPS51AuthCredentials, GPS51User, GPS51Device, GPS51Position } from './GPS51Client';
-
-export interface SyncResult {
-  success: boolean;
-  vehiclesSynced?: number;
-  positionsStored?: number;
-  error?: string;
-}
-
-// GPS51 API Types
-export interface GPS51ApiConfig {
-  baseUrl: string;
-  apiKey: string;
-  timeout: number;
-}
-
+// GPS51 API Response Types
 export interface GPS51Vehicle {
   id: string;
   name: string;
   plate: string;
-  brand: string;
-  model: string;
-  type: string;
-  status: string;
+  brand?: string;
+  model?: string;
+  type: 'car' | 'truck' | 'van' | 'motorcycle';
+  status: 'active' | 'inactive' | 'maintenance';
   createdAt: string;
   updatedAt: string;
+}
+
+export interface GPS51Position {
+  vehicleId: string;
+  latitude: number;
+  longitude: number;
+  altitude?: number;
+  speed: number;
+  heading: number;
+  accuracy?: number;
+  timestamp: string;
+  address?: string;
+  ignition: boolean;
+  fuel?: number;
+  temperature?: number;
+  batteryLevel?: number;
 }
 
 export interface GPS51Telemetry {
@@ -61,27 +44,15 @@ export interface GPS51Geofence {
   type: 'circle' | 'polygon';
   coordinates: number[][];
   radius?: number;
-  description?: string;
+  vehicleIds: string[];
+  alerts: {
+    enter: boolean;
+    exit: boolean;
+  };
 }
 
-// Real-time sync types
-export interface RealTimeGPS51Data {
-  deviceId: string;
-  latitude: number;
-  longitude: number;
-  speed: number;
-  course: number;
-  timestamp: Date;
-  ignitionStatus: boolean;
-  fuel?: number;
-  temperature?: number;
-  address?: string;
-}
-
-export interface RealTimeSyncStatus {
-  isActive: boolean;
-  isConnected: boolean;
-  lastUpdate: Date | null;
-  activeDevices: number;
-  error: string | null;
+export interface GPS51ApiConfig {
+  baseUrl: string;
+  apiKey: string;
+  timeout: number;
 }
