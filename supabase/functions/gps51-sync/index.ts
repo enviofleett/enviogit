@@ -65,10 +65,10 @@ serve(async (req) => {
   }
 
   const startTime = Date.now();
-  let token: string | null = null;
+  let authenticatedToken: string | null = null;
 
   try {
-    console.log('=== GPS51 SYNC STARTED (ENHANCED) ===');
+    console.log('=== GPS51 SYNC STARTED (ENHANCED WITH DEBUG) ===');
     console.log('Timestamp:', new Date().toISOString());
 
     if (req.method !== 'POST') {
@@ -171,6 +171,12 @@ serve(async (req) => {
 
     console.log("=== GPS51 LOGIN ATTEMPT ===");
     console.log("Login URL:", loginUrl);
+    console.log("Login payload:", {
+      username: loginPayload.username,
+      passwordLength: loginPayload.password.length,
+      from: loginPayload.from,
+      type: loginPayload.type
+    });
 
     const loginResponse = await fetch(loginUrl, {
       method: 'POST',
@@ -185,9 +191,12 @@ serve(async (req) => {
     console.log(`GPS51 Login Response:`, {
       status: loginResponse.status,
       statusText: loginResponse.statusText,
+      contentType: loginResponse.headers.get('Content-Type'),
       bodyLength: loginResponseText.length,
       bodyPreview: loginResponseText.substring(0, 200)
     });
+
+    console.log(`GPS51 Login Raw Response Body: ${loginResponseText}`);
 
     if (!loginResponse.ok) {
       throw new Error(`GPS51 login HTTP error: ${loginResponse.status} ${loginResponse.statusText} - ${loginResponseText}`);
@@ -213,24 +222,33 @@ serve(async (req) => {
       throw new Error(errorMsg);
     }
 
-    token = loginData.token;
-    console.log('GPS51 login successful, token acquired');
+    // Store the authenticated token for subsequent requests
+    authenticatedToken = loginData.token;
+    console.log('GPS51 login successful, authenticated token acquired:', authenticatedToken.substring(0, 8) + '...');
 
-    // Step 2: Get device list
+    // Step 2: Get device list using the authenticated token
     const deviceListToken = generateToken();
     const deviceListUrl = `${correctedApiUrl}?action=querymonitorlist&token=${deviceListToken}`;
 
     const deviceListPayload = {
-      username: finalUsername
+      username: finalUsername,
+      token: authenticatedToken // Include the authenticated token in the payload
     };
 
     console.log("=== GPS51 DEVICE LIST REQUEST ===");
+    console.log("Device List URL:", deviceListUrl);
+    console.log("Device List Payload:", {
+      username: deviceListPayload.username,
+      hasAuthToken: !!deviceListPayload.token,
+      authTokenPreview: deviceListPayload.token?.substring(0, 8) + '...'
+    });
+    
     const deviceListResponse = await fetch(deviceListUrl, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'Content-Type': 'application/json'
+        // Note: Removed Authorization header - GPS51 uses token in URL and payload
       },
       body: JSON.stringify(deviceListPayload)
     });
@@ -238,8 +256,12 @@ serve(async (req) => {
     const deviceListResponseText = await deviceListResponse.text();
     console.log(`GPS51 Device List Response:`, {
       status: deviceListResponse.status,
+      statusText: deviceListResponse.statusText,
+      contentType: deviceListResponse.headers.get('Content-Type'),
       bodyLength: deviceListResponseText.length
     });
+
+    console.log(`GPS51 Device List Raw Response Body: ${deviceListResponseText}`);
 
     let devices: GPS51Device[] = [];
     if (deviceListResponse.ok) {
@@ -247,21 +269,44 @@ serve(async (req) => {
         const deviceListData: GPS51ApiResponse = JSON.parse(deviceListResponseText);
         console.log('Device list data:', {
           status: deviceListData.status,
+          message: deviceListData.message,
           hasGroups: !!deviceListData.groups,
-          groupsLength: deviceListData.groups?.length || 0
+          groupsLength: deviceListData.groups?.length || 0,
+          hasData: !!deviceListData.data,
+          dataType: Array.isArray(deviceListData.data) ? 'array' : typeof deviceListData.data
         });
 
         if (deviceListData.status === 0 && deviceListData.groups) {
           deviceListData.groups.forEach((group: any) => {
+            console.log(`Processing group:`, {
+              groupId: group.groupid,
+              groupName: group.groupname,
+              hasDevices: !!group.devices,
+              deviceCount: group.devices?.length || 0
+            });
+            
             if (group.devices && Array.isArray(group.devices)) {
               devices = devices.concat(group.devices);
             }
           });
-          console.log(`Found ${devices.length} devices`);
+          console.log(`Found ${devices.length} devices total`);
+        } else {
+          console.warn('Unexpected device list response format or error:', {
+            status: deviceListData.status,
+            message: deviceListData.message,
+            responseKeys: Object.keys(deviceListData)
+          });
         }
       } catch (e) {
         console.error('Failed to parse device list response:', e);
+        console.error('Raw response that failed to parse:', deviceListResponseText);
       }
+    } else {
+      console.error('Device list request failed with HTTP error:', {
+        status: deviceListResponse.status,
+        statusText: deviceListResponse.statusText,
+        body: deviceListResponseText
+      });
     }
 
     // Step 3: Get last query position time from database
@@ -287,18 +332,25 @@ serve(async (req) => {
       const deviceIds = devices.map(d => d.deviceid);
       const positionPayload = {
         deviceids: deviceIds,
-        lastquerypositiontime: lastQueryPositionTime
+        lastquerypositiontime: lastQueryPositionTime,
+        token: authenticatedToken // Include the authenticated token
       };
 
       console.log("=== GPS51 POSITION REQUEST ===");
       console.log(`Requesting positions for ${deviceIds.length} devices with lastquerypositiontime: ${lastQueryPositionTime}`);
+      console.log("Position URL:", positionUrl);
+      console.log("Position Payload:", {
+        deviceidsCount: positionPayload.deviceids.length,
+        lastQueryTime: positionPayload.lastquerypositiontime,
+        hasAuthToken: !!positionPayload.token
+      });
 
       const positionResponse = await fetch(positionUrl, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
+          // Note: Removed Authorization header - GPS51 uses token in URL and payload
         },
         body: JSON.stringify(positionPayload)
       });
@@ -306,12 +358,24 @@ serve(async (req) => {
       const positionResponseText = await positionResponse.text();
       console.log(`GPS51 Position Response:`, {
         status: positionResponse.status,
+        statusText: positionResponse.statusText,
+        contentType: positionResponse.headers.get('Content-Type'),
         bodyLength: positionResponseText.length
       });
+
+      console.log(`GPS51 Position Raw Response Body: ${positionResponseText}`);
 
       if (positionResponse.ok) {
         try {
           const positionData: GPS51ApiResponse = JSON.parse(positionResponseText);
+          console.log('Position data:', {
+            status: positionData.status,
+            message: positionData.message,
+            hasRecords: !!positionData.records,
+            recordsLength: positionData.records?.length || 0,
+            lastQueryPositionTime: positionData.lastquerypositiontime
+          });
+          
           if (positionData.status === 0 && positionData.records) {
             positions = positionData.records;
             console.log(`Retrieved ${positions.length} positions`);
@@ -320,10 +384,23 @@ serve(async (req) => {
             if (positionData.lastquerypositiontime) {
               lastQueryPositionTime = positionData.lastquerypositiontime;
             }
+          } else {
+            console.warn('Unexpected position response format or error:', {
+              status: positionData.status,
+              message: positionData.message,
+              responseKeys: Object.keys(positionData)
+            });
           }
         } catch (e) {
           console.error('Failed to parse position response:', e);
+          console.error('Raw position response that failed to parse:', positionResponseText);
         }
+      } else {
+        console.error('Position request failed with HTTP error:', {
+          status: positionResponse.status,
+          statusText: positionResponse.statusText,
+          body: positionResponseText
+        });
       }
     }
 
@@ -443,7 +520,13 @@ serve(async (req) => {
       positionsStored,
       devicesFound: devices.length,
       positionsRetrieved: positions.length,
-      lastQueryPositionTime
+      lastQueryPositionTime,
+      debugInfo: {
+        authenticatedTokenLength: authenticatedToken?.length || 0,
+        loginSuccess: !!authenticatedToken,
+        deviceListRequestMade: true,
+        positionRequestMade: devices.length > 0
+      }
     };
 
     console.log('GPS51 sync completed:', result);
@@ -454,11 +537,12 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('=== GPS51 SYNC ERROR (ENHANCED) ===');
+    console.error('=== GPS51 SYNC ERROR (ENHANCED WITH DEBUG) ===');
     console.error('Error details:', {
       message: error.message,
       stack: error.stack,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      hadAuthenticatedToken: !!authenticatedToken
     });
 
     const executionTime = (Date.now() - startTime) / 1000;
@@ -466,7 +550,11 @@ serve(async (req) => {
       success: false,
       error: error.message,
       timestamp: new Date().toISOString(),
-      executionTimeSeconds: executionTime
+      executionTimeSeconds: executionTime,
+      debugInfo: {
+        authenticatedTokenAcquired: !!authenticatedToken,
+        errorOccurredAt: 'See logs for details'
+      }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
