@@ -127,6 +127,12 @@ export class GPS51AuthService {
     return null;
   }
 
+  // New method to get the full token object when needed
+  async getTokenObject(): Promise<GPS51AuthToken | null> {
+    const tokenString = await this.getValidToken();
+    return tokenString ? this.token : null;
+  }
+
   async refreshToken(): Promise<GPS51AuthToken | null> {
     // Try to load credentials from localStorage if not in memory
     if (!this.credentials) {
@@ -193,7 +199,23 @@ export class GPS51AuthService {
 
   isAuthenticated(): boolean {
     if (!this.token) {
-      return false;
+      // Try to load from localStorage
+      const storedToken = localStorage.getItem('gps51_token');
+      if (storedToken) {
+        try {
+          const tokenData = JSON.parse(storedToken);
+          this.token = {
+            access_token: tokenData.access_token,
+            token_type: tokenData.token_type,
+            expires_in: tokenData.expires_in,
+            expires_at: new Date(tokenData.expires_at)
+          };
+        } catch (e) {
+          return false;
+        }
+      } else {
+        return false;
+      }
     }
     
     const currentTime = Date.now();

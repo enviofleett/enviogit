@@ -123,22 +123,21 @@ serve(async (req) => {
       }
     }
 
-    // Get credentials from localStorage if not provided (for cron jobs)
+    // Improved credential handling for edge function
     let finalApiUrl = apiUrl;
     let finalUsername = username;
     let finalPassword = password;
 
+    // For cron jobs or when credentials are not provided, get them from Supabase secrets
     if (!finalApiUrl || !finalUsername || !finalPassword) {
-      console.log('Getting credentials from system settings...');
-      // For cron jobs, we need to get credentials from a secure location
-      // This is a placeholder - in production, store these securely
-      finalApiUrl = Deno.env.get('GPS51_API_URL') || apiUrl;
-      finalUsername = Deno.env.get('GPS51_USERNAME') || username;
-      finalPassword = Deno.env.get('GPS51_PASSWORD_HASH') || password;
+      console.log('Getting credentials from Supabase secrets...');
+      finalApiUrl = Deno.env.get('GPS51_API_URL') || 'https://api.gps51.com/openapi';
+      finalUsername = Deno.env.get('GPS51_USERNAME') || '';
+      finalPassword = Deno.env.get('GPS51_PASSWORD_HASH') || '';
     }
 
     if (!finalApiUrl || !finalUsername || !finalPassword) {
-      throw new Error('GPS51 credentials not available for automated sync');
+      throw new Error('GPS51 credentials not available. Please configure GPS51_USERNAME, GPS51_PASSWORD_HASH, and GPS51_API_URL in Supabase secrets.');
     }
     
     // Ensure we use the correct GPS51 API URL
@@ -146,6 +145,10 @@ serve(async (req) => {
     if (correctedApiUrl.includes('www.gps51.com')) {
       console.log('Correcting API URL from www.gps51.com to api.gps51.com');
       correctedApiUrl = correctedApiUrl.replace('www.gps51.com', 'api.gps51.com');
+    }
+    if (correctedApiUrl.includes('/webapi')) {
+      console.log('Correcting API URL from /webapi to /openapi');
+      correctedApiUrl = correctedApiUrl.replace('/webapi', '/openapi');
     }
 
     console.log('Using API URL:', correctedApiUrl);
@@ -643,6 +646,10 @@ serve(async (req) => {
     
     // Update job with error status
     if (jobId) {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      
       await supabase
         .from('gps51_sync_jobs')
         .update({

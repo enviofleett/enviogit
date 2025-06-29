@@ -54,9 +54,9 @@ export const useGPS51RealTimeSync = (enableSync: boolean = true) => {
         throw new Error('GPS51 authentication required. Please reconnect.');
       }
 
-      // Get valid token for GPS51 API calls
-      const token = await authService.getValidToken();
-      if (!token?.access_token) {
+      // Get valid token for GPS51 API calls - fix the type error
+      const tokenString = await authService.getValidToken();
+      if (!tokenString) {
         throw new Error('No valid GPS51 token available.');
       }
 
