@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useGPS51SessionBridge } from '@/hooks/useGPS51SessionBridge';
@@ -151,8 +150,8 @@ export const useCredentialsForm = () => {
         localStorage.setItem('gps51_api_key', credentials.apiKey);
       }
 
-      // Connect using the session bridge
-      await connect();
+      // Connect using the session bridge with credentials
+      await connect(credentials);
       
       toast({
         title: "Configuration Saved",

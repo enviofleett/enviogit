@@ -3,6 +3,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { gps51Client } from './GPS51Client';
 import { GPS51AuthService } from '../gp51/GPS51AuthService';
 
+// Extend the GPS51Device interface to include groupId
+interface GPS51Device {
+  deviceid: string;
+  devicename?: string;
+  groupId?: string;
+}
+
 export interface SyncResult {
   success: boolean;
   vehiclesSynced: number;

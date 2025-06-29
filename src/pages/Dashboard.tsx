@@ -3,13 +3,9 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useGPS51LiveData } from '@/hooks/useGPS51LiveData';
-import FleetStats from '@/components/dashboard/FleetStats';
 import RealTimeMap from '@/components/dashboard/RealTimeMap';
-import VehicleCard from '@/components/dashboard/VehicleCard';
-import RealtimeChart from '@/components/dashboard/RealtimeChart';
 import RealTimeGPS51Status from '@/components/dashboard/RealTimeGPS51Status';
 import GPS51SyncButton from '@/components/dashboard/GPS51SyncButton';
-import RealTimeConnectionStatus from '@/components/dashboard/RealTimeConnectionStatus';
 import MonitoringAlertsPanel from '@/components/dashboard/MonitoringAlertsPanel';
 import AIInsights from '@/components/dashboard/AIInsights';
 
@@ -42,20 +38,26 @@ const Dashboard = () => {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <FleetStats 
-          metrics={metrics}
-          loading={loading}
-        />
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Fleet Overview</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{uniqueDevices.length}</div>
+            <p className="text-xs text-muted-foreground">
+              Total Devices
+            </p>
+          </CardContent>
+        </Card>
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Connection Status</CardTitle>
           </CardHeader>
           <CardContent>
-            <RealTimeConnectionStatus 
-              connected={metrics.realTimeConnected}
-              lastUpdateTime={metrics.lastUpdateTime}
-            />
+            <div className="text-sm">
+              {loading ? 'Connecting...' : metrics.realTimeConnected ? 'Connected' : 'Disconnected'}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -78,11 +80,7 @@ const Dashboard = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <RealTimeMap 
-                positions={positions}
-                loading={loading}
-                error={error}
-              />
+              <RealTimeMap />
             </CardContent>
           </Card>
         </TabsContent>
@@ -90,21 +88,30 @@ const Dashboard = () => {
         <TabsContent value="vehicles">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {uniqueDevices.map((deviceId) => (
-              <VehicleCard 
-                key={deviceId}
-                deviceId={deviceId}
-                positions={positions.filter(p => p.deviceid === deviceId)}
-              />
+              <Card key={deviceId}>
+                <CardHeader>
+                  <CardTitle className="text-sm">{deviceId}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-xs text-muted-foreground">
+                    Device positions: {positions.filter(p => p.deviceid === deviceId).length}
+                  </p>
+                </CardContent>
+              </Card>
             ))}
           </div>
         </TabsContent>
 
         <TabsContent value="analytics">
           <div className="grid gap-4">
-            <RealtimeChart 
-              positions={positions}
-              loading={loading}
-            />
+            <Card>
+              <CardHeader>
+                <CardTitle>Analytics</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p>Analytics data will be displayed here</p>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 
@@ -113,20 +120,13 @@ const Dashboard = () => {
         </TabsContent>
 
         <TabsContent value="ai">
-          <AIInsights 
-            positions={positions}
-            metrics={metrics}
-          />
+          <AIInsights />
         </TabsContent>
       </Tabs>
 
       <div className="flex gap-4">
         <RealTimeGPS51Status />
-        <GPS51SyncButton 
-          onSync={refresh}
-          loading={loading}
-          lastSyncTime={lastSyncTime}
-        />
+        <GPS51SyncButton />
       </div>
     </div>
   );
