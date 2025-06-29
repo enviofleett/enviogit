@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -5,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Eye, EyeOff, Save, TestTube, Trash2, CheckCircle, AlertCircle, Bug } from 'lucide-react';
+import { Eye, EyeOff, Save, TestTube, Trash2, CheckCircle, AlertCircle, Bug, Loader2 } from 'lucide-react';
 import { useGPS51SessionBridge } from '@/hooks/useGPS51SessionBridge';
 import { md5 } from 'js-md5';
 
@@ -69,7 +70,6 @@ export const GPS51CredentialsForm = () => {
       return false;
     }
 
-    // Basic URL validation
     try {
       new URL(formData.apiUrl);
     } catch {
@@ -81,7 +81,6 @@ export const GPS51CredentialsForm = () => {
       return false;
     }
 
-    // Validate correct API URL - updated for openapi endpoint
     if (!formData.apiUrl.includes('api.gps51.com')) {
       toast({
         title: "Incorrect API URL",
@@ -91,7 +90,6 @@ export const GPS51CredentialsForm = () => {
       return false;
     }
 
-    // Check for deprecated webapi endpoint
     if (formData.apiUrl.includes('/webapi')) {
       toast({
         title: "Deprecated API Endpoint",
@@ -105,7 +103,6 @@ export const GPS51CredentialsForm = () => {
   };
 
   const prepareCredentials = (rawPassword: string) => {
-    // Only hash if not already hashed
     const hashedPassword = isValidMD5(rawPassword) ? rawPassword : md5(rawPassword).toLowerCase();
     
     const credentials = {
@@ -117,7 +114,6 @@ export const GPS51CredentialsForm = () => {
       type: formData.type
     };
 
-    // Store debug info
     setDebugInfo({
       originalPassword: {
         length: rawPassword.length,
@@ -131,7 +127,7 @@ export const GPS51CredentialsForm = () => {
       },
       credentials: {
         ...credentials,
-        password: hashedPassword.substring(0, 8) + '...' // Truncated for security
+        password: hashedPassword.substring(0, 8) + '...'
       },
       timestamp: new Date().toISOString()
     });
@@ -141,7 +137,6 @@ export const GPS51CredentialsForm = () => {
 
   const saveCredentialsToStorage = (credentials: any) => {
     try {
-      // Save individual items for easy access
       localStorage.setItem('gps51_api_url', credentials.apiUrl);
       localStorage.setItem('gps51_username', credentials.username);
       localStorage.setItem('gps51_password_hash', credentials.password);
@@ -152,7 +147,6 @@ export const GPS51CredentialsForm = () => {
         localStorage.setItem('gps51_api_key', credentials.apiKey);
       }
 
-      // Save as JSON for session bridge
       const safeCredentials = {
         username: credentials.username,
         apiUrl: credentials.apiUrl,
@@ -162,10 +156,7 @@ export const GPS51CredentialsForm = () => {
       };
       localStorage.setItem('gps51_credentials', JSON.stringify(safeCredentials));
       
-      console.log('GPS51 credentials saved to localStorage:', {
-        keys: Object.keys(localStorage).filter(k => k.startsWith('gps51_')),
-        credentialsKeys: Object.keys(safeCredentials)
-      });
+      console.log('GPS51 credentials saved to localStorage');
     } catch (error) {
       console.error('Failed to save credentials to localStorage:', error);
       throw new Error('Failed to save credentials');
@@ -178,46 +169,46 @@ export const GPS51CredentialsForm = () => {
     setIsLoading(true);
     try {
       console.log('=== GPS51 SAVE CREDENTIALS DEBUG ===');
-      console.log('1. Form validation passed');
       
       const credentials = prepareCredentials(formData.password);
-      console.log('2. Credentials prepared:', {
-        username: credentials.username,
-        apiUrl: credentials.apiUrl,
-        passwordIsHashed: isValidMD5(credentials.password),
-        from: credentials.from,
-        type: credentials.type,
-        hasApiKey: !!credentials.apiKey
-      });
+      console.log('Credentials prepared for save');
 
-      // Save to localStorage first
       saveCredentialsToStorage(credentials);
-      console.log('3. Credentials saved to localStorage');
+      console.log('Credentials saved to localStorage');
 
-      // Test authentication
-      console.log('4. Testing authentication...');
+      console.log('Testing authentication...');
       const success = await connect(credentials);
       
       if (success) {
-        console.log('5. Authentication successful');
+        console.log('Authentication successful');
         toast({
           title: "Settings Saved",
           description: "GPS51 credentials have been saved and authenticated successfully.",
         });
         
-        // Clear password field for security
         setFormData(prev => ({ ...prev, password: '' }));
         
-        // Test immediate sync to verify everything works
         try {
-          console.log('6. Testing immediate sync...');
-          await refresh();
-          console.log('7. Sync test successful');
+          console.log('Testing immediate sync...');
+          const syncResult = await refresh();
+          console.log('Sync test successful:', syncResult);
+          
+          if (syncResult && syncResult.vehiclesSynced !== undefined) {
+            toast({
+              title: "Sync Test Successful",
+              description: `Found ${syncResult.devicesFound || 0} devices, synced ${syncResult.vehiclesSynced} vehicles and ${syncResult.positionsStored || 0} positions.`,
+            });
+          }
         } catch (syncError) {
           console.warn('Sync test failed but authentication worked:', syncError);
+          toast({
+            title: "Authentication Successful",
+            description: "Credentials saved successfully, but sync test encountered issues. Live data may need manual refresh.",
+            variant: "default",
+          });
         }
       } else {
-        console.error('5. Authentication failed:', status.error);
+        console.error('Authentication failed:', status.error);
         toast({
           title: "Authentication Failed",
           description: status.error || "Failed to authenticate with GPS51 after saving credentials.",
@@ -244,13 +235,7 @@ export const GPS51CredentialsForm = () => {
       console.log('=== GPS51 TEST CONNECTION DEBUG ===');
       const credentials = prepareCredentials(formData.password);
       
-      console.log('Testing connection with credentials:', {
-        username: credentials.username,
-        apiUrl: credentials.apiUrl,
-        passwordIsHashed: isValidMD5(credentials.password),
-        from: credentials.from,
-        type: credentials.type
-      });
+      console.log('Testing connection with credentials');
       
       const success = await connect(credentials);
       
@@ -292,10 +277,14 @@ export const GPS51CredentialsForm = () => {
       console.log('Manual sync requested...');
       const result = await refresh();
       
-      toast({
-        title: "Sync Successful",
-        description: `Synced ${result.vehiclesSynced} vehicles and ${result.positionsStored} positions.`,
-      });
+      if (result && result.success) {
+        toast({
+          title: "Sync Successful",
+          description: `Synced ${result.vehiclesSynced || 0} vehicles and ${result.positionsStored || 0} positions.`,
+        });
+      } else {
+        throw new Error(result?.error || 'Sync failed');
+      }
     } catch (error) {
       console.error('Sync data error:', error);
       toast({
@@ -454,7 +443,6 @@ export const GPS51CredentialsForm = () => {
           />
         </div>
 
-        {/* Debug Information Panel */}
         {showDebug && debugInfo && (
           <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-md">
             <h4 className="text-sm font-semibold text-gray-800 mb-2">🐛 Debug Information</h4>
@@ -464,7 +452,6 @@ export const GPS51CredentialsForm = () => {
           </div>
         )}
 
-        {/* Critical Configuration Notes */}
         <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
           <h4 className="text-sm font-semibold text-yellow-800 mb-2">⚠️ Critical Configuration Requirements</h4>
           <ul className="text-xs text-yellow-700 space-y-1">
@@ -481,7 +468,7 @@ export const GPS51CredentialsForm = () => {
             disabled={isLoading || isTesting}
             className="flex items-center gap-2"
           >
-            <Save className="h-4 w-4" />
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             {isLoading ? 'Saving...' : 'Save & Connect'}
           </Button>
           
@@ -491,7 +478,7 @@ export const GPS51CredentialsForm = () => {
             variant="outline"
             className="flex items-center gap-2"
           >
-            <TestTube className="h-4 w-4" />
+            {isTesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />}
             {isTesting ? 'Testing...' : 'Test Connection'}
           </Button>
 
@@ -502,7 +489,7 @@ export const GPS51CredentialsForm = () => {
               variant="secondary"
               className="flex items-center gap-2"
             >
-              <Save className="h-4 w-4" />
+              {status.syncStatus === 'syncing' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {status.syncStatus === 'syncing' ? 'Syncing...' : 'Sync Data'}
             </Button>
           )}
@@ -519,7 +506,6 @@ export const GPS51CredentialsForm = () => {
           )}
         </div>
 
-        {/* Enhanced Status Display */}
         {status.error && (
           <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
             <p className="text-sm text-red-800">
@@ -559,7 +545,8 @@ export const GPS51CredentialsForm = () => {
 
         {status.syncStatus === 'syncing' && (
           <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-            <p className="text-sm text-blue-800">
+            <p className="text-sm text-blue-800 flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
               🔄 Syncing data from GPS51...
             </p>
           </div>

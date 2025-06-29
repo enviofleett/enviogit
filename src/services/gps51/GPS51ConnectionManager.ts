@@ -2,6 +2,7 @@
 import { gps51ConfigService } from '../gp51/GPS51ConfigService';
 import { GPS51AuthService } from '../gp51/GPS51AuthService';
 import { GPS51CredentialValidator, GPS51ConnectionCredentials } from './GPS51CredentialValidator';
+import { supabase } from '@/integrations/supabase/client';
 
 export class GPS51ConnectionManager {
   private authService = GPS51AuthService.getInstance();
@@ -11,10 +12,8 @@ export class GPS51ConnectionManager {
       console.log('=== GPS51 CONNECTION MANAGER CONNECT ===');
       console.log('1. Starting connection process...');
       
-      // Validate credentials
       GPS51CredentialValidator.validateCredentials(credentials);
       
-      // Prepare auth credentials
       const authCredentials = GPS51CredentialValidator.prepareAuthCredentials(credentials);
       
       console.log('2. Prepared auth credentials:', {
@@ -28,11 +27,9 @@ export class GPS51ConnectionManager {
         endpointMigrated: authCredentials.apiUrl.includes('/openapi')
       });
       
-      // Save configuration first
       console.log('3. Saving configuration...');
       await gps51ConfigService.saveConfiguration(authCredentials);
       
-      // Then authenticate
       console.log('4. Attempting authentication...');
       const token = await this.authService.authenticate(authCredentials);
       
@@ -40,12 +37,28 @@ export class GPS51ConnectionManager {
         throw new Error('Authentication failed - no token received');
       }
       
-      console.log('5. Authentication successful:', {
-        hasToken: !!token.access_token,
-        tokenLength: token.access_token.length,
-        tokenType: token.token_type,
-        expiresIn: token.expires_in
-      });
+      console.log('5. Authentication successful');
+      
+      // Test the connection by calling the sync function
+      console.log('6. Testing sync with credentials...');
+      try {
+        const { data, error } = await supabase.functions.invoke('gps51-sync', {
+          body: {
+            username: authCredentials.username,
+            password: authCredentials.password,
+            apiUrl: authCredentials.apiUrl,
+            priority: 1
+          }
+        });
+
+        if (error) {
+          console.warn('Sync test failed but authentication succeeded:', error);
+        } else {
+          console.log('7. Sync test successful:', data);
+        }
+      } catch (syncError) {
+        console.warn('Sync test failed but authentication succeeded:', syncError);
+      }
       
       return true;
     } catch (error) {
@@ -73,14 +86,33 @@ export class GPS51ConnectionManager {
   async refresh(): Promise<any> {
     console.log('Starting GPS51 data refresh...');
     
-    const result = await gps51ConfigService.syncData();
-    
-    if (!result.success) {
-      throw new Error(result.error || 'Sync failed');
+    try {
+      // Get current credentials
+      const config = await gps51ConfigService.getConfig();
+      if (!config) {
+        throw new Error('No GPS51 configuration found');
+      }
+
+      // Call the sync function with current credentials
+      const { data, error } = await supabase.functions.invoke('gps51-sync', {
+        body: {
+          username: config.username,
+          password: config.password,
+          apiUrl: config.apiUrl,
+          priority: 2
+        }
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Sync failed');
+      }
+
+      console.log('GPS51 data refresh successful:', data);
+      return data;
+    } catch (error) {
+      console.error('GPS51 refresh error:', error);
+      throw error;
     }
-    
-    console.log('GPS51 data refresh successful:', result);
-    return result;
   }
 
   async checkStatus(): Promise<{
