@@ -1,4 +1,7 @@
+
 import { md5 } from 'js-md5';
+
+// ==================== TYPE DEFINITIONS ====================
 
 export interface GPS51AuthCredentials {
   username: string;
@@ -6,6 +9,7 @@ export interface GPS51AuthCredentials {
   from: 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN';
   type: 'USER' | 'DEVICE';
   apiUrl: string;
+  apiKey?: string;
 }
 
 export interface GPS51User {
@@ -81,6 +85,34 @@ export interface GPS51Group {
   devices: GPS51Device[];
 }
 
+// ==================== API ENDPOINT CONFIGURATION ====================
+
+interface GPS51ApiEndpoints {
+  standard: {
+    baseUrl: string;
+    name: string;
+    features: string[];
+  };
+  openapi: {
+    baseUrl: string;
+    name: string;
+    features: string[];
+  };
+}
+
+const GPS51_ENDPOINTS: GPS51ApiEndpoints = {
+  standard: {
+    baseUrl: 'https://www.gps51.com/webapi',
+    name: 'Standard Web API',
+    features: ['Basic device management', 'Standard authentication', 'Legacy support']
+  },
+  openapi: {
+    baseUrl: 'https://api.gps51.com/openapi',
+    name: 'OpenAPI (RESTful)',
+    features: ['Modern REST API', 'Better error handling', 'Enhanced data format', 'Improved performance']
+  }
+};
+
 const GPS51_STATUS = {
   SUCCESS: 0,
   FAILED: 1,
@@ -91,6 +123,8 @@ const GPS51_STATUS = {
   NO_PERMISSION: 5,
 } as const;
 
+// ==================== MULTI-ENDPOINT GPS51 CLIENT ====================
+
 export class GPS51Client {
   private baseURL: string;
   private token: string | null = null;
@@ -99,6 +133,8 @@ export class GPS51Client {
   private retryCount = 0;
   private maxRetries = 3;
   private retryDelay = 1000;
+  private preferredEndpoint: 'standard' | 'openapi' | 'auto' = 'auto';
+  private endpointTokens: Map<string, { token: string; expiry: Date }> = new Map();
 
   constructor(baseURL = 'https://api.gps51.com/openapi') {
     this.baseURL = baseURL;
@@ -113,6 +149,220 @@ export class GPS51Client {
   private validateMD5Hash(password: string): boolean {
     const md5Regex = /^[a-f0-9]{32}$/;
     return md5Regex.test(password);
+  }
+
+  // ==================== AUTHENTICATION FOR BOTH ENDPOINTS ====================
+
+  async authenticateEndpoint(endpointType: 'standard' | 'openapi', credentials: GPS51AuthCredentials): Promise<{
+    success: boolean;
+    token?: string;
+    user?: GPS51User;
+    error?: string;
+    responseTime: number;
+  }> {
+    const startTime = Date.now();
+    const endpoint = GPS51_ENDPOINTS[endpointType];
+    
+    try {
+      console.log(`🔐 Authenticating with ${endpoint.name} (${endpoint.baseUrl})...`);
+      
+      const hashedPassword = this.validateMD5Hash(credentials.password) 
+        ? credentials.password 
+        : md5(credentials.password);
+      
+      // Different login URL patterns for each endpoint
+      const loginUrl = endpointType === 'openapi' 
+        ? `${endpoint.baseUrl}?action=login`
+        : `${endpoint.baseUrl}?action=login&token=`;
+      
+      const response = await fetch(loginUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'FleetManagement/2.0',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          action: 'login',
+          username: credentials.username,
+          password: hashedPassword,
+          from: credentials.from,
+          type: credentials.type
+        }),
+        signal: AbortSignal.timeout(30000)
+      });
+
+      const responseTime = Date.now() - startTime;
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      console.log(`${endpoint.name} login response:`, result);
+
+      if (result.status === GPS51_STATUS.SUCCESS && result.token) {
+        // Store token with expiry
+        this.endpointTokens.set(endpointType, {
+          token: result.token,
+          expiry: new Date(Date.now() + 23 * 60 * 60 * 1000) // 23 hours
+        });
+        
+        console.log(`✅ ${endpoint.name} authentication successful (${responseTime}ms)`);
+        return {
+          success: true,
+          token: result.token,
+          user: result.user,
+          responseTime
+        };
+      } else {
+        throw new Error(`Authentication failed: ${result.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      const responseTime = Date.now() - startTime;
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`❌ ${endpoint.name} authentication failed (${responseTime}ms):`, errorMsg);
+      
+      return {
+        success: false,
+        error: errorMsg,
+        responseTime
+      };
+    }
+  }
+
+  async authenticate(credentials: GPS51AuthCredentials): Promise<{ success: boolean; user?: GPS51User; error?: string }> {
+    try {
+      console.log('GPS51 Authentication Debug Info:', { 
+        username: credentials.username,
+        passwordProvided: !!credentials.password,
+        passwordLength: credentials.password?.length || 0,
+        isPasswordMD5: this.validateMD5Hash(credentials.password || ''),
+        apiUrl: credentials.apiUrl,
+        from: credentials.from,
+        type: credentials.type 
+      });
+
+      // Determine endpoint type from URL
+      let endpointType: 'standard' | 'openapi' = 'openapi';
+      if (credentials.apiUrl.includes('webapi')) {
+        endpointType = 'standard';
+      }
+
+      // Set the baseURL for this instance
+      this.baseURL = credentials.apiUrl;
+
+      const result = await this.authenticateEndpoint(endpointType, credentials);
+
+      if (result.success && result.token) {
+        this.token = result.token;
+        this.user = result.user || null;
+        this.tokenExpiry = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
+        
+        console.log('GPS51 Authentication successful');
+        return {
+          success: true,
+          user: this.user || undefined
+        };
+      } else {
+        console.error('GPS51 Authentication failed:', result.error);
+        return {
+          success: false,
+          error: result.error || 'Authentication failed'
+        };
+      }
+    } catch (error) {
+      console.error('GPS51 Authentication exception:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown authentication error'
+      };
+    }
+  }
+
+  async getDeviceList(): Promise<GPS51Device[]> {
+    this.ensureAuthenticated();
+    
+    try {
+      const response = await this.makeRequest('querymonitorlist', { username: this.user?.username || 'octopus' });
+      console.log('GPS51 Device List Response:', response);
+
+      if (response.status === GPS51_STATUS.SUCCESS) {
+        let devices: GPS51Device[] = [];
+        
+        if (response.groups && Array.isArray(response.groups)) {
+          console.log(`Processing ${response.groups.length} device groups`);
+          
+          response.groups.forEach((group: GPS51Group) => {
+            console.log(`Group: ${group.groupname}, devices: ${group.devices?.length || 0}`);
+            
+            if (group.devices && Array.isArray(group.devices)) {
+              devices = devices.concat(group.devices);
+            }
+          });
+        } else if (response.data || response.devices) {
+          devices = response.data || response.devices || [];
+        }
+        
+        console.log(`Retrieved ${devices.length} devices from GPS51 groups format`);
+        return devices;
+      } else {
+        throw new Error(response.message || 'Failed to fetch device list');
+      }
+    } catch (error) {
+      console.error('Failed to get device list:', error);
+      throw error;
+    }
+  }
+
+  async getRealtimePositions(deviceids: string[] = [], lastQueryTime?: number): Promise<GPS51Position[]> {
+    this.ensureAuthenticated();
+    
+    try {
+      const params: any = {
+        deviceids: deviceids.length > 0 ? deviceids : [],
+        lastquerypositiontime: lastQueryTime || 0
+      };
+
+      console.log('GPS51 Position Request Parameters:', {
+        deviceidsCount: params.deviceids.length,
+        deviceids: params.deviceids,
+        lastQueryTime: params.lastquerypositiontime
+      });
+
+      const response = await this.makeRequest('lastposition', params);
+      console.log('GPS51 Position Response:', response);
+
+      if (response.status === GPS51_STATUS.SUCCESS) {
+        let positions: GPS51Position[] = [];
+        
+        if (response.records && Array.isArray(response.records)) {
+          positions = response.records;
+          console.log(`Retrieved ${positions.length} positions from records field`);
+        } else if (response.data && Array.isArray(response.data)) {
+          positions = response.data;
+          console.log(`Retrieved ${positions.length} positions from data field`);
+        } else if (response.positions && Array.isArray(response.positions)) {
+          positions = response.positions;
+          console.log(`Retrieved ${positions.length} positions from positions field`);
+        } else {
+          console.warn('No position data found in response:', {
+            hasRecords: !!response.records,
+            hasData: !!response.data,
+            hasPositions: !!response.positions,
+            responseKeys: Object.keys(response)
+          });
+        }
+        
+        return positions;
+      } else {
+        throw new Error(response.message || 'Failed to fetch realtime positions');
+      }
+    } catch (error) {
+      console.error('Failed to get realtime positions:', error);
+      throw error;
+    }
   }
 
   private async makeRequest(
@@ -237,202 +487,6 @@ export class GPS51Client {
     }
   }
 
-  async authenticate(credentials: GPS51AuthCredentials): Promise<{ success: boolean; user?: GPS51User; error?: string }> {
-    try {
-      console.log('GPS51 Authentication Debug Info:', { 
-        username: credentials.username,
-        passwordProvided: !!credentials.password,
-        passwordLength: credentials.password?.length || 0,
-        isPasswordMD5: this.validateMD5Hash(credentials.password || ''),
-        apiUrl: credentials.apiUrl,
-        from: credentials.from,
-        type: credentials.type 
-      });
-
-      if (!this.validateMD5Hash(credentials.password)) {
-        console.warn('Password does not appear to be a valid MD5 hash. Expected 32 lowercase hex characters.');
-      }
-
-      if (credentials.apiUrl) {
-        if (credentials.apiUrl.includes('www.gps51.com')) {
-          console.warn('Correcting API URL from www.gps51.com to api.gps51.com');
-          this.baseURL = credentials.apiUrl.replace('www.gps51.com', 'api.gps51.com').replace('/webapi', '/openapi');
-        } else if (credentials.apiUrl.includes('/webapi')) {
-          console.warn('Migrating API URL from /webapi to /openapi');
-          this.baseURL = credentials.apiUrl.replace('/webapi', '/openapi');
-        } else {
-          this.baseURL = credentials.apiUrl;
-        }
-      }
-
-      const loginParams = {
-        username: credentials.username,
-        password: credentials.password,
-        from: credentials.from,
-        type: credentials.type
-      };
-
-      console.log('Sending GPS51 login request:', {
-        baseURL: this.baseURL,
-        method: 'POST',
-        loginParams: {
-          ...loginParams,
-          password: loginParams.password.substring(0, 8) + '...'
-        }
-      });
-
-      const response = await this.makeRequest('login', loginParams, 'POST');
-
-      console.log('GPS51 Login Response Analysis:', {
-        status: response.status,
-        message: response.message,
-        hasToken: !!response.token,
-        tokenLength: response.token?.length || 0,
-        userInfo: response.user ? {
-          username: response.user.username,
-          usertype: response.user.usertype,
-          companyname: response.user.companyname
-        } : null
-      });
-
-      if (response.status === GPS51_STATUS.SUCCESS && response.token) {
-        this.token = response.token;
-        this.user = response.user || null;
-        this.tokenExpiry = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
-        
-        console.log('GPS51 Authentication successful');
-
-        return {
-          success: true,
-          user: this.user || undefined
-        };
-      } else {
-        const errorDetails = {
-          status: response.status,
-          message: response.message,
-          expectedStatus: GPS51_STATUS.SUCCESS,
-          hasToken: !!response.token,
-        };
-        
-        console.error('GPS51 Authentication failed - detailed analysis:', errorDetails);
-        
-        let errorMessage = response.message || `Authentication failed with status: ${response.status}`;
-        
-        if (response.status === 8901) {
-          errorMessage += ' (Status 8901: Authentication parameter validation failed - check username, password hash, from, and type parameters)';
-        } else if (response.status === 1) {
-          errorMessage += ' (Status 1: Login failed - verify credentials and account status)';
-        }
-        
-        return {
-          success: false,
-          error: errorMessage
-        };
-      }
-    } catch (error) {
-      console.error('GPS51 Authentication exception:', {
-        error: error.message,
-        stack: error.stack,
-        credentials: {
-          username: credentials.username,
-          hasPassword: !!credentials.password,
-          apiUrl: credentials.apiUrl,
-          from: credentials.from,
-          type: credentials.type
-        }
-      });
-      
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown authentication error'
-      };
-    }
-  }
-
-  async getDeviceList(): Promise<GPS51Device[]> {
-    this.ensureAuthenticated();
-    
-    try {
-      const response = await this.makeRequest('querymonitorlist', { username: this.user?.username || 'octopus' });
-      console.log('GPS51 Device List Response:', response);
-
-      if (response.status === GPS51_STATUS.SUCCESS) {
-        let devices: GPS51Device[] = [];
-        
-        if (response.groups && Array.isArray(response.groups)) {
-          console.log(`Processing ${response.groups.length} device groups`);
-          
-          response.groups.forEach((group: GPS51Group) => {
-            console.log(`Group: ${group.groupname}, devices: ${group.devices?.length || 0}`);
-            
-            if (group.devices && Array.isArray(group.devices)) {
-              devices = devices.concat(group.devices);
-            }
-          });
-        } else if (response.data || response.devices) {
-          devices = response.data || response.devices || [];
-        }
-        
-        console.log(`Retrieved ${devices.length} devices from GPS51 groups format`);
-        return devices;
-      } else {
-        throw new Error(response.message || 'Failed to fetch device list');
-      }
-    } catch (error) {
-      console.error('Failed to get device list:', error);
-      throw error;
-    }
-  }
-
-  async getRealtimePositions(deviceids: string[] = [], lastQueryTime?: number): Promise<GPS51Position[]> {
-    this.ensureAuthenticated();
-    
-    try {
-      const params: any = {
-        deviceids: deviceids.length > 0 ? deviceids : [],
-        lastquerypositiontime: lastQueryTime || 0
-      };
-
-      console.log('GPS51 Position Request Parameters:', {
-        deviceidsCount: params.deviceids.length,
-        deviceids: params.deviceids,
-        lastQueryTime: params.lastquerypositiontime
-      });
-
-      const response = await this.makeRequest('lastposition', params);
-      console.log('GPS51 Position Response:', response);
-
-      if (response.status === GPS51_STATUS.SUCCESS) {
-        let positions: GPS51Position[] = [];
-        
-        if (response.records && Array.isArray(response.records)) {
-          positions = response.records;
-          console.log(`Retrieved ${positions.length} positions from records field`);
-        } else if (response.data && Array.isArray(response.data)) {
-          positions = response.data;
-          console.log(`Retrieved ${positions.length} positions from data field`);
-        } else if (response.positions && Array.isArray(response.positions)) {
-          positions = response.positions;
-          console.log(`Retrieved ${positions.length} positions from positions field`);
-        } else {
-          console.warn('No position data found in response:', {
-            hasRecords: !!response.records,
-            hasData: !!response.data,
-            hasPositions: !!response.positions,
-            responseKeys: Object.keys(response)
-          });
-        }
-        
-        return positions;
-      } else {
-        throw new Error(response.message || 'Failed to fetch realtime positions');
-      }
-    } catch (error) {
-      console.error('Failed to get realtime positions:', error);
-      throw error;
-    }
-  }
-
   async refreshToken(): Promise<boolean> {
     if (!this.user) {
       return false;
@@ -478,12 +532,20 @@ export class GPS51Client {
     return this.token;
   }
 
+  async getValidToken(): Promise<any> {
+    if (this.isAuthenticated() && this.token) {
+      return { access_token: this.token };
+    }
+    return null;
+  }
+
   logout(): void {
     this.token = null;
     this.tokenExpiry = null;
     this.user = null;
     this.retryCount = 0;
     this.retryDelay = 1000;
+    this.endpointTokens.clear();
   }
 }
 

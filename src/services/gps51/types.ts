@@ -13,7 +13,11 @@ export interface GPS51Credentials {
   from: 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN';
   type: 'USER' | 'DEVICE';
   apiUrl: string;
+  apiKey?: string;
 }
+
+// Re-export from GPS51Client for backward compatibility
+export type { GPS51AuthCredentials, GPS51User, GPS51Device, GPS51Position } from './GPS51Client';
 
 export interface SyncResult {
   success: boolean;
@@ -39,22 +43,6 @@ export interface GPS51Vehicle {
   status: string;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface GPS51Position {
-  vehicleId: string;
-  latitude: number;
-  longitude: number;
-  speed: number;
-  heading: number;
-  altitude?: number;
-  accuracy?: number;
-  timestamp: string;
-  address?: string;
-  ignition: boolean;
-  fuel?: number;
-  temperature?: number;
-  batteryLevel?: number;
 }
 
 export interface GPS51Telemetry {

@@ -28,13 +28,16 @@ export class GPS51ConnectionManager {
       });
       
       console.log('3. Saving configuration...');
-      await gps51ConfigService.saveConfiguration(authCredentials);
+      const saveResult = await gps51ConfigService.saveConfiguration(authCredentials);
+      if (!saveResult) {
+        throw new Error('Failed to save configuration');
+      }
       
       console.log('4. Attempting authentication...');
-      const token = await this.authService.authenticate(authCredentials);
+      const authResult = await this.authService.authenticate(authCredentials);
       
-      if (!token || !token.access_token) {
-        throw new Error('Authentication failed - no token received');
+      if (!authResult.success || !authResult.access_token) {
+        throw new Error(`Authentication failed: ${authResult.error || 'No token received'}`);
       }
       
       console.log('5. Authentication successful');

@@ -18,7 +18,7 @@ export class GPS51AuthService {
     return GPS51AuthService.instance;
   }
 
-  async authenticate(credentials: GPS51AuthCredentials): Promise<{ success: boolean; user?: GPS51User; error?: string }> {
+  async authenticate(credentials: GPS51AuthCredentials): Promise<{ success: boolean; user?: GPS51User; error?: string; access_token?: string }> {
     try {
       console.log('GPS51AuthService: Starting authentication...');
       
@@ -29,9 +29,13 @@ export class GPS51AuthService {
         await gps51SessionManager.createSession(credentials);
         console.log('GPS51AuthService: Authentication successful, session created');
         
+        // Get the token for backward compatibility
+        const token = await this.gps51Client.getValidToken();
+        
         return {
           success: true,
-          user: result.user
+          user: result.user,
+          access_token: token?.access_token
         };
       } else {
         console.error('GPS51AuthService: Authentication failed:', result.error);
@@ -49,7 +53,7 @@ export class GPS51AuthService {
     }
   }
 
-  async isAuthenticated(): Promise<boolean> {
+  async isAuthenticatedAsync(): Promise<boolean> {
     return this.gps51Client.isAuthenticated();
   }
 
