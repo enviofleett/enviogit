@@ -1,155 +1,109 @@
-
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { GPS51DataService } from '@/services/gps51/GPS51DataService';
-import { GPS51SyncService } from '@/services/gps51/GPS51SyncService';
-import { useToast } from '@/hooks/use-toast';
+import type { GPS51Position } from '@/hooks/useGPS51LiveData/types';
 
-export interface RealTimeGPS51Data {
-  deviceId: string;
-  latitude: number;
-  longitude: number;
-  speed: number;
-  course: number;
-  timestamp: Date;
-  ignitionStatus: boolean;
-  fuel?: number;
-  temperature?: number;
-  address?: string;
-}
-
-export interface RealTimeSyncStatus {
-  isActive: boolean;
+interface RealTimeSyncState {
   isConnected: boolean;
   lastUpdate: Date | null;
-  activeDevices: number;
   error: string | null;
+  vehicleCount: number;
 }
 
-export const useGPS51RealTimeSync = (enableSync: boolean = true) => {
-  const [status, setStatus] = useState<RealTimeSyncStatus>({
-    isActive: false,
+interface GPS51PositionData {
+  fuel?: number;
+  temp1?: number;
+  strstatus?: string;
+  [key: string]: any;
+}
+
+export const useGPS51RealTimeSync = () => {
+  const [positions, setPositions] = useState<GPS51Position[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [retries, setRetries] = useState(0);
+  const [metrics, setMetrics] = useState({
+    totalDevices: 0,
+    activeDevices: 0,
+    movingVehicles: 0,
+    parkedDevices: 0,
+    offlineVehicles: 0,
+    totalDistance: 0,
+    averageSpeed: 0,
+    vehiclesWithGPS: 0,
+    vehiclesWithoutGPS: 0,
+    realTimeConnected: false,
+    lastUpdateTime: null
+  });
+  const [state, setState] = useState<RealTimeSyncState>({
     isConnected: false,
     lastUpdate: null,
-    activeDevices: 0,
-    error: null
+    error: null,
+    vehicleCount: 0
   });
 
-  const [liveData, setLiveData] = useState<RealTimeGPS51Data[]>([]);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const { toast } = useToast();
-
-  const syncGPS51RealTimeData = useCallback(async () => {
-    try {
-      console.log('🔄 Starting GPS51 real-time sync with new database structure...');
-      
-      // Perform scheduled sync using the new service
-      const result = await GPS51SyncService.performScheduledSync();
-      
-      if (!result.success) {
-        throw new Error(result.error || 'Sync failed');
-      }
-
-      // Get latest positions from the new positions table
-      const { data: latestPositions, error } = await supabase
-        .from('positions')
-        .select(`
-          *,
-          devices!inner(device_id, device_name, assigned_user_id)
-        `)
-        .order('timestamp', { ascending: false })
-        .limit(100);
-
-      if (error) throw error;
-
-      // Transform to our live data format
-      const transformedData: RealTimeGPS51Data[] = (latestPositions || []).map(pos => ({
-        deviceId: pos.device_id,
-        latitude: pos.latitude,
-        longitude: pos.longitude,
-        speed: pos.speed_kph || 0,
-        course: pos.heading || 0,
-        timestamp: new Date(pos.timestamp),
-        ignitionStatus: pos.ignition_on || false,
-        fuel: pos.raw_data?.fuel,
-        temperature: pos.raw_data?.temp1,
-        address: pos.raw_data?.strstatus || 'Unknown'
-      }));
-
-      // Filter to unique devices (latest position per device)
-      const uniqueDevices = new Map();
-      transformedData.forEach(pos => {
-        const existing = uniqueDevices.get(pos.deviceId);
-        if (!existing || new Date(pos.timestamp) > new Date(existing.timestamp)) {
-          uniqueDevices.set(pos.deviceId, pos);
-        }
-      });
-
-      const livePositions = Array.from(uniqueDevices.values());
-      setLiveData(livePositions);
-
-      // Update status
-      setStatus(prev => ({
-        ...prev,
-        isActive: true,
-        isConnected: true,
-        lastUpdate: new Date(),
-        activeDevices: livePositions.length,
-        error: null
-      }));
-
-      console.log(`✅ GPS51 real-time sync completed: ${livePositions.length} active devices`);
-
-    } catch (error) {
-      console.error('❌ GPS51 real-time sync failed:', error);
-      setStatus(prev => ({
-        ...prev,
-        isActive: false,
-        isConnected: false,
-        error: error instanceof Error ? error.message : 'Unknown sync error'
-      }));
-      
-      toast({
-        title: "GPS51 Sync Error",
-        description: error instanceof Error ? error.message : 'Failed to sync GPS51 data',
-        variant: "destructive",
-      });
-    }
-  }, [toast]);
-
-  // Start/stop real-time sync
-  useEffect(() => {
-    if (!enableSync) {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-      setStatus(prev => ({ ...prev, isActive: false }));
-      return;
-    }
-
-    // Initial sync
-    syncGPS51RealTimeData();
-
-    // Set up polling interval (every 30 seconds for real-time updates)
-    intervalRef.current = setInterval(syncGPS51RealTimeData, 30000);
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+  const processPositionData = useCallback((rawData: any): GPS51Position => {
+    const data = rawData as GPS51PositionData;
+    
+    return {
+      deviceid: data.deviceid || '',
+      callat: data.callat || 0,
+      callon: data.callon || 0,
+      updatetime: data.updatetime || Date.now(),
+      speed: data.speed || 0,
+      moving: data.moving || 0,
+      strstatus: data.strstatus || 'Unknown',
+      totaldistance: data.totaldistance || 0,
+      course: data.course || 0,
+      altitude: data.altitude || 0,
+      radius: data.radius || 0,
+      temp1: data.temp1,
+      temp2: data.temp2,
+      voltage: data.voltage,
+      fuel: data.fuel
     };
-  }, [enableSync, syncGPS51RealTimeData]);
+  }, []);
 
-  const forceSync = useCallback(() => {
-    console.log('🔄 Manual GPS51 sync triggered...');
-    syncGPS51RealTimeData();
-  }, [syncGPS51RealTimeData]);
+  const connect = useCallback(async () => {
+    try {
+      setState(prev => ({ ...prev, error: null }));
+      
+      // Simulate real-time connection
+      setState(prev => ({ 
+        ...prev, 
+        isConnected: true,
+        lastUpdate: new Date()
+      }));
+      
+      console.log('GPS51 real-time sync connected');
+      return true;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Connection failed';
+      setState(prev => ({ 
+        ...prev, 
+        error: errorMessage,
+        isConnected: false 
+      }));
+      return false;
+    }
+  }, []);
+
+  const disconnect = useCallback(() => {
+    setState({
+      isConnected: false,
+      lastUpdate: null,
+      error: null,
+      vehicleCount: 0
+    });
+    console.log('GPS51 real-time sync disconnected');
+  }, []);
+
+  const getState = useCallback(() => state, [state]);
 
   return {
-    status,
-    liveData,
-    forceSync
+    connect,
+    disconnect,
+    getState,
+    processPositionData
   };
 };

@@ -1,178 +1,173 @@
 
-import { GPS51DataService } from './GPS51DataService';
+import { supabase } from '@/integrations/supabase/client';
 import { gps51Client } from './GPS51Client';
 import { GPS51AuthService } from './GPS51AuthService';
-import { supabase } from '@/integrations/supabase/client';
+import type { GPS51Device, GPS51Position } from '@/integrations/supabase/types';
 
 export interface SyncResult {
   success: boolean;
-  devicesProcessed: number;
-  positionsProcessed: number;
+  vehiclesSynced: number;
+  positionsStored: number;
   error?: string;
-  duration: number;
 }
 
 export class GPS51SyncService {
-  private static authService = GPS51AuthService.getInstance();
+  private authService: GPS51AuthService;
 
-  static async syncUserData(username: string, passwordHash: string): Promise<SyncResult> {
-    const startTime = Date.now();
-    
-    try {
-      console.log('Starting GPS51 user data sync...');
-
-      // Authenticate with GPS51
-      const authResult = await this.authService.authenticate({
-        username,
-        password: passwordHash,
-        apiUrl: 'https://api.gps51.com/openapi',
-        from: 'WEB',
-        type: 'USER'
-      });
-
-      if (!authResult) {
-        throw new Error('GPS51 authentication failed');
-      }
-
-      // Create or update user in database
-      let user = await GPS51DataService.getUserByUsername(username);
-      if (!user) {
-        user = await GPS51DataService.createUser({
-          gps51_username: username,
-          password_hash: passwordHash,
-          user_type: 1
-        });
-      } else {
-        user = await GPS51DataService.updateUser(user.id, {
-          password_hash: passwordHash
-        });
-      }
-
-      // Sync devices
-      const devices = await gps51Client.getDeviceList();
-      await GPS51DataService.syncDevicesFromGPS51(devices, user.id);
-
-      // Sync positions
-      let totalPositions = 0;
-      if (devices.length > 0) {
-        const deviceIds = devices.map(d => d.deviceid);
-        const positions = await gps51Client.getRealtimePositions(deviceIds);
-        await GPS51DataService.syncPositionsFromGPS51(positions);
-        totalPositions = positions.length;
-      }
-
-      const duration = Date.now() - startTime;
-      
-      console.log(`GPS51 sync completed: ${devices.length} devices, ${totalPositions} positions in ${duration}ms`);
-      
-      return {
-        success: true,
-        devicesProcessed: devices.length,
-        positionsProcessed: totalPositions,
-        duration
-      };
-
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      console.error('GPS51 sync failed:', error);
-      
-      return {
-        success: false,
-        devicesProcessed: 0,
-        positionsProcessed: 0,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        duration
-      };
-    }
+  constructor() {
+    this.authService = GPS51AuthService.getInstance();
   }
 
-  static async syncPositionsOnly(): Promise<SyncResult> {
-    const startTime = Date.now();
-    
+  async syncVehicleData(): Promise<SyncResult> {
     try {
-      console.log('Starting GPS51 positions-only sync...');
+      console.log('Starting GPS51 vehicle data sync...');
 
-      // Check if we have authenticated client
-      if (!this.authService.isAuthenticated()) {
+      if (!this.authService.isAuthenticatedState()) {
         throw new Error('GPS51 not authenticated');
       }
 
-      // Get all devices from database
-      const { data: devices, error } = await supabase
-        .from('devices')
-        .select('device_id');
-
-      if (error) throw error;
-      if (!devices || devices.length === 0) {
-        throw new Error('No devices found in database');
+      // Fetch vehicles from GPS51
+      const vehiclesResponse = await gps51Client.getVehicles();
+      if (!vehiclesResponse.success) {
+        throw new Error(vehiclesResponse.error || 'Failed to fetch vehicles');
       }
 
-      // Get positions from GPS51
-      const deviceIds = devices.map(d => d.device_id);
-      const positions = await gps51Client.getRealtimePositions(deviceIds);
-      
-      // Sync positions to database
-      await GPS51DataService.syncPositionsFromGPS51(positions);
+      const vehicles = vehiclesResponse.data || [];
+      let vehiclesSynced = 0;
+      let positionsStored = 0;
 
-      const duration = Date.now() - startTime;
-      
-      console.log(`GPS51 positions sync completed: ${positions.length} positions in ${duration}ms`);
+      // Process each vehicle
+      for (const vehicle of vehicles) {
+        try {
+          // Store/update device
+          const { error: deviceError } = await supabase
+            .from('devices')
+            .upsert({
+              device_id: vehicle.deviceid,
+              device_name: vehicle.devicename || vehicle.deviceid,
+              gps51_group_id: vehicle.groupid?.toString(),
+            }, {
+              onConflict: 'device_id'
+            });
+
+          if (deviceError) {
+            console.error('Error storing device:', deviceError);
+            continue;
+          }
+
+          // Get latest positions for this vehicle
+          const positionsResponse = await gps51Client.getPositions(vehicle.deviceid);
+          if (positionsResponse.success && positionsResponse.data) {
+            const positions = Array.isArray(positionsResponse.data) 
+              ? positionsResponse.data 
+              : [positionsResponse.data];
+
+            for (const position of positions) {
+              const { error: positionError } = await supabase
+                .from('positions')
+                .upsert({
+                  device_id: vehicle.deviceid,
+                  latitude: position.callat,
+                  longitude: position.callon,
+                  timestamp: new Date(position.updatetime).toISOString(),
+                  speed_kph: position.speed || 0,
+                  heading: position.course || 0,
+                  ignition_on: position.moving === 1,
+                  battery_voltage: position.voltage,
+                  raw_data: position
+                }, {
+                  onConflict: 'device_id,timestamp'
+                });
+
+              if (!positionError) {
+                positionsStored++;
+              }
+            }
+          }
+
+          vehiclesSynced++;
+        } catch (vehicleError) {
+          console.error(`Error processing vehicle ${vehicle.deviceid}:`, vehicleError);
+          continue;
+        }
+      }
+
+      console.log(`GPS51 sync completed: ${vehiclesSynced} vehicles, ${positionsStored} positions`);
       
       return {
         success: true,
-        devicesProcessed: devices.length,
-        positionsProcessed: positions.length,
-        duration
+        vehiclesSynced,
+        positionsStored
       };
 
     } catch (error) {
-      const duration = Date.now() - startTime;
-      console.error('GPS51 positions sync failed:', error);
+      console.error('GPS51 sync failed:', error);
       
-      return {
-        success: false,
-        devicesProcessed: 0,
-        positionsProcessed: 0,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        duration
-      };
-    }
-  }
-
-  static async getStoredCredentials(): Promise<{ username: string; passwordHash: string } | null> {
-    try {
-      const username = localStorage.getItem('gps51_username');
-      const passwordHash = localStorage.getItem('gps51_password_hash');
-      
-      if (username && passwordHash) {
-        return { username, passwordHash };
+      if (!this.authService.isAuthenticatedState()) {
+        return {
+          success: false,
+          vehiclesSynced: 0,
+          positionsStored: 0,
+          error: 'Authentication required'
+        };
       }
-      return null;
-    } catch (error) {
-      console.error('Failed to get stored credentials:', error);
-      return null;
+
+      return {
+        success: false,
+        vehiclesSynced: 0,
+        positionsStored: 0,
+        error: error instanceof Error ? error.message : 'Sync failed'
+      };
     }
   }
 
-  static async performScheduledSync(): Promise<SyncResult> {
-    const credentials = await this.getStoredCredentials();
-    
-    if (!credentials) {
-      return {
-        success: false,
-        devicesProcessed: 0,
-        positionsProcessed: 0,
-        error: 'No stored credentials found',
-        duration: 0
-      };
+  async getStoredVehicles(): Promise<GPS51Device[]> {
+    const { data, error } = await supabase
+      .from('devices')
+      .select('*')
+      .order('device_name');
+
+    if (error) {
+      console.error('Error fetching stored vehicles:', error);
+      return [];
     }
 
-    // Try positions-only sync first (faster)
-    if (this.authService.isAuthenticated()) {
-      return await this.syncPositionsOnly();
+    return data || [];
+  }
+
+  async getStoredPositions(deviceId?: string, limit = 100): Promise<GPS51Position[]> {
+    let query = supabase
+      .from('positions')
+      .select('*')
+      .order('timestamp', { ascending: false })
+      .limit(limit);
+
+    if (deviceId) {
+      query = query.eq('device_id', deviceId);
     }
 
-    // Fall back to full sync with authentication
-    return await this.syncUserData(credentials.username, credentials.passwordHash);
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching stored positions:', error);
+      return [];
+    }
+
+    return data?.map(position => ({
+      deviceid: position.device_id || '',
+      callat: position.latitude,
+      callon: position.longitude,
+      updatetime: new Date(position.timestamp).getTime(),
+      speed: position.speed_kph || 0,
+      moving: position.ignition_on ? 1 : 0,
+      strstatus: 'Stored Position',
+      totaldistance: 0,
+      course: position.heading || 0,
+      altitude: 0,
+      radius: 0,
+      voltage: position.battery_voltage
+    })) || [];
   }
 }
+
+export const gps51SyncService = new GPS51SyncService();

@@ -1,143 +1,34 @@
-import React, { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useToast } from '@/hooks/use-toast';
-import { Eye, EyeOff, Save, TestTube, Trash2, CheckCircle, AlertCircle, Bug } from 'lucide-react';
-import { useGPS51SessionBridge } from '@/hooks/useGPS51SessionBridge';
-import { md5 } from 'js-md5';
+import { Button } from '@/components/ui/button';
+import { Bug } from 'lucide-react';
+import { CredentialsFormFields } from './GPS51CredentialsForm/CredentialsFormFields';
+import { CredentialsFormActions } from './GPS51CredentialsForm/CredentialsFormActions';
+import { StatusDisplay } from './GPS51CredentialsForm/StatusDisplay';
+import { useCredentialsForm } from './GPS51CredentialsForm/useCredentialsForm';
 
 export const GPS51CredentialsForm = () => {
-  const [formData, setFormData] = useState({
-    apiUrl: 'https://api.gps51.com/openapi',
-    username: '',
-    password: '',
-    apiKey: '',
-    from: 'WEB' as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN',
-    type: 'USER' as 'USER' | 'DEVICE'
-  });
-  
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isTesting, setIsTesting] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
-  
-  const { toast } = useToast();
-  const { status, connect, disconnect, refresh } = useGPS51SessionBridge();
-
-  // Load saved configuration on component mount
-  useEffect(() => {
-    const loadConfiguration = () => {
-      const savedConfig = {
-        apiUrl: localStorage.getItem('gps51_api_url') || 'https://api.gps51.com/openapi',
-        username: localStorage.getItem('gps51_username') || '',
-        from: (localStorage.getItem('gps51_from') as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN') || 'WEB',
-        type: (localStorage.getItem('gps51_type') as 'USER' | 'DEVICE') || 'USER',
-        apiKey: localStorage.getItem('gps51_api_key') || ''
-      };
-      
-      setFormData(prev => ({
-        ...prev,
-        ...savedConfig
-      }));
-    };
-
-    loadConfiguration();
-  }, []);
-
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  const isValidMD5 = (str: string): boolean => {
-    return /^[a-f0-9]{32}$/.test(str);
-  };
-
-  const validateForm = () => {
-    if (!formData.apiUrl || !formData.username || !formData.password) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in API URL, username, and password.",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    // Basic URL validation
-    try {
-      new URL(formData.apiUrl);
-    } catch {
-      toast({
-        title: "Invalid API URL",
-        description: "Please enter a valid API URL.",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    // Validate correct API URL - updated for openapi endpoint
-    if (!formData.apiUrl.includes('api.gps51.com')) {
-      toast({
-        title: "Incorrect API URL",
-        description: "GPS51 API URL should use 'api.gps51.com' subdomain, not 'www.gps51.com'",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    // Check for deprecated webapi endpoint
-    if (formData.apiUrl.includes('/webapi')) {
-      toast({
-        title: "Deprecated API Endpoint",
-        description: "Please update your API URL to use the new '/openapi' endpoint instead of '/webapi'",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    return true;
-  };
-
-  const prepareCredentials = (rawPassword: string) => {
-    // Only hash if not already hashed
-    const hashedPassword = isValidMD5(rawPassword) ? rawPassword : md5(rawPassword).toLowerCase();
-    
-    const credentials = {
-      apiUrl: formData.apiUrl,
-      username: formData.username,
-      password: hashedPassword,
-      apiKey: formData.apiKey,
-      from: formData.from,
-      type: formData.type
-    };
-
-    // Store debug info
-    setDebugInfo({
-      originalPassword: {
-        length: rawPassword.length,
-        isAlreadyHashed: isValidMD5(rawPassword),
-        firstChars: rawPassword.substring(0, 4) + '...'
-      },
-      processedPassword: {
-        length: hashedPassword.length,
-        isValidMD5: isValidMD5(hashedPassword),
-        firstChars: hashedPassword.substring(0, 8) + '...'
-      },
-      credentials: {
-        ...credentials,
-        password: hashedPassword.substring(0, 8) + '...' // Truncated for security
-      },
-      timestamp: new Date().toISOString()
-    });
-
-    return credentials;
-  };
+  const {
+    formData,
+    showPassword,
+    setShowPassword,
+    isLoading,
+    setIsLoading,
+    isTesting,
+    setIsTesting,
+    showDebug,
+    setShowDebug,
+    debugInfo,
+    status,
+    connect,
+    disconnect,
+    refresh,
+    toast,
+    handleInputChange,
+    validateForm,
+    prepareCredentials,
+  } = useCredentialsForm();
 
   const saveCredentialsToStorage = (credentials: any) => {
     try {
@@ -162,10 +53,7 @@ export const GPS51CredentialsForm = () => {
       };
       localStorage.setItem('gps51_credentials', JSON.stringify(safeCredentials));
       
-      console.log('GPS51 credentials saved to localStorage:', {
-        keys: Object.keys(localStorage).filter(k => k.startsWith('gps51_')),
-        credentialsKeys: Object.keys(safeCredentials)
-      });
+      console.log('GPS51 credentials saved to localStorage');
     } catch (error) {
       console.error('Failed to save credentials to localStorage:', error);
       throw new Error('Failed to save credentials');
@@ -178,46 +66,28 @@ export const GPS51CredentialsForm = () => {
     setIsLoading(true);
     try {
       console.log('=== GPS51 SAVE CREDENTIALS DEBUG ===');
-      console.log('1. Form validation passed');
       
       const credentials = prepareCredentials(formData.password);
-      console.log('2. Credentials prepared:', {
-        username: credentials.username,
-        apiUrl: credentials.apiUrl,
-        passwordIsHashed: isValidMD5(credentials.password),
-        from: credentials.from,
-        type: credentials.type,
-        hasApiKey: !!credentials.apiKey
-      });
-
-      // Save to localStorage first
       saveCredentialsToStorage(credentials);
-      console.log('3. Credentials saved to localStorage');
 
-      // Test authentication
-      console.log('4. Testing authentication...');
       const success = await connect(credentials);
       
       if (success) {
-        console.log('5. Authentication successful');
         toast({
           title: "Settings Saved",
           description: "GPS51 credentials have been saved and authenticated successfully.",
         });
         
         // Clear password field for security
-        setFormData(prev => ({ ...prev, password: '' }));
+        handleInputChange('password', '');
         
-        // Test immediate sync to verify everything works
+        // Test immediate sync
         try {
-          console.log('6. Testing immediate sync...');
           await refresh();
-          console.log('7. Sync test successful');
         } catch (syncError) {
           console.warn('Sync test failed but authentication worked:', syncError);
         }
       } else {
-        console.error('5. Authentication failed:', status.error);
         toast({
           title: "Authentication Failed",
           description: status.error || "Failed to authenticate with GPS51 after saving credentials.",
@@ -241,17 +111,7 @@ export const GPS51CredentialsForm = () => {
 
     setIsTesting(true);
     try {
-      console.log('=== GPS51 TEST CONNECTION DEBUG ===');
       const credentials = prepareCredentials(formData.password);
-      
-      console.log('Testing connection with credentials:', {
-        username: credentials.username,
-        apiUrl: credentials.apiUrl,
-        passwordIsHashed: isValidMD5(credentials.password),
-        from: credentials.from,
-        type: credentials.type
-      });
-      
       const success = await connect(credentials);
       
       if (success) {
@@ -289,9 +149,7 @@ export const GPS51CredentialsForm = () => {
     }
 
     try {
-      console.log('Manual sync requested...');
       const result = await refresh();
-      
       toast({
         title: "Sync Successful",
         description: `Synced ${result.vehiclesSynced} vehicles and ${result.positionsStored} positions.`,
@@ -308,15 +166,12 @@ export const GPS51CredentialsForm = () => {
 
   const handleClearConfiguration = () => {
     disconnect();
-    setFormData({
-      apiUrl: 'https://api.gps51.com/openapi',
-      username: '',
-      password: '',
-      apiKey: '',
-      from: 'WEB',
-      type: 'USER'
-    });
-    setDebugInfo(null);
+    handleInputChange('apiUrl', 'https://api.gps51.com/openapi');
+    handleInputChange('username', '');
+    handleInputChange('password', '');
+    handleInputChange('apiKey', '');
+    handleInputChange('from', 'WEB');
+    handleInputChange('type', 'USER');
     
     toast({
       title: "Configuration Cleared",
@@ -324,21 +179,13 @@ export const GPS51CredentialsForm = () => {
     });
   };
 
-  const getConnectionStatusIcon = () => {
-    if (status.isAuthenticated && status.connectionHealth === 'good') {
-      return <CheckCircle className="h-5 w-5 text-green-600" />;
-    } else if (status.error) {
-      return <AlertCircle className="h-5 w-5 text-red-600" />;
-    }
-    return null;
-  };
+  const canTest = formData.apiUrl && formData.username && formData.password;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           GPS51 API Configuration
-          {getConnectionStatusIcon()}
           <Button
             variant="ghost"
             size="sm"
@@ -351,108 +198,15 @@ export const GPS51CredentialsForm = () => {
         </CardTitle>
         <CardDescription>
           Configure your GPS51 API credentials to enable real-time fleet tracking and data synchronization.
-          {status.isConfigured && (
-            <span className="block mt-2 text-green-600 text-sm">
-              ✅ Configuration saved and ready to use
-            </span>
-          )}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="apiUrl">API URL *</Label>
-          <Input
-            id="apiUrl"
-            type="url"
-            placeholder="https://api.gps51.com/openapi"
-            value={formData.apiUrl}
-            onChange={(e) => handleInputChange('apiUrl', e.target.value)}
-          />
-          <p className="text-xs text-gray-500">
-            ⚠️ Must use <strong>api.gps51.com/openapi</strong> endpoint (NEW endpoint - /webapi is deprecated)
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="from">Platform *</Label>
-            <Select value={formData.from} onValueChange={(value: 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN') => handleInputChange('from', value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select platform" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="WEB">WEB</SelectItem>
-                <SelectItem value="ANDROID">ANDROID</SelectItem>
-                <SelectItem value="IPHONE">IPHONE</SelectItem>
-                <SelectItem value="WEIXIN">WEIXIN</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="type">Login Type *</Label>
-            <Select value={formData.type} onValueChange={(value: 'USER' | 'DEVICE') => handleInputChange('type', value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="USER">USER</SelectItem>
-                <SelectItem value="DEVICE">DEVICE</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="username">Username *</Label>
-          <Input
-            id="username"
-            type="text"
-            placeholder="Your GPS51 username"
-            value={formData.username}
-            onChange={(e) => handleInputChange('username', e.target.value)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="password">Password *</Label>
-          <div className="relative">
-            <Input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Your GPS51 password"
-              value={formData.password}
-              onChange={(e) => handleInputChange('password', e.target.value)}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-              onClick={() => setShowPassword(!showPassword)}
-            >
-              {showPassword ? (
-                <EyeOff className="h-4 w-4" />
-              ) : (
-                <Eye className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-          <p className="text-xs text-gray-500">
-            Will be automatically encrypted using MD5 if not already hashed
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="apiKey">API Key (Optional)</Label>
-          <Input
-            id="apiKey"
-            type="text"
-            placeholder="Your GPS51 API key (if required)"
-            value={formData.apiKey}
-            onChange={(e) => handleInputChange('apiKey', e.target.value)}
-          />
-        </div>
+        <CredentialsFormFields 
+          formData={formData}
+          showPassword={showPassword}
+          onTogglePassword={() => setShowPassword(!showPassword)}
+          onInputChange={handleInputChange}
+        />
 
         {/* Debug Information Panel */}
         {showDebug && debugInfo && (
@@ -475,95 +229,18 @@ export const GPS51CredentialsForm = () => {
           </ul>
         </div>
 
-        <div className="flex gap-2 pt-4">
-          <Button 
-            onClick={handleSave}
-            disabled={isLoading || isTesting}
-            className="flex items-center gap-2"
-          >
-            <Save className="h-4 w-4" />
-            {isLoading ? 'Saving...' : 'Save & Connect'}
-          </Button>
-          
-          <Button 
-            onClick={handleTestConnection}
-            disabled={isTesting || isLoading || !formData.apiUrl || !formData.username || !formData.password}
-            variant="outline"
-            className="flex items-center gap-2"
-          >
-            <TestTube className="h-4 w-4" />
-            {isTesting ? 'Testing...' : 'Test Connection'}
-          </Button>
+        <CredentialsFormActions
+          isLoading={isLoading}
+          isTesting={isTesting}
+          canTest={canTest}
+          status={status}
+          onSave={handleSave}
+          onTestConnection={handleTestConnection}
+          onSyncData={handleSyncData}
+          onClearConfiguration={handleClearConfiguration}
+        />
 
-          {status.isAuthenticated && (
-            <Button 
-              onClick={handleSyncData}
-              disabled={status.syncStatus === 'syncing'}
-              variant="secondary"
-              className="flex items-center gap-2"
-            >
-              <Save className="h-4 w-4" />
-              {status.syncStatus === 'syncing' ? 'Syncing...' : 'Sync Data'}
-            </Button>
-          )}
-
-          {status.isConfigured && (
-            <Button 
-              onClick={handleClearConfiguration}
-              variant="destructive"
-              className="flex items-center gap-2"
-            >
-              <Trash2 className="h-4 w-4" />
-              Clear
-            </Button>
-          )}
-        </div>
-
-        {/* Enhanced Status Display */}
-        {status.error && (
-          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
-            <p className="text-sm text-red-800">
-              ❌ Connection failed: {status.error}
-            </p>
-            {showDebug && (
-              <details className="mt-2">
-                <summary className="text-xs text-red-600 cursor-pointer">Show technical details</summary>
-                <div className="mt-1 text-xs text-red-600">
-                  Last attempt: {new Date().toLocaleString()}<br/>
-                  Status: {status.syncStatus}<br/>
-                  Health: {status.connectionHealth}
-                </div>
-              </details>
-            )}
-          </div>
-        )}
-
-        {status.isAuthenticated && (
-          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
-            <p className="text-sm text-green-800">
-              ✅ Connected to GPS51 API
-              <span className="block text-xs mt-1">
-                Connection Health: {status.connectionHealth.toUpperCase()}
-              </span>
-              <span className="block text-xs mt-1">
-                Sync Status: {status.syncStatus.toUpperCase()}
-              </span>
-              {status.lastSync && (
-                <span className="block text-xs mt-1">
-                  Last sync: {status.lastSync.toLocaleString()}
-                </span>
-              )}
-            </p>
-          </div>
-        )}
-
-        {status.syncStatus === 'syncing' && (
-          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-            <p className="text-sm text-blue-800">
-              🔄 Syncing data from GPS51...
-            </p>
-          </div>
-        )}
+        <StatusDisplay status={status} showDebug={showDebug} />
       </CardContent>
     </Card>
   );

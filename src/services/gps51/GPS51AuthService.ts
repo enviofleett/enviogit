@@ -29,7 +29,7 @@ export class GPS51AuthService {
     return GPS51AuthService.instance;
   }
 
-  async authenticate(credentials: AuthCredentials): Promise<AuthResult | null> {
+  async authenticate(credentials: AuthCredentials): Promise<AuthResult> {
     try {
       console.log('Authenticating with GPS51...');
       
