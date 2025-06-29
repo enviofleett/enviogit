@@ -562,6 +562,42 @@ export type Database = {
         }
         Relationships: []
       }
+      gps51_sync_jobs: {
+        Row: {
+          completed_at: string | null
+          error_message: string | null
+          execution_time_seconds: number | null
+          id: string
+          positions_stored: number | null
+          priority: number
+          started_at: string
+          success: boolean | null
+          vehicles_processed: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          error_message?: string | null
+          execution_time_seconds?: number | null
+          id?: string
+          positions_stored?: number | null
+          priority: number
+          started_at?: string
+          success?: boolean | null
+          vehicles_processed?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          error_message?: string | null
+          execution_time_seconds?: number | null
+          id?: string
+          positions_stored?: number | null
+          priority?: number
+          started_at?: string
+          success?: boolean | null
+          vehicles_processed?: number | null
+        }
+        Relationships: []
+      }
       guarantor_documents: {
         Row: {
           document_type: string
@@ -2406,6 +2442,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_cron_jobs_status: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       get_dashboard_data: {
         Args: Record<PropertyKey, never>
         Returns: Json

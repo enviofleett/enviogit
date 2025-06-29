@@ -40,14 +40,13 @@ export const GPS51CronJobManager = () => {
     try {
       console.log('Fetching cron job status...');
       
-      // Get cron job status from pg_cron
+      // Get cron job status from the new function
       const { data: cronData, error: cronError } = await supabase
-        .rpc('get_cron_jobs') // We'll need to create this function
-        .single();
+        .rpc('get_cron_jobs_status');
 
       if (cronError) {
         console.error('Error fetching cron jobs:', cronError);
-        // Fallback to mock data for now
+        // Fallback to mock data
         setCronJobs([
           {
             jobname: 'gps51-sync-priority-1',
@@ -79,20 +78,44 @@ export const GPS51CronJobManager = () => {
           }
         ]);
       } else {
-        setCronJobs(cronData || []);
+        // Parse the JSON data returned from the function
+        if (Array.isArray(cronData)) {
+          setCronJobs(cronData as CronJobStatus[]);
+        } else {
+          // Handle case where cronData might be a JSON string
+          const parsedData = typeof cronData === 'string' ? JSON.parse(cronData) : cronData;
+          setCronJobs(Array.isArray(parsedData) ? parsedData : []);
+        }
       }
 
-      // Get sync job logs
+      // Get sync job logs using raw SQL query since the table might not be in types yet
       const { data: logsData, error: logsError } = await supabase
-        .from('gps51_sync_jobs')
+        .from('gps51_sync_jobs' as any)
         .select('*')
         .order('started_at', { ascending: false })
         .limit(20);
 
       if (logsError) {
         console.error('Error fetching sync logs:', logsError);
+        // Set empty array if there's an error
+        setSyncLogs([]);
       } else {
-        setSyncLogs(logsData || []);
+        // Filter and map the data to ensure it matches our SyncJobLog interface
+        const filteredLogs = (logsData || []).filter((log: any) => 
+          log.priority !== undefined && log.started_at !== undefined
+        ).map((log: any) => ({
+          id: log.id,
+          priority: log.priority,
+          started_at: log.started_at,
+          completed_at: log.completed_at,
+          success: log.success,
+          vehicles_processed: log.vehicles_processed || 0,
+          positions_stored: log.positions_stored || 0,
+          error_message: log.error_message,
+          execution_time_seconds: log.execution_time_seconds
+        })) as SyncJobLog[];
+        
+        setSyncLogs(filteredLogs);
       }
 
       toast({
