@@ -227,20 +227,17 @@ serve(async (req) => {
     console.log('GPS51 login successful, authenticated token acquired:', authenticatedToken.substring(0, 8) + '...');
 
     // Step 2: Get device list using the authenticated token
-    const deviceListToken = generateToken();
-    const deviceListUrl = `${correctedApiUrl}?action=querymonitorlist&token=${deviceListToken}`;
+    const deviceListUrl = `${correctedApiUrl}?action=querymonitorlist&token=${authenticatedToken}`;
 
     const deviceListPayload = {
-      username: finalUsername,
-      token: authenticatedToken // Include the authenticated token in the payload
+      username: finalUsername
     };
 
     console.log("=== GPS51 DEVICE LIST REQUEST ===");
     console.log("Device List URL:", deviceListUrl);
     console.log("Device List Payload:", {
       username: deviceListPayload.username,
-      hasAuthToken: !!deviceListPayload.token,
-      authTokenPreview: deviceListPayload.token?.substring(0, 8) + '...'
+      usingAuthenticatedToken: true
     });
     
     const deviceListResponse = await fetch(deviceListUrl, {
@@ -248,7 +245,6 @@ serve(async (req) => {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json'
-        // Note: Removed Authorization header - GPS51 uses token in URL and payload
       },
       body: JSON.stringify(deviceListPayload)
     });
@@ -326,14 +322,12 @@ serve(async (req) => {
     // Step 4: Get real-time positions if we have devices
     let positions: GPS51Position[] = [];
     if (devices.length > 0) {
-      const positionToken = generateToken();
-      const positionUrl = `${correctedApiUrl}?action=lastposition&token=${positionToken}`;
+      const positionUrl = `${correctedApiUrl}?action=lastposition&token=${authenticatedToken}`;
 
       const deviceIds = devices.map(d => d.deviceid);
       const positionPayload = {
         deviceids: deviceIds,
-        lastquerypositiontime: lastQueryPositionTime,
-        token: authenticatedToken // Include the authenticated token
+        lastquerypositiontime: lastQueryPositionTime
       };
 
       console.log("=== GPS51 POSITION REQUEST ===");
@@ -342,7 +336,7 @@ serve(async (req) => {
       console.log("Position Payload:", {
         deviceidsCount: positionPayload.deviceids.length,
         lastQueryTime: positionPayload.lastquerypositiontime,
-        hasAuthToken: !!positionPayload.token
+        usingAuthenticatedToken: true
       });
 
       const positionResponse = await fetch(positionUrl, {
@@ -350,7 +344,6 @@ serve(async (req) => {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
-          // Note: Removed Authorization header - GPS51 uses token in URL and payload
         },
         body: JSON.stringify(positionPayload)
       });
