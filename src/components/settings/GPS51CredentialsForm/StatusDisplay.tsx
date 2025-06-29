@@ -5,10 +5,10 @@ import type { SessionStatus } from '@/hooks/useGPS51SessionBridge';
 
 interface StatusDisplayProps {
   status: SessionStatus;
-  showDebug: boolean;
+  showDebug?: boolean;
 }
 
-export const StatusDisplay: React.FC<StatusDisplayProps> = ({ status, showDebug }) => {
+export const StatusDisplay: React.FC<StatusDisplayProps> = ({ status, showDebug = false }) => {
   const getConnectionStatusIcon = () => {
     if (status.isAuthenticated && status.connectionHealth === 'good') {
       return <CheckCircle className="h-5 w-5 text-green-600" />;

@@ -1,6 +1,6 @@
 
 import { gps51Client } from '../../gps51/GPS51Client';
-import type { GPS51Credentials, GPS51AuthToken, GPS51AuthResult } from './types';
+import type { GPS51Credentials, GPS51AuthToken } from './types';
 
 export class AuthenticationHandler {
   async authenticate(credentials: GPS51Credentials): Promise<GPS51AuthToken> {

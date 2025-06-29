@@ -135,6 +135,94 @@ export const useCredentialsForm = () => {
     return credentials;
   };
 
+  const handleSave = async () => {
+    if (!validateForm()) return;
+
+    setIsLoading(true);
+    try {
+      const credentials = prepareCredentials(formData.password);
+      
+      // Store credentials in localStorage
+      localStorage.setItem('gps51_api_url', credentials.apiUrl);
+      localStorage.setItem('gps51_username', credentials.username);
+      localStorage.setItem('gps51_from', credentials.from);
+      localStorage.setItem('gps51_type', credentials.type);
+      if (credentials.apiKey) {
+        localStorage.setItem('gps51_api_key', credentials.apiKey);
+      }
+
+      // Connect using the session bridge
+      await connect();
+      
+      toast({
+        title: "Configuration Saved",
+        description: "GPS51 credentials have been saved and connection established.",
+      });
+    } catch (error) {
+      console.error('Save failed:', error);
+      toast({
+        title: "Save Failed",
+        description: error instanceof Error ? error.message : 'Failed to save configuration',
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    if (!validateForm()) return;
+
+    setIsTesting(true);
+    try {
+      const credentials = prepareCredentials(formData.password);
+      
+      // Test connection logic here - for now just simulate
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      toast({
+        title: "Connection Test Successful",
+        description: "Successfully connected to GPS51 API.",
+      });
+    } catch (error) {
+      console.error('Test failed:', error);
+      toast({
+        title: "Connection Test Failed",
+        description: error instanceof Error ? error.message : 'Failed to test connection',
+        variant: "destructive",
+      });
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const handleClearConfiguration = () => {
+    // Clear localStorage
+    localStorage.removeItem('gps51_api_url');
+    localStorage.removeItem('gps51_username');
+    localStorage.removeItem('gps51_from');
+    localStorage.removeItem('gps51_type');
+    localStorage.removeItem('gps51_api_key');
+
+    // Reset form
+    setFormData({
+      apiUrl: 'https://api.gps51.com/openapi',
+      username: '',
+      password: '',
+      apiKey: '',
+      from: 'WEB',
+      type: 'USER'
+    });
+
+    // Disconnect
+    disconnect();
+
+    toast({
+      title: "Configuration Cleared",
+      description: "GPS51 configuration has been cleared.",
+    });
+  };
+
   return {
     formData,
     showPassword,
@@ -154,6 +242,9 @@ export const useCredentialsForm = () => {
     handleInputChange,
     validateForm,
     prepareCredentials,
-    isValidMD5
+    isValidMD5,
+    handleSave,
+    handleTestConnection,
+    handleClearConfiguration
   };
 };

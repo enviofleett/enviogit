@@ -46,7 +46,7 @@ export class GPS51SyncService {
             .upsert({
               device_id: device.deviceid,
               device_name: device.devicename || device.deviceid,
-              gps51_group_id: device.groupid?.toString(),
+              gps51_group_id: device.groupId?.toString() || null,
             }, {
               onConflict: 'device_id'
             });
@@ -77,7 +77,7 @@ export class GPS51SyncService {
               heading: position.course || 0,
               ignition_on: position.moving === 1,
               battery_voltage: position.voltage,
-              raw_data: position
+              raw_data: position as any
             }, {
               onConflict: 'device_id,timestamp'
             });

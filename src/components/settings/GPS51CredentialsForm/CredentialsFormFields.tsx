@@ -12,13 +12,15 @@ interface CredentialsFormFieldsProps {
   showPassword: boolean;
   onTogglePassword: () => void;
   onInputChange: (field: string, value: string) => void;
+  disabled?: boolean;
 }
 
 export const CredentialsFormFields: React.FC<CredentialsFormFieldsProps> = ({
   formData,
   showPassword,
   onTogglePassword,
-  onInputChange
+  onInputChange,
+  disabled = false
 }) => {
   return (
     <div className="space-y-4">
@@ -30,6 +32,7 @@ export const CredentialsFormFields: React.FC<CredentialsFormFieldsProps> = ({
           placeholder="https://api.gps51.com/openapi"
           value={formData.apiUrl}
           onChange={(e) => onInputChange('apiUrl', e.target.value)}
+          disabled={disabled}
         />
         <p className="text-xs text-gray-500">
           ⚠️ Must use <strong>api.gps51.com/openapi</strong> endpoint (NEW endpoint - /webapi is deprecated)
@@ -39,7 +42,11 @@ export const CredentialsFormFields: React.FC<CredentialsFormFieldsProps> = ({
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="from">Platform *</Label>
-          <Select value={formData.from} onValueChange={(value: 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN') => onInputChange('from', value)}>
+          <Select 
+            value={formData.from} 
+            onValueChange={(value: 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN') => onInputChange('from', value)}
+            disabled={disabled}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Select platform" />
             </SelectTrigger>
@@ -54,7 +61,11 @@ export const CredentialsFormFields: React.FC<CredentialsFormFieldsProps> = ({
 
         <div className="space-y-2">
           <Label htmlFor="type">Login Type *</Label>
-          <Select value={formData.type} onValueChange={(value: 'USER' | 'DEVICE') => onInputChange('type', value)}>
+          <Select 
+            value={formData.type} 
+            onValueChange={(value: 'USER' | 'DEVICE') => onInputChange('type', value)}
+            disabled={disabled}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Select type" />
             </SelectTrigger>
@@ -74,6 +85,7 @@ export const CredentialsFormFields: React.FC<CredentialsFormFieldsProps> = ({
           placeholder="Your GPS51 username"
           value={formData.username}
           onChange={(e) => onInputChange('username', e.target.value)}
+          disabled={disabled}
         />
       </div>
 
@@ -86,6 +98,7 @@ export const CredentialsFormFields: React.FC<CredentialsFormFieldsProps> = ({
             placeholder="Your GPS51 password"
             value={formData.password}
             onChange={(e) => onInputChange('password', e.target.value)}
+            disabled={disabled}
           />
           <Button
             type="button"
@@ -93,6 +106,7 @@ export const CredentialsFormFields: React.FC<CredentialsFormFieldsProps> = ({
             size="sm"
             className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
             onClick={onTogglePassword}
+            disabled={disabled}
           >
             {showPassword ? (
               <EyeOff className="h-4 w-4" />
@@ -114,6 +128,7 @@ export const CredentialsFormFields: React.FC<CredentialsFormFieldsProps> = ({
           placeholder="Your GPS51 API key (if required)"
           value={formData.apiKey}
           onChange={(e) => onInputChange('apiKey', e.target.value)}
+          disabled={disabled}
         />
       </div>
     </div>

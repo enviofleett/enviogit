@@ -1,25 +1,27 @@
 
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useGPS51SessionBridge } from '@/hooks/useGPS51SessionBridge';
 import { useCredentialsForm } from './GPS51CredentialsForm/useCredentialsForm';
 import { CredentialsFormFields } from './GPS51CredentialsForm/CredentialsFormFields';
 import { CredentialsFormActions } from './GPS51CredentialsForm/CredentialsFormActions';
 import { StatusDisplay } from './GPS51CredentialsForm/StatusDisplay';
 
 export const GPS51CredentialsForm: React.FC = () => {
-  const { status, connect, disconnect, refresh } = useGPS51SessionBridge();
-  
   const {
     formData,
+    showPassword,
+    setShowPassword,
     isLoading,
     isTesting,
+    showDebug,
     debugInfo,
+    status,
+    refresh,
     handleInputChange,
     handleSave,
     handleTestConnection,
     handleClearConfiguration
-  } = useCredentialsForm(connect, disconnect);
+  } = useCredentialsForm();
 
   const canTest = !!(
     formData.apiUrl &&
@@ -45,11 +47,13 @@ export const GPS51CredentialsForm: React.FC = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <StatusDisplay status={status} />
+          <StatusDisplay status={status} showDebug={showDebug} />
           
           <CredentialsFormFields
             formData={formData}
-            onChange={handleInputChange}
+            showPassword={showPassword}
+            onTogglePassword={() => setShowPassword(!showPassword)}
+            onInputChange={handleInputChange}
             disabled={isLoading || isTesting}
           />
           

@@ -20,14 +20,12 @@ const Dashboard = () => {
     loading, 
     error, 
     lastSyncTime,
-    connect,
-    disconnect,
-    sync
+    refresh
   } = useGPS51LiveData();
 
   // Get unique device IDs from positions
   const uniqueDevices = positions.reduce((acc, position) => {
-    const deviceId = position.device_id || position.deviceid || '';
+    const deviceId = position.deviceid || '';
     if (deviceId && !acc.includes(deviceId)) {
       acc.push(deviceId);
     }
@@ -54,7 +52,10 @@ const Dashboard = () => {
             <CardTitle className="text-sm font-medium">Connection Status</CardTitle>
           </CardHeader>
           <CardContent>
-            <RealTimeConnectionStatus />
+            <RealTimeConnectionStatus 
+              connected={metrics.realTimeConnected}
+              lastUpdateTime={metrics.lastUpdateTime}
+            />
           </CardContent>
         </Card>
       </div>
@@ -92,7 +93,7 @@ const Dashboard = () => {
               <VehicleCard 
                 key={deviceId}
                 deviceId={deviceId}
-                positions={positions.filter(p => (p.device_id || p.deviceid) === deviceId)}
+                positions={positions.filter(p => p.deviceid === deviceId)}
               />
             ))}
           </div>
@@ -122,7 +123,7 @@ const Dashboard = () => {
       <div className="flex gap-4">
         <RealTimeGPS51Status />
         <GPS51SyncButton 
-          onSync={sync}
+          onSync={refresh}
           loading={loading}
           lastSyncTime={lastSyncTime}
         />
