@@ -1,9 +1,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { gps51ConfigService } from '@/services/gp51/GPS51ConfigService';
-import { GPS51AuthService } from '@/services/gp51/GPS51AuthService';
-import { gps51Client } from '@/services/gps51/GPS51Client';
-import { supabase } from '@/integrations/supabase/client';
+import { GPS51DataService } from '@/services/gps51/GPS51DataService';
+import { GPS51SyncService } from '@/services/gps51/GPS51SyncService';
+import { useToast } from '@/hooks/use-toast';
 
 export interface RealTimeGPS51Data {
   deviceId: string;
@@ -37,70 +36,56 @@ export const useGPS51RealTimeSync = (enableSync: boolean = true) => {
 
   const [liveData, setLiveData] = useState<RealTimeGPS51Data[]>([]);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const authService = GPS51AuthService.getInstance();
+  const { toast } = useToast();
 
   const syncGPS51RealTimeData = useCallback(async () => {
     try {
-      console.log('🔄 Starting GPS51 real-time sync...');
+      console.log('🔄 Starting GPS51 real-time sync with new database structure...');
       
-      // Verify GPS51 connection and credentials
-      const isConfigured = gps51ConfigService.isConfigured();
-      if (!isConfigured) {
-        throw new Error('GPS51 not configured. Please set up credentials.');
+      // Perform scheduled sync using the new service
+      const result = await GPS51SyncService.performScheduledSync();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Sync failed');
       }
 
-      const isAuthenticated = authService.isAuthenticated();
-      if (!isAuthenticated) {
-        throw new Error('GPS51 authentication required. Please reconnect.');
-      }
+      // Get latest positions from the new positions table
+      const { data: latestPositions, error } = await supabase
+        .from('positions')
+        .select(`
+          *,
+          devices!inner(device_id, device_name, assigned_user_id)
+        `)
+        .order('timestamp', { ascending: false })
+        .limit(100);
 
-      // Get valid token for GPS51 API calls - fix the type error
-      const tokenString = await authService.getValidToken();
-      if (!tokenString) {
-        throw new Error('No valid GPS51 token available.');
-      }
+      if (error) throw error;
 
-      console.log('✅ GPS51 authenticated, fetching live data...');
-
-      // Fetch device list from GPS51
-      const devices = await gps51Client.getDeviceList();
-      console.log(`📱 Found ${devices.length} GPS51 devices`);
-
-      if (devices.length === 0) {
-        setStatus(prev => ({
-          ...prev,
-          isConnected: true,
-          activeDevices: 0,
-          lastUpdate: new Date(),
-          error: null
-        }));
-        return;
-      }
-
-      // Get real-time positions from GPS51
-      const deviceIds = devices.map(d => d.deviceid);
-      const positions = await gps51Client.getRealtimePositions(deviceIds);
-      console.log(`📍 Received ${positions.length} live positions from GPS51`);
-
-      // Transform GPS51 data to our format
-      const transformedData: RealTimeGPS51Data[] = positions.map(pos => ({
-        deviceId: pos.deviceid,
-        latitude: pos.callat,
-        longitude: pos.callon,
-        speed: pos.speed,
-        course: pos.course,
-        timestamp: new Date(pos.updatetime),
-        ignitionStatus: pos.moving === 1,
-        fuel: pos.fuel,
-        temperature: pos.temp1,
-        address: pos.strstatus
+      // Transform to our live data format
+      const transformedData: RealTimeGPS51Data[] = (latestPositions || []).map(pos => ({
+        deviceId: pos.device_id,
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+        speed: pos.speed_kph || 0,
+        course: pos.heading || 0,
+        timestamp: new Date(pos.timestamp),
+        ignitionStatus: pos.ignition_on || false,
+        fuel: pos.raw_data?.fuel,
+        temperature: pos.raw_data?.temp1,
+        address: pos.raw_data?.strstatus || 'Unknown'
       }));
 
-      // Update live data state
-      setLiveData(transformedData);
+      // Filter to unique devices (latest position per device)
+      const uniqueDevices = new Map();
+      transformedData.forEach(pos => {
+        const existing = uniqueDevices.get(pos.deviceId);
+        if (!existing || new Date(pos.timestamp) > new Date(existing.timestamp)) {
+          uniqueDevices.set(pos.deviceId, pos);
+        }
+      });
 
-      // Store positions in Supabase for dashboard display
-      await storePositionsInSupabase(transformedData);
+      const livePositions = Array.from(uniqueDevices.values());
+      setLiveData(livePositions);
 
       // Update status
       setStatus(prev => ({
@@ -108,11 +93,11 @@ export const useGPS51RealTimeSync = (enableSync: boolean = true) => {
         isActive: true,
         isConnected: true,
         lastUpdate: new Date(),
-        activeDevices: transformedData.length,
+        activeDevices: livePositions.length,
         error: null
       }));
 
-      console.log(`✅ GPS51 real-time sync completed: ${transformedData.length} positions updated`);
+      console.log(`✅ GPS51 real-time sync completed: ${livePositions.length} active devices`);
 
     } catch (error) {
       console.error('❌ GPS51 real-time sync failed:', error);
@@ -122,42 +107,14 @@ export const useGPS51RealTimeSync = (enableSync: boolean = true) => {
         isConnected: false,
         error: error instanceof Error ? error.message : 'Unknown sync error'
       }));
+      
+      toast({
+        title: "GPS51 Sync Error",
+        description: error instanceof Error ? error.message : 'Failed to sync GPS51 data',
+        variant: "destructive",
+      });
     }
-  }, [authService]);
-
-  const storePositionsInSupabase = async (positions: RealTimeGPS51Data[]) => {
-    for (const position of positions) {
-      try {
-        // Find vehicle by GPS51 device ID
-        const { data: vehicle } = await supabase
-          .from('vehicles')
-          .select('id')
-          .eq('gps51_device_id', position.deviceId)
-          .single();
-
-        if (vehicle) {
-          // Insert real-time position
-          await supabase
-            .from('vehicle_positions')
-            .insert({
-              vehicle_id: vehicle.id,
-              latitude: position.latitude,
-              longitude: position.longitude,
-              speed: position.speed,
-              heading: position.course,
-              timestamp: position.timestamp.toISOString(),
-              ignition_status: position.ignitionStatus,
-              fuel_level: position.fuel,
-              engine_temperature: position.temperature,
-              address: position.address,
-              recorded_at: new Date().toISOString()
-            });
-        }
-      } catch (error) {
-        console.warn(`Failed to store position for device ${position.deviceId}:`, error);
-      }
-    }
-  };
+  }, [toast]);
 
   // Start/stop real-time sync
   useEffect(() => {
@@ -185,6 +142,7 @@ export const useGPS51RealTimeSync = (enableSync: boolean = true) => {
   }, [enableSync, syncGPS51RealTimeData]);
 
   const forceSync = useCallback(() => {
+    console.log('🔄 Manual GPS51 sync triggered...');
     syncGPS51RealTimeData();
   }, [syncGPS51RealTimeData]);
 
