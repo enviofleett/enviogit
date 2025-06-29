@@ -41,9 +41,16 @@ export class GPS51ConfigService {
         throw new Error('Missing required configuration fields');
       }
 
+      // Migrate old webapi endpoint to new openapi endpoint
+      let apiUrl = config.apiUrl;
+      if (apiUrl.includes('/webapi')) {
+        console.warn('GPS51ConfigService: Migrating from deprecated /webapi to /openapi endpoint');
+        apiUrl = apiUrl.replace('/webapi', '/openapi');
+      }
+
       // Store configuration in localStorage with consistent keys
       const configData = {
-        apiUrl: config.apiUrl,
+        apiUrl: apiUrl,
         username: config.username,
         from: config.from || 'WEB',
         type: config.type || 'USER',
@@ -86,16 +93,23 @@ export class GPS51ConfigService {
 
   getConfiguration(): GPS51Config | null {
     try {
-      const apiUrl = localStorage.getItem('gps51_api_url');
+      let apiUrl = localStorage.getItem('gps51_api_url');
       const username = localStorage.getItem('gps51_username');
       const passwordHash = localStorage.getItem('gps51_password_hash');
       const apiKey = localStorage.getItem('gps51_api_key');
       const from = localStorage.getItem('gps51_from') as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN';
       const type = localStorage.getItem('gps51_type') as 'USER' | 'DEVICE';
 
+      // Migrate old webapi endpoint to new openapi endpoint
+      if (apiUrl && apiUrl.includes('/webapi')) {
+        console.warn('GPS51ConfigService: Auto-migrating stored API URL from /webapi to /openapi');
+        apiUrl = apiUrl.replace('/webapi', '/openapi');
+        localStorage.setItem('gps51_api_url', apiUrl); // Update stored value
+      }
+
       if (apiUrl && username) {
         const config = {
-          apiUrl,
+          apiUrl: apiUrl,
           username,
           password: passwordHash || '', // Return stored hash if available
           apiKey: apiKey || undefined,
@@ -109,7 +123,8 @@ export class GPS51ConfigService {
           hasPassword: !!config.password,
           hasApiKey: !!config.apiKey,
           from: config.from,
-          type: config.type
+          type: config.type,
+          usingNewEndpoint: config.apiUrl.includes('/openapi')
         });
         
         return config;

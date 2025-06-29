@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +11,7 @@ import { md5 } from 'js-md5';
 
 export const GPS51CredentialsForm = () => {
   const [formData, setFormData] = useState({
-    apiUrl: 'https://api.gps51.com/webapi',
+    apiUrl: 'https://api.gps51.com/openapi',
     username: '',
     password: '',
     apiKey: '',
@@ -33,7 +32,7 @@ export const GPS51CredentialsForm = () => {
   useEffect(() => {
     const loadConfiguration = () => {
       const savedConfig = {
-        apiUrl: localStorage.getItem('gps51_api_url') || 'https://api.gps51.com/webapi',
+        apiUrl: localStorage.getItem('gps51_api_url') || 'https://api.gps51.com/openapi',
         username: localStorage.getItem('gps51_username') || '',
         from: (localStorage.getItem('gps51_from') as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN') || 'WEB',
         type: (localStorage.getItem('gps51_type') as 'USER' | 'DEVICE') || 'USER',
@@ -82,11 +81,21 @@ export const GPS51CredentialsForm = () => {
       return false;
     }
 
-    // Validate correct API URL
+    // Validate correct API URL - updated for openapi endpoint
     if (!formData.apiUrl.includes('api.gps51.com')) {
       toast({
         title: "Incorrect API URL",
         description: "GPS51 API URL should use 'api.gps51.com' subdomain, not 'www.gps51.com'",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    // Check for deprecated webapi endpoint
+    if (formData.apiUrl.includes('/webapi')) {
+      toast({
+        title: "Deprecated API Endpoint",
+        description: "Please update your API URL to use the new '/openapi' endpoint instead of '/webapi'",
         variant: "destructive",
       });
       return false;
@@ -300,7 +309,7 @@ export const GPS51CredentialsForm = () => {
   const handleClearConfiguration = () => {
     disconnect();
     setFormData({
-      apiUrl: 'https://api.gps51.com/webapi',
+      apiUrl: 'https://api.gps51.com/openapi',
       username: '',
       password: '',
       apiKey: '',
@@ -355,12 +364,12 @@ export const GPS51CredentialsForm = () => {
           <Input
             id="apiUrl"
             type="url"
-            placeholder="https://api.gps51.com/webapi"
+            placeholder="https://api.gps51.com/openapi"
             value={formData.apiUrl}
             onChange={(e) => handleInputChange('apiUrl', e.target.value)}
           />
           <p className="text-xs text-gray-500">
-            ⚠️ Must use <strong>api.gps51.com</strong> subdomain (not www.gps51.com)
+            ⚠️ Must use <strong>api.gps51.com/openapi</strong> endpoint (NEW endpoint - /webapi is deprecated)
           </p>
         </div>
 
@@ -459,7 +468,7 @@ export const GPS51CredentialsForm = () => {
         <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
           <h4 className="text-sm font-semibold text-yellow-800 mb-2">⚠️ Critical Configuration Requirements</h4>
           <ul className="text-xs text-yellow-700 space-y-1">
-            <li>• API URL must use <strong>api.gps51.com</strong> (not www.gps51.com)</li>
+            <li>• API URL must use <strong>api.gps51.com/openapi</strong> (NEW endpoint - /webapi is deprecated)</li>
             <li>• Platform and Login Type values are case-sensitive</li>
             <li>• Password will be MD5 encrypted automatically if needed</li>
             <li>• Authentication uses POST method with JSON body</li>

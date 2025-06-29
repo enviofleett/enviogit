@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { gps51ConfigService } from '@/services/gp51/GPS51ConfigService';
 import { GPS51AuthService } from '@/services/gp51/GPS51AuthService';
@@ -69,12 +68,22 @@ export const useGPS51SessionBridge = () => {
       
       console.log('=== GPS51 SESSION BRIDGE CONNECT ===');
       console.log('1. Starting connection process...');
+      
+      // Auto-migrate webapi to openapi endpoint
+      let apiUrl = credentials.apiUrl;
+      if (apiUrl.includes('/webapi')) {
+        console.warn('GPS51SessionBridge: Auto-migrating API URL from /webapi to /openapi');
+        apiUrl = apiUrl.replace('/webapi', '/openapi');
+      }
+      
       console.log('2. Received credentials:', {
         username: credentials.username,
         hasPassword: !!credentials.password,
         passwordLength: credentials.password?.length || 0,
         passwordIsAlreadyHashed: isValidMD5(credentials.password || ''),
-        apiUrl: credentials.apiUrl,
+        apiUrl: apiUrl,
+        originalApiUrl: credentials.apiUrl,
+        migrated: apiUrl !== credentials.apiUrl,
         hasApiKey: !!credentials.apiKey,
         from: credentials.from || 'WEB',
         type: credentials.type || 'USER'
@@ -85,7 +94,7 @@ export const useGPS51SessionBridge = () => {
         throw new Error('Username and password are required');
       }
       
-      if (!credentials.apiUrl) {
+      if (!apiUrl) {
         throw new Error('API URL is required');
       }
       
@@ -94,7 +103,7 @@ export const useGPS51SessionBridge = () => {
         username: credentials.username,
         password: credentials.password, // Use as-is, should already be MD5 hashed
         apiKey: credentials.apiKey,
-        apiUrl: credentials.apiUrl,
+        apiUrl: apiUrl, // Use migrated URL
         from: (credentials.from as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN') || 'WEB',
         type: (credentials.type as 'USER' | 'DEVICE') || 'USER'
       };
@@ -106,7 +115,8 @@ export const useGPS51SessionBridge = () => {
         apiUrl: authCredentials.apiUrl,
         from: authCredentials.from,
         type: authCredentials.type,
-        hasApiKey: !!authCredentials.apiKey
+        hasApiKey: !!authCredentials.apiKey,
+        endpointMigrated: authCredentials.apiUrl.includes('/openapi')
       });
       
       // Save configuration first

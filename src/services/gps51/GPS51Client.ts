@@ -103,7 +103,7 @@ export class GPS51Client {
   private maxRetries = 3;
   private retryDelay = 1000;
 
-  constructor(baseURL = 'https://api.gps51.com/webapi') {
+  constructor(baseURL = 'https://api.gps51.com/openapi') {
     this.baseURL = baseURL;
   }
 
@@ -267,11 +267,14 @@ export class GPS51Client {
         });
       }
 
-      // Update base URL if provided - ensure it uses api.gps51.com
+      // Update base URL if provided - ensure it uses api.gps51.com with openapi
       if (credentials.apiUrl) {
         if (credentials.apiUrl.includes('www.gps51.com')) {
           console.warn('Correcting API URL from www.gps51.com to api.gps51.com');
-          this.baseURL = credentials.apiUrl.replace('www.gps51.com', 'api.gps51.com');
+          this.baseURL = credentials.apiUrl.replace('www.gps51.com', 'api.gps51.com').replace('/webapi', '/openapi');
+        } else if (credentials.apiUrl.includes('/webapi')) {
+          console.warn('Migrating API URL from /webapi to /openapi endpoint');
+          this.baseURL = credentials.apiUrl.replace('/webapi', '/openapi');
         } else {
           this.baseURL = credentials.apiUrl;
         }
