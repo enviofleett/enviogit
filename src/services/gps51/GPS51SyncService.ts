@@ -1,8 +1,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { gps51Client } from './GPS51Client';
-import { GPS51AuthService } from './GPS51AuthService';
-import type { GPS51Device, GPS51Position } from '@/integrations/supabase/types';
+import { GPS51AuthService } from '../gp51/GPS51AuthService';
 
 export interface SyncResult {
   success: boolean;
@@ -22,30 +21,32 @@ export class GPS51SyncService {
     try {
       console.log('Starting GPS51 vehicle data sync...');
 
-      if (!this.authService.isAuthenticatedState()) {
+      if (!this.authService.isAuthenticated()) {
         throw new Error('GPS51 not authenticated');
       }
 
-      // Fetch vehicles from GPS51
-      const vehiclesResponse = await gps51Client.getVehicles();
-      if (!vehiclesResponse.success) {
-        throw new Error(vehiclesResponse.error || 'Failed to fetch vehicles');
-      }
+      // Fetch devices from GPS51
+      const devices = await gps51Client.getDeviceList();
+      console.log(`Found ${devices.length} devices from GPS51`);
 
-      const vehicles = vehiclesResponse.data || [];
+      // Fetch real-time positions
+      const deviceIds = devices.map(d => d.deviceid);
+      const positions = await gps51Client.getRealtimePositions(deviceIds);
+      console.log(`Found ${positions.length} positions from GPS51`);
+
       let vehiclesSynced = 0;
       let positionsStored = 0;
 
-      // Process each vehicle
-      for (const vehicle of vehicles) {
+      // Process each device
+      for (const device of devices) {
         try {
           // Store/update device
           const { error: deviceError } = await supabase
             .from('devices')
             .upsert({
-              device_id: vehicle.deviceid,
-              device_name: vehicle.devicename || vehicle.deviceid,
-              gps51_group_id: vehicle.groupid?.toString(),
+              device_id: device.deviceid,
+              device_name: device.devicename || device.deviceid,
+              gps51_group_id: device.groupid?.toString(),
             }, {
               onConflict: 'device_id'
             });
@@ -55,39 +56,37 @@ export class GPS51SyncService {
             continue;
           }
 
-          // Get latest positions for this vehicle
-          const positionsResponse = await gps51Client.getPositions(vehicle.deviceid);
-          if (positionsResponse.success && positionsResponse.data) {
-            const positions = Array.isArray(positionsResponse.data) 
-              ? positionsResponse.data 
-              : [positionsResponse.data];
-
-            for (const position of positions) {
-              const { error: positionError } = await supabase
-                .from('positions')
-                .upsert({
-                  device_id: vehicle.deviceid,
-                  latitude: position.callat,
-                  longitude: position.callon,
-                  timestamp: new Date(position.updatetime).toISOString(),
-                  speed_kph: position.speed || 0,
-                  heading: position.course || 0,
-                  ignition_on: position.moving === 1,
-                  battery_voltage: position.voltage,
-                  raw_data: position
-                }, {
-                  onConflict: 'device_id,timestamp'
-                });
-
-              if (!positionError) {
-                positionsStored++;
-              }
-            }
-          }
-
           vehiclesSynced++;
         } catch (vehicleError) {
-          console.error(`Error processing vehicle ${vehicle.deviceid}:`, vehicleError);
+          console.error(`Error processing vehicle ${device.deviceid}:`, vehicleError);
+          continue;
+        }
+      }
+
+      // Store positions
+      for (const position of positions) {
+        try {
+          const { error: positionError } = await supabase
+            .from('positions')
+            .upsert({
+              device_id: position.deviceid,
+              latitude: position.callat,
+              longitude: position.callon,
+              timestamp: new Date(position.updatetime).toISOString(),
+              speed_kph: position.speed || 0,
+              heading: position.course || 0,
+              ignition_on: position.moving === 1,
+              battery_voltage: position.voltage,
+              raw_data: position
+            }, {
+              onConflict: 'device_id,timestamp'
+            });
+
+          if (!positionError) {
+            positionsStored++;
+          }
+        } catch (positionError) {
+          console.error(`Error storing position for ${position.deviceid}:`, positionError);
           continue;
         }
       }
@@ -103,15 +102,6 @@ export class GPS51SyncService {
     } catch (error) {
       console.error('GPS51 sync failed:', error);
       
-      if (!this.authService.isAuthenticatedState()) {
-        return {
-          success: false,
-          vehiclesSynced: 0,
-          positionsStored: 0,
-          error: 'Authentication required'
-        };
-      }
-
       return {
         success: false,
         vehiclesSynced: 0,
@@ -121,7 +111,7 @@ export class GPS51SyncService {
     }
   }
 
-  async getStoredVehicles(): Promise<GPS51Device[]> {
+  async getStoredVehicles() {
     const { data, error } = await supabase
       .from('devices')
       .select('*')
@@ -135,7 +125,7 @@ export class GPS51SyncService {
     return data || [];
   }
 
-  async getStoredPositions(deviceId?: string, limit = 100): Promise<GPS51Position[]> {
+  async getStoredPositions(deviceId?: string, limit = 100) {
     let query = supabase
       .from('positions')
       .select('*')
@@ -153,20 +143,7 @@ export class GPS51SyncService {
       return [];
     }
 
-    return data?.map(position => ({
-      deviceid: position.device_id || '',
-      callat: position.latitude,
-      callon: position.longitude,
-      updatetime: new Date(position.timestamp).getTime(),
-      speed: position.speed_kph || 0,
-      moving: position.ignition_on ? 1 : 0,
-      strstatus: 'Stored Position',
-      totaldistance: 0,
-      course: position.heading || 0,
-      altitude: 0,
-      radius: 0,
-      voltage: position.battery_voltage
-    })) || [];
+    return data || [];
   }
 }
 
