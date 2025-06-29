@@ -1,5 +1,5 @@
 
-import { gps51ConfigService } from './GPS51ConfigService';
+import { gps51ConfigService } from '../gp51/GPS51ConfigService';
 import { GPS51AuthService } from '../gp51/GPS51AuthService';
 import { GPS51CredentialValidator, GPS51ConnectionCredentials } from './GPS51CredentialValidator';
 
