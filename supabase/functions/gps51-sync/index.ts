@@ -53,7 +53,8 @@ serve(async (req) => {
   }
 
   try {
-    console.log('Starting GPS51 sync process...');
+    console.log('=== GPS51 SYNC STARTED ===');
+    console.log('Timestamp:', new Date().toISOString());
 
     if (req.method !== 'POST') {
       return new Response(JSON.stringify({ error: 'Method Not Allowed. Only POST requests are supported.' }), {
@@ -65,9 +66,9 @@ serve(async (req) => {
     let requestBody: GPS51SyncRequest;
     try {
       const requestText = await req.text();
-      console.log('Request body received:', {
-        length: requestText.length,
-        preview: requestText.substring(0, 200) + (requestText.length > 200 ? '...' : '')
+      console.log('Request received:', {
+        bodyLength: requestText.length,
+        hasContent: !!requestText.trim()
       });
       
       if (!requestText || requestText.trim() === '') {
@@ -75,7 +76,7 @@ serve(async (req) => {
       }
 
       requestBody = JSON.parse(requestText);
-      console.log("GPS51 Sync Request Debug:", {
+      console.log("GPS51 Sync Request validation:", {
         hasUsername: !!requestBody.username,
         hasPassword: !!requestBody.password,
         hasApiUrl: !!requestBody.apiUrl,
@@ -83,7 +84,7 @@ serve(async (req) => {
         apiUrl: requestBody.apiUrl
       });
     } catch (e) {
-      console.error("Error parsing request body:", e);
+      console.error("Request parsing error:", e);
       return new Response(JSON.stringify({ error: 'Invalid or empty request body. Expected JSON.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
@@ -111,6 +112,8 @@ serve(async (req) => {
       correctedApiUrl = correctedApiUrl.replace('www.gps51.com', 'api.gps51.com');
     }
 
+    console.log('Using API URL:', correctedApiUrl);
+
     // Generate a proper random token for the login request
     const generateToken = () => {
       const array = new Uint8Array(16);
@@ -118,7 +121,7 @@ serve(async (req) => {
       return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
     };
 
-    // Step 1: Authenticate with GPS51 API using POST request with JSON body
+    // Step 1: Authenticate with GPS51 API
     const loginToken = generateToken();
     const loginUrl = new URL(correctedApiUrl);
     loginUrl.searchParams.append('action', 'login');
@@ -126,25 +129,21 @@ serve(async (req) => {
 
     const loginPayload = {
       username: username,
-      password: password, // Should already be MD5 hashed from client
+      password: password,
       from: 'WEB',
       type: 'USER'
     };
 
-    console.log("GPS51 Login Request Debug:", {
-      url: loginUrl.toString(),
-      method: 'POST',
-      payload: {
-        username: loginPayload.username,
-        passwordLength: loginPayload.password.length,
-        isValidMD5: /^[a-f0-9]{32}$/.test(loginPayload.password),
-        from: loginPayload.from,
-        type: loginPayload.type
-      },
-      correctedApiUrl
+    console.log("=== GPS51 LOGIN ATTEMPT ===");
+    console.log("Login URL:", loginUrl.toString());
+    console.log("Login payload validation:", {
+      username: loginPayload.username,
+      passwordLength: loginPayload.password.length,
+      isValidMD5: /^[a-f0-9]{32}$/.test(loginPayload.password),
+      from: loginPayload.from,
+      type: loginPayload.type
     });
 
-    console.log("Sending GPS51 login request with POST method and JSON body...");
     const loginResponse = await fetch(loginUrl.toString(), {
       method: 'POST',
       headers: {
@@ -155,14 +154,11 @@ serve(async (req) => {
     });
 
     const loginResponseText = await loginResponse.text();
-    console.log(`GPS51 Login Response Debug:`, {
+    console.log(`GPS51 Login Response:`, {
       status: loginResponse.status,
       statusText: loginResponse.statusText,
-      contentType: loginResponse.headers.get('content-type'),
-      contentLength: loginResponse.headers.get('content-length'),
       bodyLength: loginResponseText.length,
-      bodyPreview: loginResponseText.substring(0, 500),
-      isJSON: loginResponseText.trim().startsWith('{') || loginResponseText.trim().startsWith('[')
+      bodyPreview: loginResponseText.substring(0, 200)
     });
 
     if (!loginResponse.ok) {
@@ -172,48 +168,32 @@ serve(async (req) => {
     let loginData: GPS51ApiResponse;
     try {
       loginData = JSON.parse(loginResponseText);
-      console.log('GPS51 Login Parsed Response:', {
+      console.log('GPS51 Login Success:', {
         status: loginData.status,
         message: loginData.message,
         hasToken: !!loginData.token,
         tokenLength: loginData.token?.length || 0
       });
     } catch (parseError) {
-      console.error('Failed to parse GPS51 login response as JSON:', {
-        error: parseError.message,
-        responseText: loginResponseText
-      });
+      console.error('Failed to parse GPS51 login response:', parseError);
       throw new Error(`Failed to parse login response: ${loginResponseText}`);
     }
 
     if (loginData.status !== 0 || !loginData.token) {
-      const errorDetails = {
-        status: loginData.status,
-        message: loginData.message,
-        hasToken: !!loginData.token,
-        fullResponse: loginData
-      };
-      console.error('GPS51 login failed:', errorDetails);
-      
-      let errorMessage = loginData.message || `Login failed with status: ${loginData.status}`;
-      if (loginData.status === 8901) {
-        errorMessage += ' (Status 8901: Authentication parameter validation failed - check username, password hash, from, and type parameters)';
-      } else if (loginData.status === 1) {
-        errorMessage += ' (Status 1: Login failed - verify credentials and account status)';
-      }
-      
-      throw new Error(errorMessage);
+      const errorMsg = loginData.message || `Login failed with status: ${loginData.status}`;
+      console.error('GPS51 login failed:', { status: loginData.status, message: loginData.message });
+      throw new Error(errorMsg);
     }
 
     const token = loginData.token;
-    console.log('GPS51 login successful, token received');
+    console.log('GPS51 login successful, token acquired');
 
-    // Step 2: Fetch device list using POST with username parameter
+    // Step 2: Fetch device list
     const deviceListUrl = new URL(correctedApiUrl);
     deviceListUrl.searchParams.append('action', 'querymonitorlist');
     deviceListUrl.searchParams.append('token', token);
 
-    console.log("Fetching device list...");
+    console.log("=== FETCHING DEVICE LIST ===");
     const deviceResponse = await fetch(deviceListUrl.toString(), {
       method: 'POST',
       headers: {
@@ -224,7 +204,11 @@ serve(async (req) => {
     });
 
     const deviceResponseText = await deviceResponse.text();
-    console.log(`Device List Response: ${deviceResponse.status} - ${deviceResponseText.substring(0, 1000)}...`);
+    console.log(`Device List Response:`, {
+      status: deviceResponse.status,
+      bodyLength: deviceResponseText.length,
+      bodyPreview: deviceResponseText.substring(0, 300)
+    });
 
     let devices: GPS51Device[] = [];
     let deviceIds: string[] = [];
@@ -232,14 +216,14 @@ serve(async (req) => {
     if (deviceResponse.ok && deviceResponseText.trim()) {
       try {
         const deviceData = JSON.parse(deviceResponseText);
-        console.log('Device Data Structure:', {
+        console.log('Device Data Analysis:', {
           status: deviceData.status,
           hasGroups: !!deviceData.groups,
-          groupsLength: deviceData.groups?.length || 0
+          groupsLength: deviceData.groups?.length || 0,
+          rawKeys: Object.keys(deviceData)
         });
         
         if (deviceData.status === 0 && deviceData.groups) {
-          // Process groups format
           deviceData.groups.forEach((group: any) => {
             console.log(`Processing group: ${group.groupname}, devices: ${group.devices?.length || 0}`);
             if (group.devices && Array.isArray(group.devices)) {
@@ -251,13 +235,13 @@ serve(async (req) => {
           });
         }
       } catch (e) {
-        console.warn('Failed to parse device response, continuing with empty array:', e);
+        console.error('Failed to parse device response:', e);
       }
     }
 
-    console.log(`Found ${devices.length} devices, device IDs: ${deviceIds.join(', ')}`);
+    console.log(`Device Summary: Found ${devices.length} devices, IDs: ${deviceIds.slice(0, 5).join(', ')}${deviceIds.length > 5 ? '...' : ''}`);
 
-    // Step 3: Fetch positions for devices using POST with deviceids parameter
+    // Step 3: Fetch positions for devices - CRITICAL FIX
     let positions: GPS51Position[] = [];
     if (deviceIds.length > 0) {
       const positionUrl = new URL(correctedApiUrl);
@@ -269,7 +253,13 @@ serve(async (req) => {
         lastquerypositiontime: 0
       };
 
-      console.log("Fetching positions with payload:", positionPayload);
+      console.log("=== FETCHING POSITIONS ===");
+      console.log("Position request payload:", {
+        deviceCount: positionPayload.deviceids.length,
+        firstFewIds: positionPayload.deviceids.slice(0, 3),
+        lastQueryTime: positionPayload.lastquerypositiontime
+      });
+
       const positionResponse = await fetch(positionUrl.toString(), {
         method: 'POST',
         headers: {
@@ -280,55 +270,72 @@ serve(async (req) => {
       });
 
       const positionResponseText = await positionResponse.text();
-      console.log(`Position Response: ${positionResponse.status} - ${positionResponseText}`);
+      console.log(`Position Response Analysis:`, {
+        status: positionResponse.status,
+        statusText: positionResponse.statusText,
+        bodyLength: positionResponseText.length,
+        bodyPreview: positionResponseText.substring(0, 500),
+        isEmptyOrNull: !positionResponseText.trim() || positionResponseText === 'null'
+      });
 
       if (positionResponse.ok && positionResponseText.trim() && positionResponseText !== 'null') {
         try {
           const positionData = JSON.parse(positionResponseText);
-          console.log('Position Data Structure:', {
+          console.log('Position Data Structure Analysis:', {
             status: positionData.status,
             hasRecords: !!positionData.records,
             hasData: !!positionData.data,
             recordsLength: positionData.records?.length || 0,
-            dataLength: positionData.data?.length || 0
+            dataLength: positionData.data?.length || 0,
+            responseKeys: Object.keys(positionData),
+            firstRecord: positionData.records?.[0] || positionData.data?.[0] || null
           });
           
           if (positionData.status === 0) {
-            // Handle different response formats
             if (positionData.records && Array.isArray(positionData.records)) {
               positions = positionData.records;
+              console.log(`✅ Found ${positions.length} positions in 'records' field`);
             } else if (positionData.data && Array.isArray(positionData.data)) {
               positions = positionData.data;
+              console.log(`✅ Found ${positions.length} positions in 'data' field`);
+            } else {
+              console.log('⚠️ No position array found in response');
             }
+          } else {
+            console.log(`❌ Position API returned error status: ${positionData.status}`);
           }
         } catch (e) {
-          console.warn('Failed to parse position response, continuing with empty array:', e);
+          console.error('❌ Failed to parse position response:', e);
         }
       } else {
-        console.log('No position data available or null response received');
+        console.log('⚠️ No valid position data received or null response');
       }
+    } else {
+      console.log('⚠️ No devices found, skipping position fetch');
     }
 
-    console.log(`Found ${positions.length} positions`);
+    console.log(`Position Summary: Found ${positions.length} positions for ${deviceIds.length} devices`);
 
-    // Step 4: Sync vehicles to database with GPS51 device IDs
+    // Step 4: Sync vehicles to database with proper error handling
     let vehiclesSynced = 0;
-    const deviceToVehicleMap = new Map<string, string>(); // deviceid -> vehicle_id mapping
+    const vehicleSyncErrors: string[] = [];
+    
+    console.log("=== SYNCING VEHICLES ===");
     
     for (const device of devices) {
       try {
         const vehicleData = {
           license_plate: device.devicename,
-          gps51_device_id: device.deviceid, // Store GPS51 device ID for position mapping
+          gps51_device_id: device.deviceid,
           brand: 'GPS51',
           model: `Device ${device.devicetype}`,
           type: mapDeviceTypeToVehicleType(device.devicetype),
           status: (device.isfree === 1 ? 'available' : 'assigned') as 'available' | 'inactive' | 'maintenance' | 'assigned',
-          notes: `Device ID: ${device.deviceid}, SIM: ${device.simnum}`,
+          notes: `Device ID: ${device.deviceid}, SIM: ${device.simnum}, Last Active: ${new Date(device.lastactivetime).toISOString()}`,
           updated_at: new Date().toISOString(),
         };
 
-        console.log(`Syncing vehicle: ${device.devicename} with GPS51 ID: ${device.deviceid}`);
+        console.log(`Syncing vehicle: ${device.devicename} (${device.deviceid})`);
 
         const { data: vehicleResult, error: vehicleError } = await supabase
           .from('vehicles')
@@ -338,99 +345,163 @@ serve(async (req) => {
 
         if (!vehicleError && vehicleResult) {
           vehiclesSynced++;
-          deviceToVehicleMap.set(device.deviceid, vehicleResult.id);
-          console.log(`Successfully synced vehicle ${device.devicename} -> ${vehicleResult.id}`);
+          console.log(`✅ Vehicle synced: ${device.devicename} -> DB ID: ${vehicleResult.id}`);
         } else {
-          console.warn(`Error syncing vehicle ${device.deviceid}:`, vehicleError);
+          const errorMsg = `Vehicle sync failed for ${device.deviceid}: ${vehicleError?.message || 'Unknown error'}`;
+          console.error(`❌ ${errorMsg}`);
+          vehicleSyncErrors.push(errorMsg);
         }
       } catch (err) {
-        console.warn(`Error processing vehicle ${device.deviceid}:`, err);
+        const errorMsg = `Exception syncing vehicle ${device.deviceid}: ${err}`;
+        console.error(`❌ ${errorMsg}`);
+        vehicleSyncErrors.push(errorMsg);
       }
     }
 
-    console.log(`Vehicle sync completed: ${vehiclesSynced} vehicles synced`);
-    console.log('Device to Vehicle mapping:', Array.from(deviceToVehicleMap.entries()));
+    console.log(`Vehicle Sync Summary: ${vehiclesSynced}/${devices.length} vehicles synced successfully`);
+    if (vehicleSyncErrors.length > 0) {
+      console.log('Vehicle Sync Errors:', vehicleSyncErrors.slice(0, 5));
+    }
 
-    // Step 5: Store positions using GPS51 device ID mapping
+    // Step 5: Store positions with enhanced validation and error handling
     let positionsStored = 0;
+    const positionStorageErrors: string[] = [];
+    const skippedPositions: string[] = [];
+
+    console.log("=== STORING POSITIONS ===");
+    console.log(`Processing ${positions.length} positions...`);
+
     for (const position of positions) {
       try {
-        console.log(`Processing position for GPS51 device: ${position.deviceid}`);
+        console.log(`Processing position for device: ${position.deviceid}`);
 
-        // Find vehicle by GPS51 device ID
-        const { data: vehicle, error: vehicleQueryError } = await supabase
-          .from('vehicles')
-          .select('id')
-          .eq('gps51_device_id', position.deviceid)
-          .single();
-
-        if (vehicleQueryError) {
-          console.warn(`Error finding vehicle for device ${position.deviceid}:`, vehicleQueryError);
+        // Enhanced validation for position data
+        if (!position.deviceid || typeof position.callat !== 'number' || typeof position.callon !== 'number') {
+          const skipMsg = `Invalid position data for ${position.deviceid}: lat=${position.callat}, lon=${position.callon}`;
+          console.warn(`⚠️ ${skipMsg}`);
+          skippedPositions.push(skipMsg);
           continue;
         }
 
-        if (vehicle) {
-          const positionData = {
-            vehicle_id: vehicle.id,
-            latitude: position.callat,
-            longitude: position.callon,
-            speed: position.speed,
-            heading: position.course,
-            timestamp: new Date(position.updatetime).toISOString(),
-            ignition_status: position.moving === 1,
-            fuel_level: position.voltagepercent,
-            engine_temperature: position.temp1,
-            address: position.strstatus,
-            recorded_at: new Date().toISOString()
-          };
+        // Validate coordinates are within reasonable bounds
+        if (Math.abs(position.callat) > 90 || Math.abs(position.callon) > 180) {
+          const skipMsg = `Invalid coordinates for ${position.deviceid}: lat=${position.callat}, lon=${position.callon}`;
+          console.warn(`⚠️ ${skipMsg}`);
+          skippedPositions.push(skipMsg);
+          continue;
+        }
 
-          console.log(`Storing position for vehicle ${vehicle.id}:`, {
-            deviceId: position.deviceid,
-            lat: position.callat,
-            lon: position.callon,
-            speed: position.speed,
-            moving: position.moving
+        // Find vehicle by GPS51 device ID with better error handling
+        const { data: vehicle, error: vehicleQueryError } = await supabase
+          .from('vehicles')
+          .select('id, license_plate')
+          .eq('gps51_device_id', position.deviceid)
+          .single();
+
+        if (vehicleQueryError || !vehicle) {
+          const skipMsg = `Vehicle not found for GPS51 device ${position.deviceid}: ${vehicleQueryError?.message || 'No matching vehicle'}`;
+          console.warn(`⚠️ ${skipMsg}`);
+          skippedPositions.push(skipMsg);
+          continue;
+        }
+
+        // Validate timestamp
+        const positionTimestamp = new Date(position.updatetime);
+        if (isNaN(positionTimestamp.getTime())) {
+          const skipMsg = `Invalid timestamp for ${position.deviceid}: ${position.updatetime}`;
+          console.warn(`⚠️ ${skipMsg}`);
+          skippedPositions.push(skipMsg);
+          continue;
+        }
+
+        const positionData = {
+          vehicle_id: vehicle.id,
+          latitude: Number(position.callat),
+          longitude: Number(position.callon),
+          speed: Number(position.speed || 0),
+          heading: Number(position.course || 0),
+          timestamp: positionTimestamp.toISOString(),
+          ignition_status: position.moving === 1,
+          fuel_level: position.voltagepercent ? Number(position.voltagepercent) : null,
+          engine_temperature: position.temp1 ? Number(position.temp1) : null,
+          address: position.strstatus || null,
+          recorded_at: new Date().toISOString()
+        };
+
+        console.log(`Storing position for vehicle ${vehicle.license_plate} (${vehicle.id}):`, {
+          deviceId: position.deviceid,
+          lat: positionData.latitude,
+          lon: positionData.longitude,
+          speed: positionData.speed,
+          timestamp: positionData.timestamp,
+          ignition: positionData.ignition_status
+        });
+
+        const { error: positionError } = await supabase
+          .from('vehicle_positions')
+          .upsert(positionData, { 
+            onConflict: 'vehicle_id,timestamp',
+            ignoreDuplicates: false 
           });
 
-          const { error: positionError } = await supabase
-            .from('vehicle_positions')
-            .insert(positionData);
-
-          if (!positionError) {
-            positionsStored++;
-            console.log(`Successfully stored position for device ${position.deviceid}`);
-          } else {
-            console.warn(`Failed to store position for device ${position.deviceid}:`, positionError);
-          }
+        if (!positionError) {
+          positionsStored++;
+          console.log(`✅ Position stored for ${position.deviceid} -> ${vehicle.license_plate}`);
         } else {
-          console.warn(`No vehicle found for GPS51 device ID: ${position.deviceid}`);
+          const errorMsg = `Position storage failed for ${position.deviceid}: ${positionError.message}`;
+          console.error(`❌ ${errorMsg}`);
+          positionStorageErrors.push(errorMsg);
         }
       } catch (err) {
-        console.warn(`Error storing position for ${position.deviceid}:`, err);
+        const errorMsg = `Exception storing position for ${position.deviceid}: ${err}`;
+        console.error(`❌ ${errorMsg}`);
+        positionStorageErrors.push(errorMsg);
       }
     }
 
-    console.log(`Position storage completed: ${positionsStored} positions stored`);
-    console.log('GPS51 sync completed successfully');
-    
-    return new Response(
-      JSON.stringify({
-        success: true,
+    // Final summary with detailed statistics
+    const summary = {
+      success: true,
+      timestamp: new Date().toISOString(),
+      statistics: {
+        devicesFound: devices.length,
+        positionsRetrieved: positions.length,
         vehiclesSynced,
         positionsStored,
-        devicesFound: devices.length,
-        positionsFound: positions.length,
-        timestamp: new Date().toISOString(),
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        vehicleSyncErrors: vehicleSyncErrors.length,
+        positionStorageErrors: positionStorageErrors.length,
+        skippedPositions: skippedPositions.length
+      },
+      details: {
+        vehicleSyncSuccessRate: devices.length > 0 ? Math.round((vehiclesSynced / devices.length) * 100) : 0,
+        positionStorageSuccessRate: positions.length > 0 ? Math.round((positionsStored / positions.length) * 100) : 0,
+        positionsPerVehicleRatio: devices.length > 0 ? Math.round((positions.length / devices.length) * 100) / 100 : 0
       }
-    );
+    };
+
+    console.log('=== GPS51 SYNC COMPLETED ===');
+    console.log('Final Summary:', summary);
+
+    // Log errors for debugging
+    if (vehicleSyncErrors.length > 0) {
+      console.log('Vehicle Sync Errors (first 5):', vehicleSyncErrors.slice(0, 5));
+    }
+    if (positionStorageErrors.length > 0) {
+      console.log('Position Storage Errors (first 5):', positionStorageErrors.slice(0, 5));
+    }
+    if (skippedPositions.length > 0) {
+      console.log('Skipped Positions (first 5):', skippedPositions.slice(0, 5));
+    }
+
+    return new Response(JSON.stringify(summary), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
 
   } catch (error) {
-    console.error('GPS51 sync error:', {
+    console.error('=== GPS51 SYNC ERROR ===');
+    console.error('Error details:', {
       message: error.message,
-      stack: error.stack,
+      stack: error.stack?.split('\n').slice(0, 5),
       timestamp: new Date().toISOString()
     });
     

@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { Eye, EyeOff, Save, TestTube, Trash2, CheckCircle, AlertCircle } from 'lucide-react';
 import { useGPS51SessionBridge } from '@/hooks/useGPS51SessionBridge';
+import { md5 } from 'js-md5';
 
 export const GPS51CredentialsForm = () => {
   const [formData, setFormData] = useState({
@@ -93,7 +94,32 @@ export const GPS51CredentialsForm = () => {
     setIsLoading(true);
     try {
       console.log('Saving GPS51 credentials...');
-      const success = await connect(formData);
+      
+      // Hash the password with MD5 if it's not already hashed
+      const isAlreadyHashed = /^[a-f0-9]{32}$/.test(formData.password);
+      const hashedPassword = isAlreadyHashed ? formData.password : md5(formData.password);
+      
+      console.log('Password processing:', {
+        originalLength: formData.password.length,
+        isAlreadyHashed,
+        hashedLength: hashedPassword.length
+      });
+
+      // Save to localStorage for the sync function
+      localStorage.setItem('gps51_api_url', formData.apiUrl);
+      localStorage.setItem('gps51_username', formData.username);
+      localStorage.setItem('gps51_password_hash', hashedPassword);
+      localStorage.setItem('gps51_from', formData.from);
+      localStorage.setItem('gps51_type', formData.type);
+      if (formData.apiKey) {
+        localStorage.setItem('gps51_api_key', formData.apiKey);
+      }
+
+      // Test the connection
+      const success = await connect({
+        ...formData,
+        password: hashedPassword
+      });
       
       if (success) {
         toast({
