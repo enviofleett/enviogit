@@ -116,7 +116,7 @@ export const useGPS51Data = () => {
           if (Array.isArray(vehicle.vehicle_positions) && vehicle.vehicle_positions.length > 0) {
             // Sort by timestamp to get the latest
             latestPositionRaw = vehicle.vehicle_positions.sort((a, b) => 
-              new Date(b.updatetime).getTime() - new Date(a.updatetime).getTime()
+              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
             )[0];
           } else if (vehicle.vehicle_positions && !Array.isArray(vehicle.vehicle_positions)) {
             latestPositionRaw = vehicle.vehicle_positions;
@@ -126,16 +126,16 @@ export const useGPS51Data = () => {
           if (latestPositionRaw) {
             latestPosition = {
               vehicle_id: vehicle.id,
-              latitude: Number(latestPositionRaw.callat),
-              longitude: Number(latestPositionRaw.callon),
+              latitude: Number(latestPositionRaw.latitude),
+              longitude: Number(latestPositionRaw.longitude),
               speed: Number(latestPositionRaw.speed || 0),
-              timestamp: new Date(latestPositionRaw.updatetime).toISOString(),
-              status: latestPositionRaw.strstatus || 'Unknown location',
-              isMoving: latestPositionRaw.moving === 1,
-              ignition_status: latestPositionRaw.moving === 1,
-              heading: latestPositionRaw.course ? Number(latestPositionRaw.course) : undefined,
-              fuel_level: latestPositionRaw.voltagepercent ? Number(latestPositionRaw.voltagepercent) : undefined,
-              engine_temperature: latestPositionRaw.temp1 ? Number(latestPositionRaw.temp1) / 10 : undefined,
+              timestamp: latestPositionRaw.timestamp,
+              status: latestPositionRaw.address || 'Unknown location',
+              isMoving: latestPositionRaw.ignition_status || false,
+              ignition_status: latestPositionRaw.ignition_status,
+              heading: latestPositionRaw.heading ? Number(latestPositionRaw.heading) : undefined,
+              fuel_level: latestPositionRaw.fuel_level ? Number(latestPositionRaw.fuel_level) : undefined,
+              engine_temperature: latestPositionRaw.engine_temperature ? Number(latestPositionRaw.engine_temperature) : undefined,
             };
           }
 

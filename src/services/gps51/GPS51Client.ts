@@ -1,4 +1,3 @@
-
 import { md5 } from 'js-md5';
 
 export interface GPS51AuthCredentials {
