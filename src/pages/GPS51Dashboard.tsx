@@ -1,88 +1,78 @@
 
 import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { MapPin, Activity, Users, Truck, Zap, AlertTriangle } from 'lucide-react';
-import { useGPS51LiveData, LiveDataOptions } from '@/hooks/useGPS51LiveData';
-import { useGPS51SessionBridge } from '@/hooks/useGPS51SessionBridge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useGPS51LiveData } from '@/hooks/useGPS51LiveData';
+import { Activity, Car, Navigation, Zap } from 'lucide-react';
 
-const GPS51Dashboard: React.FC = () => {
-  const liveDataOptions: LiveDataOptions = {
+const GPS51Dashboard = () => {
+  const { positions, metrics, loading, error, lastSyncTime } = useGPS51LiveData({
     enabled: true,
     refreshInterval: 30000,
-    maxRetries: 3
-  };
+    enableWebSocket: true,
+    enableIntelligentFiltering: true
+  });
 
-  const { positions, metrics, loading, error } = useGPS51LiveData(liveDataOptions);
-  const { status, connect, disconnect } = useGPS51SessionBridge();
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
-  const handleConnect = async () => {
-    // In a real implementation, these would come from a form or config
-    const credentials = {
-      username: 'demo',
-      password: 'demo',
-      apiKey: 'demo-key',
-      apiUrl: 'https://api.gps51.com/webapi' // Added missing apiUrl property
-    };
-    await connect(credentials);
-  };
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+        <h3 className="font-semibold">Connection Error</h3>
+        <p>{error}</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">GPS51 Fleet Dashboard</h1>
-        <div className="flex items-center space-x-4">
-          <Badge variant={status.isConnected ? 'default' : 'destructive'}>
-            {status.isConnected ? 'Connected' : 'Disconnected'}
-          </Badge>
-          {status.isConnected ? (
-            <Button onClick={disconnect} variant="outline">
-              Disconnect
-            </Button>
-          ) : (
-            <Button onClick={handleConnect}>
-              Connect to GPS51
-            </Button>
-          )}
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold">GPS51 Fleet Dashboard</h1>
+        <p className="text-muted-foreground">
+          Real-time tracking and fleet management dashboard
+        </p>
       </div>
 
       {/* Fleet Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Devices</CardTitle>
-            <Truck className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total Vehicles</CardTitle>
+            <Car className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{metrics.totalDevices}</div>
             <p className="text-xs text-muted-foreground">
-              Fleet size
+              {metrics.vehiclesWithGPS} with GPS tracking
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Devices</CardTitle>
+            <CardTitle className="text-sm font-medium">Active Vehicles</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{metrics.activeDevices}</div>
+            <div className="text-2xl font-bold">{metrics.activeDevices}</div>
             <p className="text-xs text-muted-foreground">
-              Online and reporting
+              Currently reporting
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Moving</CardTitle>
-            <Zap className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Moving Vehicles</CardTitle>
+            <Navigation className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{metrics.movingVehicles}</div>
+            <div className="text-2xl font-bold">{metrics.movingVehicles}</div>
             <p className="text-xs text-muted-foreground">
               Currently in motion
             </p>
@@ -91,72 +81,79 @@ const GPS51Dashboard: React.FC = () => {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Parked</CardTitle>
-            <MapPin className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Parked Vehicles</CardTitle>
+            <Zap className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{metrics.parkedDevices}</div>
+            <div className="text-2xl font-bold">{metrics.parkedDevices}</div>
             <p className="text-xs text-muted-foreground">
-              Stationary vehicles
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Offline</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{metrics.offlineVehicles}</div>
-            <p className="text-xs text-muted-foreground">
-              Not reporting
+              Stationary with GPS
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Live Vehicle List */}
+      {/* Connection Status */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <MapPin className="h-5 w-5" />
-            <span>Live Vehicle Tracking</span>
-          </CardTitle>
+          <CardTitle>Connection Status</CardTitle>
+          <CardDescription>
+            GPS51 API connection and data synchronization status
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          {loading && <p>Loading GPS51 data...</p>}
-          {error && (
-            <div className="text-red-600 p-4 bg-red-50 rounded-lg">
-              Error: {error}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span>Real-time Connection:</span>
+              <span className={`px-2 py-1 rounded text-xs ${
+                metrics.realTimeConnected 
+                  ? 'bg-green-100 text-green-800' 
+                  : 'bg-red-100 text-red-800'
+              }`}>
+                {metrics.realTimeConnected ? 'Connected' : 'Disconnected'}
+              </span>
             </div>
-          )}
-          
-          {!loading && !error && positions.length === 0 && (
-            <p className="text-gray-500">No GPS51 devices found. Connect to GPS51 to see live data.</p>
-          )}
+            <div className="flex items-center justify-between">
+              <span>Offline Vehicles:</span>
+              <span>{metrics.offlineVehicles}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Last Update:</span>
+              <span>{lastSyncTime ? lastSyncTime.toLocaleTimeString() : 'Never'}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-          {positions.length > 0 && (
-            <div className="space-y-4">
-              {positions.slice(0, 10).map((position) => (
-                <div key={position.deviceid} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center space-x-4">
-                    <div className={`w-3 h-3 rounded-full ${position.moving === 1 ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`}></div>
-                    <div>
-                      <p className="font-medium">Device {position.deviceid}</p>
-                      <p className="text-sm text-gray-500">
-                        {position.callat.toFixed(6)}, {position.callon.toFixed(6)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-medium">{Math.round(position.speed)} km/h</p>
-                    <p className="text-sm text-gray-500">{position.strstatus}</p>
+      {/* Recent Positions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Vehicle Positions</CardTitle>
+          <CardDescription>
+            Latest position updates from GPS51 devices
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {positions.slice(0, 10).map((position) => (
+              <div key={position.deviceid} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                <div>
+                  <div className="font-medium">{position.deviceid}</div>
+                  <div className="text-sm text-gray-600">
+                    {position.callat.toFixed(6)}, {position.callon.toFixed(6)}
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
+                <div className="text-right">
+                  <div className="text-sm font-medium">{position.speed} km/h</div>
+                  <div className={`text-xs px-2 py-1 rounded ${
+                    position.moving ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {position.moving ? 'Moving' : 'Stopped'}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
     </div>
