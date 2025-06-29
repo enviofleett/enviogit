@@ -1,4 +1,3 @@
-
 import { GPS51Vehicle, GPS51Position, GPS51Telemetry } from './types';
 
 // Transform GPS51 data to our internal format
@@ -19,19 +18,19 @@ export class GPS51DataProcessor {
 
   static transformPosition(gps51Position: GPS51Position) {
     return {
-      vehicle_id: gps51Position.vehicleId,
-      latitude: gps51Position.latitude,
-      longitude: gps51Position.longitude,
+      vehicle_id: gps51Position.deviceid,
+      latitude: gps51Position.callat,
+      longitude: gps51Position.callon,
       speed: gps51Position.speed,
-      heading: gps51Position.heading,
+      heading: gps51Position.course,
       altitude: gps51Position.altitude || 0,
-      accuracy: gps51Position.accuracy || 0,
-      timestamp: new Date(gps51Position.timestamp).toISOString(),
-      address: gps51Position.address,
-      ignition_status: gps51Position.ignition,
+      accuracy: gps51Position.radius || 0,
+      timestamp: new Date(gps51Position.updatetime).toISOString(),
+      address: gps51Position.strstatus,
+      ignition_status: gps51Position.moving === 1,
       fuel_level: gps51Position.fuel,
-      engine_temperature: gps51Position.temperature,
-      battery_level: gps51Position.batteryLevel,
+      engine_temperature: gps51Position.temp1,
+      battery_level: gps51Position.voltage,
     };
   }
 
