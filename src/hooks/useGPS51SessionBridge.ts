@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react';
 import { gps51ConfigService } from '@/services/gp51/GPS51ConfigService';
 import { GPS51AuthService } from '@/services/gp51/GPS51AuthService';
-import { md5 } from 'js-md5';
 
 export interface SessionStatus {
   isConnected: boolean;
@@ -60,17 +59,25 @@ export const useGPS51SessionBridge = () => {
     return () => clearInterval(interval);
   }, [authService]);
 
-  const connect = async (credentials: { username: string; password: string; apiKey: string; apiUrl: string }) => {
+  const isValidMD5 = (str: string): boolean => {
+    return /^[a-f0-9]{32}$/.test(str);
+  };
+
+  const connect = async (credentials: { username: string; password: string; apiKey?: string; apiUrl: string; from?: string; type?: string }) => {
     try {
       setStatus(prev => ({ ...prev, error: null, syncStatus: 'syncing' }));
       
-      console.log('GPS51 Connection Debug - Starting authentication process...');
-      console.log('Credentials provided:', {
+      console.log('=== GPS51 SESSION BRIDGE CONNECT ===');
+      console.log('1. Starting connection process...');
+      console.log('2. Received credentials:', {
         username: credentials.username,
         hasPassword: !!credentials.password,
         passwordLength: credentials.password?.length || 0,
+        passwordIsAlreadyHashed: isValidMD5(credentials.password || ''),
         apiUrl: credentials.apiUrl,
-        hasApiKey: !!credentials.apiKey
+        hasApiKey: !!credentials.apiKey,
+        from: credentials.from || 'WEB',
+        type: credentials.type || 'USER'
       });
       
       // Validate input credentials
@@ -82,36 +89,39 @@ export const useGPS51SessionBridge = () => {
         throw new Error('API URL is required');
       }
       
-      // Hash password with MD5 for GPS51 API (client-side hashing)
-      console.log('Hashing password with MD5...');
-      const hashedPassword = md5(credentials.password).toLowerCase();
-      
-      console.log('Password hashing details:', {
-        originalLength: credentials.password.length,
-        hashedLength: hashedPassword.length,
-        isValidMD5Format: /^[a-f0-9]{32}$/.test(hashedPassword),
-        firstChars: hashedPassword.substring(0, 8) + '...',
-        lastChars: '...' + hashedPassword.substring(24)
-      });
-      
+      // DON'T hash password here - it should already be hashed from the form
       const authCredentials = {
-        ...credentials,
-        password: hashedPassword
+        username: credentials.username,
+        password: credentials.password, // Use as-is, should already be MD5 hashed
+        apiKey: credentials.apiKey,
+        apiUrl: credentials.apiUrl,
+        from: (credentials.from as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN') || 'WEB',
+        type: (credentials.type as 'USER' | 'DEVICE') || 'USER'
       };
       
+      console.log('3. Prepared auth credentials:', {
+        username: authCredentials.username,
+        passwordIsValidMD5: isValidMD5(authCredentials.password),
+        passwordFirstChars: authCredentials.password.substring(0, 8) + '...',
+        apiUrl: authCredentials.apiUrl,
+        from: authCredentials.from,
+        type: authCredentials.type,
+        hasApiKey: !!authCredentials.apiKey
+      });
+      
       // Save configuration first
-      console.log('Saving GPS51 configuration...');
+      console.log('4. Saving configuration...');
       await gps51ConfigService.saveConfiguration(authCredentials);
       
       // Then authenticate
-      console.log('Attempting GPS51 authentication...');
+      console.log('5. Attempting authentication...');
       const token = await authService.authenticate(authCredentials);
       
       if (!token || !token.access_token) {
         throw new Error('Authentication failed - no token received');
       }
       
-      console.log('GPS51 authentication successful:', {
+      console.log('6. Authentication successful:', {
         hasToken: !!token.access_token,
         tokenLength: token.access_token.length,
         tokenType: token.token_type,
@@ -131,12 +141,13 @@ export const useGPS51SessionBridge = () => {
       
       return true;
     } catch (error) {
-      console.error('GPS51 connection failed - detailed error:', {
-        error: error.message,
-        stack: error.stack,
+      console.error('GPS51 connection failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
         credentials: {
           username: credentials.username,
           hasPassword: !!credentials.password,
+          passwordIsHashed: isValidMD5(credentials.password || ''),
           apiUrl: credentials.apiUrl,
           hasApiKey: !!credentials.apiKey
         }
@@ -147,6 +158,8 @@ export const useGPS51SessionBridge = () => {
       // Provide helpful guidance for common issues
       if (errorMessage.includes('8901')) {
         errorMessage += '\n\nTroubleshooting tips:\n• Verify your username and password are correct\n• Ensure you are using the correct API URL\n• Check that your account has proper permissions';
+      } else if (errorMessage.includes('Login failed')) {
+        errorMessage += '\n\nPossible causes:\n• Incorrect username/password\n• Account locked or suspended\n• API endpoint not reachable\n• Invalid from/type parameters';
       }
       
       setStatus(prev => ({

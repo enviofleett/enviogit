@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -5,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Eye, EyeOff, Save, TestTube, Trash2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Save, TestTube, Trash2, CheckCircle, AlertCircle, Bug } from 'lucide-react';
 import { useGPS51SessionBridge } from '@/hooks/useGPS51SessionBridge';
 import { md5 } from 'js-md5';
 
@@ -22,6 +23,8 @@ export const GPS51CredentialsForm = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
   
   const { toast } = useToast();
   const { status, connect, disconnect, refresh } = useGPS51SessionBridge();
@@ -51,6 +54,10 @@ export const GPS51CredentialsForm = () => {
       ...prev,
       [field]: value
     }));
+  };
+
+  const isValidMD5 = (str: string): boolean => {
+    return /^[a-f0-9]{32}$/.test(str);
   };
 
   const validateForm = () => {
@@ -88,40 +95,102 @@ export const GPS51CredentialsForm = () => {
     return true;
   };
 
+  const prepareCredentials = (rawPassword: string) => {
+    // Only hash if not already hashed
+    const hashedPassword = isValidMD5(rawPassword) ? rawPassword : md5(rawPassword).toLowerCase();
+    
+    const credentials = {
+      apiUrl: formData.apiUrl,
+      username: formData.username,
+      password: hashedPassword,
+      apiKey: formData.apiKey,
+      from: formData.from,
+      type: formData.type
+    };
+
+    // Store debug info
+    setDebugInfo({
+      originalPassword: {
+        length: rawPassword.length,
+        isAlreadyHashed: isValidMD5(rawPassword),
+        firstChars: rawPassword.substring(0, 4) + '...'
+      },
+      processedPassword: {
+        length: hashedPassword.length,
+        isValidMD5: isValidMD5(hashedPassword),
+        firstChars: hashedPassword.substring(0, 8) + '...'
+      },
+      credentials: {
+        ...credentials,
+        password: hashedPassword.substring(0, 8) + '...' // Truncated for security
+      },
+      timestamp: new Date().toISOString()
+    });
+
+    return credentials;
+  };
+
+  const saveCredentialsToStorage = (credentials: any) => {
+    try {
+      // Save individual items for easy access
+      localStorage.setItem('gps51_api_url', credentials.apiUrl);
+      localStorage.setItem('gps51_username', credentials.username);
+      localStorage.setItem('gps51_password_hash', credentials.password);
+      localStorage.setItem('gps51_from', credentials.from);
+      localStorage.setItem('gps51_type', credentials.type);
+      
+      if (credentials.apiKey) {
+        localStorage.setItem('gps51_api_key', credentials.apiKey);
+      }
+
+      // Save as JSON for session bridge
+      const safeCredentials = {
+        username: credentials.username,
+        apiUrl: credentials.apiUrl,
+        from: credentials.from,
+        type: credentials.type,
+        hasApiKey: !!credentials.apiKey
+      };
+      localStorage.setItem('gps51_credentials', JSON.stringify(safeCredentials));
+      
+      console.log('GPS51 credentials saved to localStorage:', {
+        keys: Object.keys(localStorage).filter(k => k.startsWith('gps51_')),
+        credentialsKeys: Object.keys(safeCredentials)
+      });
+    } catch (error) {
+      console.error('Failed to save credentials to localStorage:', error);
+      throw new Error('Failed to save credentials');
+    }
+  };
+
   const handleSave = async () => {
     if (!validateForm()) return;
 
     setIsLoading(true);
     try {
-      console.log('Saving GPS51 credentials...');
+      console.log('=== GPS51 SAVE CREDENTIALS DEBUG ===');
+      console.log('1. Form validation passed');
       
-      // Hash the password with MD5 if it's not already hashed
-      const isAlreadyHashed = /^[a-f0-9]{32}$/.test(formData.password);
-      const hashedPassword = isAlreadyHashed ? formData.password : md5(formData.password);
-      
-      console.log('Password processing:', {
-        originalLength: formData.password.length,
-        isAlreadyHashed,
-        hashedLength: hashedPassword.length
+      const credentials = prepareCredentials(formData.password);
+      console.log('2. Credentials prepared:', {
+        username: credentials.username,
+        apiUrl: credentials.apiUrl,
+        passwordIsHashed: isValidMD5(credentials.password),
+        from: credentials.from,
+        type: credentials.type,
+        hasApiKey: !!credentials.apiKey
       });
 
-      // Save to localStorage for the sync function
-      localStorage.setItem('gps51_api_url', formData.apiUrl);
-      localStorage.setItem('gps51_username', formData.username);
-      localStorage.setItem('gps51_password_hash', hashedPassword);
-      localStorage.setItem('gps51_from', formData.from);
-      localStorage.setItem('gps51_type', formData.type);
-      if (formData.apiKey) {
-        localStorage.setItem('gps51_api_key', formData.apiKey);
-      }
+      // Save to localStorage first
+      saveCredentialsToStorage(credentials);
+      console.log('3. Credentials saved to localStorage');
 
-      // Test the connection
-      const success = await connect({
-        ...formData,
-        password: hashedPassword
-      });
+      // Test authentication
+      console.log('4. Testing authentication...');
+      const success = await connect(credentials);
       
       if (success) {
+        console.log('5. Authentication successful');
         toast({
           title: "Settings Saved",
           description: "GPS51 credentials have been saved and authenticated successfully.",
@@ -129,18 +198,28 @@ export const GPS51CredentialsForm = () => {
         
         // Clear password field for security
         setFormData(prev => ({ ...prev, password: '' }));
+        
+        // Test immediate sync to verify everything works
+        try {
+          console.log('6. Testing immediate sync...');
+          await refresh();
+          console.log('7. Sync test successful');
+        } catch (syncError) {
+          console.warn('Sync test failed but authentication worked:', syncError);
+        }
       } else {
+        console.error('5. Authentication failed:', status.error);
         toast({
-          title: "Connection Failed",
-          description: status.error || "Failed to authenticate with GPS51.",
+          title: "Authentication Failed",
+          description: status.error || "Failed to authenticate with GPS51 after saving credentials.",
           variant: "destructive",
         });
       }
     } catch (error) {
       console.error('Save credentials error:', error);
       toast({
-        title: "Error",
-        description: "Failed to save credentials. Please try again.",
+        title: "Save Failed",
+        description: `Failed to save credentials: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive",
       });
     } finally {
@@ -153,8 +232,18 @@ export const GPS51CredentialsForm = () => {
 
     setIsTesting(true);
     try {
-      console.log('Testing GPS51 connection...');
-      const success = await connect(formData);
+      console.log('=== GPS51 TEST CONNECTION DEBUG ===');
+      const credentials = prepareCredentials(formData.password);
+      
+      console.log('Testing connection with credentials:', {
+        username: credentials.username,
+        apiUrl: credentials.apiUrl,
+        passwordIsHashed: isValidMD5(credentials.password),
+        from: credentials.from,
+        type: credentials.type
+      });
+      
+      const success = await connect(credentials);
       
       if (success) {
         toast({
@@ -191,7 +280,7 @@ export const GPS51CredentialsForm = () => {
     }
 
     try {
-      console.log('Syncing GPS51 data...');
+      console.log('Manual sync requested...');
       const result = await refresh();
       
       toast({
@@ -218,6 +307,7 @@ export const GPS51CredentialsForm = () => {
       from: 'WEB',
       type: 'USER'
     });
+    setDebugInfo(null);
     
     toast({
       title: "Configuration Cleared",
@@ -240,6 +330,15 @@ export const GPS51CredentialsForm = () => {
         <CardTitle className="flex items-center gap-2">
           GPS51 API Configuration
           {getConnectionStatusIcon()}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowDebug(!showDebug)}
+            className="ml-auto"
+          >
+            <Bug className="h-4 w-4" />
+            Debug
+          </Button>
         </CardTitle>
         <CardDescription>
           Configure your GPS51 API credentials to enable real-time fleet tracking and data synchronization.
@@ -279,9 +378,6 @@ export const GPS51CredentialsForm = () => {
                 <SelectItem value="WEIXIN">WEIXIN</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-gray-500">
-              Case-sensitive: must be exact values
-            </p>
           </div>
 
           <div className="space-y-2">
@@ -295,9 +391,6 @@ export const GPS51CredentialsForm = () => {
                 <SelectItem value="DEVICE">DEVICE</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-gray-500">
-              Case-sensitive: must be exact values
-            </p>
           </div>
         </div>
 
@@ -337,9 +430,30 @@ export const GPS51CredentialsForm = () => {
             </Button>
           </div>
           <p className="text-xs text-gray-500">
-            Will be automatically encrypted using MD5 (32-char lowercase)
+            Will be automatically encrypted using MD5 if not already hashed
           </p>
         </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="apiKey">API Key (Optional)</Label>
+          <Input
+            id="apiKey"
+            type="text"
+            placeholder="Your GPS51 API key (if required)"
+            value={formData.apiKey}
+            onChange={(e) => handleInputChange('apiKey', e.target.value)}
+          />
+        </div>
+
+        {/* Debug Information Panel */}
+        {showDebug && debugInfo && (
+          <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-md">
+            <h4 className="text-sm font-semibold text-gray-800 mb-2">🐛 Debug Information</h4>
+            <pre className="text-xs text-gray-600 overflow-auto max-h-40">
+              {JSON.stringify(debugInfo, null, 2)}
+            </pre>
+          </div>
+        )}
 
         {/* Critical Configuration Notes */}
         <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
@@ -347,7 +461,7 @@ export const GPS51CredentialsForm = () => {
           <ul className="text-xs text-yellow-700 space-y-1">
             <li>• API URL must use <strong>api.gps51.com</strong> (not www.gps51.com)</li>
             <li>• Platform and Login Type values are case-sensitive</li>
-            <li>• Password will be MD5 encrypted automatically</li>
+            <li>• Password will be MD5 encrypted automatically if needed</li>
             <li>• Authentication uses POST method with JSON body</li>
           </ul>
         </div>
@@ -402,6 +516,16 @@ export const GPS51CredentialsForm = () => {
             <p className="text-sm text-red-800">
               ❌ Connection failed: {status.error}
             </p>
+            {showDebug && (
+              <details className="mt-2">
+                <summary className="text-xs text-red-600 cursor-pointer">Show technical details</summary>
+                <div className="mt-1 text-xs text-red-600">
+                  Last attempt: {new Date().toLocaleString()}<br/>
+                  Status: {status.syncStatus}<br/>
+                  Health: {status.connectionHealth}
+                </div>
+              </details>
+            )}
           </div>
         )}
 
