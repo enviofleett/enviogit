@@ -1,5 +1,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { GPS51DataService } from '@/services/gps51/GPS51DataService';
 import { GPS51SyncService } from '@/services/gps51/GPS51SyncService';
 import { useToast } from '@/hooks/use-toast';

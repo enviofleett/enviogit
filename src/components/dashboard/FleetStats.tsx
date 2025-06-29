@@ -6,30 +6,29 @@ import { useGPS51Data } from '@/hooks/useGPS51Data';
 import { useGPS51LiveData } from '@/hooks/useGPS51LiveData';
 
 const FleetStats = () => {
-  const { vehicles, loading: vehiclesLoading } = useGPS51Data();
+  const { devices, loading: devicesLoading } = useGPS51Data();
   const { metrics, loading: metricsLoading } = useGPS51LiveData();
 
-  const loading = vehiclesLoading || metricsLoading;
+  const loading = devicesLoading || metricsLoading;
 
-  // Calculate additional stats from vehicle data
-  const totalVehicles = vehicles.length;
-  const vehiclesWithPositions = vehicles.filter(v => v.latest_position).length;
-  const vehiclesWithoutPositions = totalVehicles - vehiclesWithPositions;
-  const activeVehicles = vehicles.filter(v => v.latest_position?.isMoving).length;
-  const maintenanceVehicles = vehicles.filter(v => v.status === 'maintenance').length;
+  // Calculate additional stats from device data
+  const totalDevices = devices.length;
+  const activeDevices = devices.filter(d => d.last_seen_at && 
+    new Date(d.last_seen_at).getTime() > Date.now() - 5 * 60 * 1000).length;
+  const offlineDevices = totalDevices - activeDevices;
 
   const stats = [
     {
       title: 'Total Fleet',
-      value: loading ? '...' : totalVehicles.toString(),
-      change: `${vehiclesWithPositions} with GPS data`,
+      value: loading ? '...' : totalDevices.toString(),
+      change: `${activeDevices} active`,
       icon: Monitor,
       color: 'text-blue-600',
       bgColor: 'bg-blue-100'
     },
     {
       title: 'Active Now',
-      value: loading ? '...' : activeVehicles.toString(),
+      value: loading ? '...' : metrics.movingVehicles.toString(),
       change: 'Engines running',
       icon: Zap,
       color: 'text-green-600',
@@ -37,15 +36,15 @@ const FleetStats = () => {
     },
     {
       title: 'GPS Tracking',
-      value: loading ? '...' : vehiclesWithPositions.toString(),
-      change: `${vehiclesWithoutPositions} offline`,
+      value: loading ? '...' : activeDevices.toString(),
+      change: `${offlineDevices} offline`,
       icon: MapPin,
       color: 'text-purple-600',
       bgColor: 'bg-purple-100'
     },
     {
       title: 'Maintenance',
-      value: loading ? '...' : maintenanceVehicles.toString(),
+      value: loading ? '...' : '0',
       change: 'Scheduled',
       icon: Settings,
       color: 'text-yellow-600',
