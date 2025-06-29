@@ -1,13 +1,21 @@
 
-import { GPS51AuthCredentials, GPS51User } from './types';
+import { GPS51AuthCredentials, GPS51User } from '../gps51/types';
 import { GPS51Client } from '../gps51/GPS51Client';
 import { gps51SessionManager } from './GPS51SessionManager';
 
 export class GPS51AuthService {
+  private static instance: GPS51AuthService;
   private gps51Client: GPS51Client;
 
-  constructor() {
+  private constructor() {
     this.gps51Client = new GPS51Client();
+  }
+
+  static getInstance(): GPS51AuthService {
+    if (!GPS51AuthService.instance) {
+      GPS51AuthService.instance = new GPS51AuthService();
+    }
+    return GPS51AuthService.instance;
   }
 
   async authenticate(credentials: GPS51AuthCredentials): Promise<{ success: boolean; user?: GPS51User; error?: string }> {
@@ -45,8 +53,16 @@ export class GPS51AuthService {
     return this.gps51Client.isAuthenticated();
   }
 
+  isAuthenticated(): boolean {
+    return this.gps51Client.isAuthenticated();
+  }
+
   async getUser(): Promise<GPS51User | null> {
     return this.gps51Client.getUser();
+  }
+
+  async getValidToken(): Promise<any> {
+    return this.gps51Client.getValidToken();
   }
 
   logout(): void {
@@ -55,4 +71,4 @@ export class GPS51AuthService {
   }
 }
 
-export const gps51AuthService = new GPS51AuthService();
+export const gps51AuthService = GPS51AuthService.getInstance();

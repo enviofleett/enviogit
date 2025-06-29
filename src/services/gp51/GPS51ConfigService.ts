@@ -1,8 +1,7 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { GPS51Client } from '../gps51/GPS51Client';
 import { gps51AuthService } from './GPS51AuthService';
-import { GPS51Credentials, SyncResult } from './types';
+import { GPS51Credentials, SyncResult } from '../gps51/types';
 
 export class GPS51ConfigService {
   private gps51Client: GPS51Client;
@@ -38,6 +37,10 @@ export class GPS51ConfigService {
     }
   }
 
+  async getCredentials(): Promise<GPS51Credentials | null> {
+    return this.getConfig();
+  }
+
   async saveConfig(credentials: GPS51Credentials): Promise<boolean> {
     try {
       const result = await gps51AuthService.authenticate(credentials);
@@ -46,6 +49,21 @@ export class GPS51ConfigService {
       console.error('Failed to save GPS51 config:', error);
       return false;
     }
+  }
+
+  async saveConfiguration(credentials: GPS51Credentials): Promise<boolean> {
+    return this.saveConfig(credentials);
+  }
+
+  async clearConfiguration(): Promise<void> {
+    localStorage.removeItem('gps51_session');
+    localStorage.removeItem('gps51_credentials');
+    localStorage.removeItem('gps51_api_url');
+    localStorage.removeItem('gps51_username');
+    localStorage.removeItem('gps51_password_hash');
+    localStorage.removeItem('gps51_from');
+    localStorage.removeItem('gps51_type');
+    localStorage.removeItem('gps51_api_key');
   }
 
   async syncData(): Promise<SyncResult> {

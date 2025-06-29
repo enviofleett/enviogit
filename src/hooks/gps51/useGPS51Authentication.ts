@@ -18,6 +18,9 @@ export const useGPS51Authentication = () => {
 
     // Get credentials
     const credentials = await gps51ConfigService.getCredentials();
+    if (!credentials) {
+      throw new Error('GPS51 credentials not found.');
+    }
     console.log('✅ GPS51 credentials retrieved');
 
     // Check if already authenticated
