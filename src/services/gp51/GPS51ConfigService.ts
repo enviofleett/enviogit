@@ -34,51 +34,103 @@ export class GPS51ConfigService {
 
   async saveConfiguration(config: GPS51Config): Promise<void> {
     try {
-      // Store configuration in localStorage (without password)
-      localStorage.setItem('gps51_api_url', config.apiUrl);
-      localStorage.setItem('gps51_username', config.username);
-      localStorage.setItem('gps51_from', config.from || 'WEB');
-      localStorage.setItem('gps51_type', config.type || 'USER');
-
-      if (config.apiKey) {
-        localStorage.setItem('gps51_api_key', config.apiKey);
+      console.log('GPS51ConfigService: Saving configuration...');
+      
+      // Validate required fields
+      if (!config.apiUrl || !config.username || !config.password) {
+        throw new Error('Missing required configuration fields');
       }
 
-      // Store credentials for auth service (without password for security)
-      localStorage.setItem('gps51_credentials', JSON.stringify({
-        username: config.username,
-        apiUrl: config.apiUrl,
-        from: config.from || 'WEB',
-        type: config.type || 'USER'
-      }));
+      // Migrate old webapi endpoint to new openapi endpoint
+      let apiUrl = config.apiUrl;
+      if (apiUrl.includes('/webapi')) {
+        console.warn('GPS51ConfigService: Migrating from deprecated /webapi to /openapi endpoint');
+        apiUrl = apiUrl.replace('/webapi', '/openapi');
+      }
 
-      console.log('GPS51 configuration saved successfully');
+      // Store configuration in localStorage with consistent keys
+      const configData = {
+        apiUrl: apiUrl,
+        username: config.username,
+        from: config.from || 'WEB',
+        type: config.type || 'USER',
+        apiKey: config.apiKey || '',
+        savedAt: new Date().toISOString()
+      };
+
+      // Save individual items for backward compatibility
+      localStorage.setItem('gps51_api_url', configData.apiUrl);
+      localStorage.setItem('gps51_username', configData.username);
+      localStorage.setItem('gps51_password_hash', config.password); // Store hashed password
+      localStorage.setItem('gps51_from', configData.from);
+      localStorage.setItem('gps51_type', configData.type);
+      
+      if (configData.apiKey) {
+        localStorage.setItem('gps51_api_key', configData.apiKey);
+      }
+
+      // Store safe credentials for auth service (without password for security)
+      const safeCredentials = {
+        username: configData.username,
+        apiUrl: configData.apiUrl,
+        from: configData.from,
+        type: configData.type,
+        hasApiKey: !!configData.apiKey,
+        savedAt: configData.savedAt
+      };
+      localStorage.setItem('gps51_credentials', JSON.stringify(safeCredentials));
+
+      console.log('GPS51ConfigService: Configuration saved successfully:', {
+        keys: Object.keys(configData),
+        hasPassword: !!config.password,
+        savedItems: Object.keys(localStorage).filter(k => k.startsWith('gps51_'))
+      });
     } catch (error) {
-      console.error('Failed to save GPS51 configuration:', error);
-      throw new Error('Failed to save configuration');
+      console.error('GPS51ConfigService: Failed to save configuration:', error);
+      throw new Error(`Failed to save configuration: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   getConfiguration(): GPS51Config | null {
     try {
-      const apiUrl = localStorage.getItem('gps51_api_url');
+      let apiUrl = localStorage.getItem('gps51_api_url');
       const username = localStorage.getItem('gps51_username');
+      const passwordHash = localStorage.getItem('gps51_password_hash');
       const apiKey = localStorage.getItem('gps51_api_key');
       const from = localStorage.getItem('gps51_from') as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN';
       const type = localStorage.getItem('gps51_type') as 'USER' | 'DEVICE';
 
+      // Migrate old webapi endpoint to new openapi endpoint
+      if (apiUrl && apiUrl.includes('/webapi')) {
+        console.warn('GPS51ConfigService: Auto-migrating stored API URL from /webapi to /openapi');
+        apiUrl = apiUrl.replace('/webapi', '/openapi');
+        localStorage.setItem('gps51_api_url', apiUrl); // Update stored value
+      }
+
       if (apiUrl && username) {
-        return {
-          apiUrl,
+        const config = {
+          apiUrl: apiUrl,
           username,
-          password: '', // Never store passwords
+          password: passwordHash || '', // Return stored hash if available
           apiKey: apiKey || undefined,
           from: from || 'WEB',
           type: type || 'USER'
         };
+        
+        console.log('GPS51ConfigService: Retrieved configuration:', {
+          hasApiUrl: !!config.apiUrl,
+          hasUsername: !!config.username,
+          hasPassword: !!config.password,
+          hasApiKey: !!config.apiKey,
+          from: config.from,
+          type: config.type,
+          usingNewEndpoint: config.apiUrl.includes('/openapi')
+        });
+        
+        return config;
       }
     } catch (error) {
-      console.error('Failed to load GPS51 configuration:', error);
+      console.error('GPS51ConfigService: Failed to load configuration:', error);
     }
 
     return null;
@@ -86,9 +138,11 @@ export class GPS51ConfigService {
 
   async testConnection(config: GPS51Config): Promise<boolean> {
     try {
+      console.log('GPS51ConfigService: Testing connection...');
+      
       const credentials: GPS51Credentials = {
         username: config.username,
-        password: config.password,
+        password: config.password, // Should already be hashed
         apiKey: config.apiKey,
         apiUrl: config.apiUrl,
         from: config.from || 'WEB',
@@ -96,16 +150,23 @@ export class GPS51ConfigService {
       };
 
       const token = await this.authService.authenticate(credentials);
-      return !!token.access_token;
+      const isValid = !!token.access_token;
+      
+      console.log('GPS51ConfigService: Connection test result:', {
+        success: isValid,
+        hasToken: !!token.access_token
+      });
+      
+      return isValid;
     } catch (error) {
-      console.error('GPS51 connection test failed:', error);
+      console.error('GPS51ConfigService: Connection test failed:', error);
       throw error;
     }
   }
 
   async syncData(): Promise<GPS51SyncResult> {
     try {
-      console.log('Starting GPS51 data sync...');
+      console.log('GPS51ConfigService: Starting data sync...');
 
       // Get valid token
       const token = await this.authService.getValidToken();
@@ -115,12 +176,12 @@ export class GPS51ConfigService {
 
       // Fetch devices using the GPS51 client
       const devices = await gps51Client.getDeviceList();
-      console.log(`Found ${devices.length} devices from GPS51`);
+      console.log(`GPS51ConfigService: Found ${devices.length} devices from GPS51`);
 
       // Fetch real-time positions
       const deviceIds = devices.map(d => d.deviceid);
       const positions = await gps51Client.getRealtimePositions(deviceIds);
-      console.log(`Found ${positions.length} positions from GPS51`);
+      console.log(`GPS51ConfigService: Found ${positions.length} positions from GPS51`);
 
       // Store vehicles in Supabase with GPS51 device IDs
       let vehiclesSynced = 0;
@@ -139,7 +200,7 @@ export class GPS51ConfigService {
             updated_at: new Date().toISOString()
           };
 
-          console.log(`Syncing vehicle: ${device.devicename} with GPS51 ID: ${device.deviceid}`);
+          console.log(`GPS51ConfigService: Syncing vehicle: ${device.devicename} with GPS51 ID: ${device.deviceid}`);
 
           const { data: vehicleResult, error } = await supabase
             .from('vehicles')
@@ -152,12 +213,12 @@ export class GPS51ConfigService {
           if (!error && vehicleResult) {
             vehiclesSynced++;
             deviceToVehicleMap.set(device.deviceid, vehicleResult.id);
-            console.log(`Successfully synced vehicle ${device.devicename} -> ${vehicleResult.id}`);
+            console.log(`GPS51ConfigService: Successfully synced vehicle ${device.devicename} -> ${vehicleResult.id}`);
           } else {
-            console.warn(`Failed to sync vehicle ${device.deviceid}:`, error);
+            console.warn(`GPS51ConfigService: Failed to sync vehicle ${device.deviceid}:`, error);
           }
         } catch (err) {
-          console.warn(`Error syncing vehicle ${device.deviceid}:`, err);
+          console.warn(`GPS51ConfigService: Error syncing vehicle ${device.deviceid}:`, err);
         }
       }
 
@@ -165,7 +226,7 @@ export class GPS51ConfigService {
       let positionsStored = 0;
       for (const position of positions) {
         try {
-          console.log(`Processing position for GPS51 device: ${position.deviceid}`);
+          console.log(`GPS51ConfigService: Processing position for GPS51 device: ${position.deviceid}`);
 
           // Find vehicle by GPS51 device ID instead of license plate
           const { data: vehicle, error: vehicleQueryError } = await supabase
@@ -175,7 +236,7 @@ export class GPS51ConfigService {
             .single();
 
           if (vehicleQueryError) {
-            console.warn(`Error finding vehicle for device ${position.deviceid}:`, vehicleQueryError);
+            console.warn(`GPS51ConfigService: Error finding vehicle for device ${position.deviceid}:`, vehicleQueryError);
             continue;
           }
 
@@ -196,7 +257,7 @@ export class GPS51ConfigService {
               recorded_at: new Date().toISOString()
             };
 
-            console.log(`Storing position for vehicle ${vehicle.id}:`, {
+            console.log(`GPS51ConfigService: Storing position for vehicle ${vehicle.id}:`, {
               deviceId: position.deviceid,
               lat: position.callat,
               lon: position.callon,
@@ -210,19 +271,19 @@ export class GPS51ConfigService {
 
             if (!error) {
               positionsStored++;
-              console.log(`Successfully stored position for device ${position.deviceid}`);
+              console.log(`GPS51ConfigService: Successfully stored position for device ${position.deviceid}`);
             } else {
-              console.warn(`Failed to store position for device ${position.deviceid}:`, error);
+              console.warn(`GPS51ConfigService: Failed to store position for device ${position.deviceid}:`, error);
             }
           } else {
-            console.warn(`No vehicle found for GPS51 device ID: ${position.deviceid}`);
+            console.warn(`GPS51ConfigService: No vehicle found for GPS51 device ID: ${position.deviceid}`);
           }
         } catch (err) {
-          console.warn(`Error storing position for ${position.deviceid}:`, err);
+          console.warn(`GPS51ConfigService: Error storing position for ${position.deviceid}:`, err);
         }
       }
 
-      console.log(`GPS51 sync completed: ${vehiclesSynced} vehicles, ${positionsStored} positions`);
+      console.log(`GPS51ConfigService: Sync completed: ${vehiclesSynced} vehicles, ${positionsStored} positions`);
 
       return {
         success: true,
@@ -233,7 +294,7 @@ export class GPS51ConfigService {
       };
 
     } catch (error) {
-      console.error('GPS51 sync failed:', error);
+      console.error('GPS51ConfigService: Sync failed:', error);
       return {
         success: false,
         vehiclesSynced: 0,
@@ -266,18 +327,34 @@ export class GPS51ConfigService {
 
   isConfigured(): boolean {
     const config = this.getConfiguration();
-    return !!(config?.apiUrl && config?.username);
+    const isConfigured = !!(config?.apiUrl && config?.username && config?.password);
+    
+    console.log('GPS51ConfigService: Configuration check:', {
+      hasConfig: !!config,
+      hasApiUrl: !!config?.apiUrl,
+      hasUsername: !!config?.username,
+      hasPassword: !!config?.password,
+      isConfigured
+    });
+    
+    return isConfigured;
   }
 
   clearConfiguration(): void {
-    localStorage.removeItem('gps51_api_url');
-    localStorage.removeItem('gps51_username');
-    localStorage.removeItem('gps51_api_key');
-    localStorage.removeItem('gps51_from');
-    localStorage.removeItem('gps51_type');
-    localStorage.removeItem('gps51_credentials');
+    const keysToRemove = [
+      'gps51_api_url',
+      'gps51_username', 
+      'gps51_password_hash',
+      'gps51_api_key',
+      'gps51_from',
+      'gps51_type',
+      'gps51_credentials'
+    ];
+    
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+    
     this.authService.logout();
-    console.log('GPS51 configuration cleared');
+    console.log('GPS51ConfigService: Configuration cleared, removed keys:', keysToRemove);
   }
 }
 
