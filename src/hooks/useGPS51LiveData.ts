@@ -291,7 +291,6 @@ export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
       
       const now = Date.now();
       const fiveMinutesAgo = now - (5 * 60 * 1000);
-      const thirtySecondsAgo = now - (30 * 1000);
       
       const activeDevices = transformedPositions.filter(p => 
         p.updatetime > fiveMinutesAgo

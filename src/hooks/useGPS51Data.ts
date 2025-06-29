@@ -17,7 +17,7 @@ export interface VehiclePosition {
   engine_temperature?: number;
 }
 
-// Define the VehicleData type - updated to include 'bike'
+// Define the VehicleData type - updated to include all vehicle types
 export interface VehicleData {
   id: string;
   brand: string;
