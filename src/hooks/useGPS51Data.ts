@@ -73,7 +73,7 @@ interface SupabaseVehicleRow {
   updated_at: string;
   notes: string;
   gps51_device_id?: string;
-  vehicle_positions: GPS51PositionRaw[] | GPS51PositionRaw | null;
+  vehicle_positions: any[] | any | null; // Using any for now since we're dealing with Supabase position data
 }
 
 export const useGPS51Data = () => {
