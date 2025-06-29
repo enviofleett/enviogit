@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4';
 
@@ -11,6 +10,9 @@ interface GPS51SyncRequest {
   apiUrl: string;
   username: string;
   password: string;
+  priority?: number;
+  batchMode?: boolean;
+  cronTriggered?: boolean;
 }
 
 interface GPS51ApiResponse {
@@ -52,8 +54,11 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const startTime = Date.now();
+  let jobId: string | null = null;
+
   try {
-    console.log('=== GPS51 SYNC STARTED ===');
+    console.log('=== GPS51 SYNC STARTED (ENHANCED) ===');
     console.log('Timestamp:', new Date().toISOString());
 
     if (req.method !== 'POST') {
@@ -83,18 +88,12 @@ serve(async (req) => {
         passwordLength: requestBody.password?.length || 0,
         apiUrl: requestBody.apiUrl,
         priority: requestBody.priority,
-        batchMode: requestBody.batchMode
+        batchMode: requestBody.batchMode,
+        cronTriggered: requestBody.cronTriggered || false
       });
     } catch (e) {
       console.error("Request parsing error:", e);
       return new Response(JSON.stringify({ error: 'Invalid or empty request body. Expected JSON.' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      });
-    }
-
-    if (!requestBody || !requestBody.username || !requestBody.password || !requestBody.apiUrl) {
-      return new Response(JSON.stringify({ error: 'Missing required parameters in request body (username, password, apiUrl).' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
       });
@@ -105,10 +104,45 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { username, password, apiUrl, priority, batchMode } = requestBody;
+    const { username, password, apiUrl, priority, batchMode, cronTriggered } = requestBody;
+
+    // Log job start if triggered by cron or in batch mode
+    if (cronTriggered || (batchMode && priority)) {
+      const { data: jobData, error: jobError } = await supabase
+        .from('gps51_sync_jobs')
+        .insert({
+          priority: priority || 0,
+          started_at: new Date().toISOString()
+        })
+        .select('id')
+        .single();
+
+      if (!jobError && jobData) {
+        jobId = jobData.id;
+        console.log(`Job logged with ID: ${jobId}`);
+      }
+    }
+
+    // Get credentials from localStorage if not provided (for cron jobs)
+    let finalApiUrl = apiUrl;
+    let finalUsername = username;
+    let finalPassword = password;
+
+    if (!finalApiUrl || !finalUsername || !finalPassword) {
+      console.log('Getting credentials from system settings...');
+      // For cron jobs, we need to get credentials from a secure location
+      // This is a placeholder - in production, store these securely
+      finalApiUrl = Deno.env.get('GPS51_API_URL') || apiUrl;
+      finalUsername = Deno.env.get('GPS51_USERNAME') || username;
+      finalPassword = Deno.env.get('GPS51_PASSWORD_HASH') || password;
+    }
+
+    if (!finalApiUrl || !finalUsername || !finalPassword) {
+      throw new Error('GPS51 credentials not available for automated sync');
+    }
     
     // Ensure we use the correct GPS51 API URL
-    let correctedApiUrl = apiUrl.replace(/\/$/, '');
+    let correctedApiUrl = finalApiUrl.replace(/\/$/, '');
     if (correctedApiUrl.includes('www.gps51.com')) {
       console.log('Correcting API URL from www.gps51.com to api.gps51.com');
       correctedApiUrl = correctedApiUrl.replace('www.gps51.com', 'api.gps51.com');
@@ -133,8 +167,8 @@ serve(async (req) => {
     loginUrl.searchParams.append('token', loginToken);
 
     const loginPayload = {
-      username: username,
-      password: password,
+      username: finalUsername,
+      password: finalPassword,
       from: 'WEB',
       type: 'USER'
     };
@@ -205,7 +239,7 @@ serve(async (req) => {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ username: username })
+      body: JSON.stringify({ username: finalUsername })
     });
 
     const deviceResponseText = await deviceResponse.text();
@@ -533,12 +567,35 @@ serve(async (req) => {
       }
     }
 
+    const executionTimeSeconds = Math.round((Date.now() - startTime) / 1000);
+
+    // Update job completion status
+    if (jobId) {
+      const success = vehicleSyncErrors.length === 0 && positionStorageErrors.length === 0;
+      const errorMessage = [...vehicleSyncErrors, ...positionStorageErrors].slice(0, 3).join('; ');
+      
+      await supabase
+        .from('gps51_sync_jobs')
+        .update({
+          completed_at: new Date().toISOString(),
+          success,
+          vehicles_processed: vehiclesSynced,
+          positions_stored: positionsStored,
+          error_message: errorMessage || null,
+          execution_time_seconds: executionTimeSeconds
+        })
+        .eq('id', jobId);
+
+      console.log(`Job ${jobId} completed: success=${success}, vehicles=${vehiclesSynced}, positions=${positionsStored}`);
+    }
+
     // Final summary with detailed statistics
     const summary = {
       success: true,
       timestamp: new Date().toISOString(),
       priority: priority || null,
       batchMode: batchMode || false,
+      executionTimeSeconds,
       statistics: {
         devicesFound: devices.length,
         devicesFiltered: filteredDevices.length,
@@ -556,7 +613,7 @@ serve(async (req) => {
       }
     };
 
-    console.log('=== GPS51 SYNC COMPLETED ===');
+    console.log('=== GPS51 SYNC COMPLETED (ENHANCED) ===');
     console.log('Final Summary:', summary);
 
     // Log errors for debugging
@@ -575,18 +632,34 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('=== GPS51 SYNC ERROR ===');
+    console.error('=== GPS51 SYNC ERROR (ENHANCED) ===');
     console.error('Error details:', {
       message: error.message,
       stack: error.stack?.split('\n').slice(0, 5),
       timestamp: new Date().toISOString()
     });
+
+    const executionTimeSeconds = Math.round((Date.now() - startTime) / 1000);
+    
+    // Update job with error status
+    if (jobId) {
+      await supabase
+        .from('gps51_sync_jobs')
+        .update({
+          completed_at: new Date().toISOString(),
+          success: false,
+          error_message: error.message,
+          execution_time_seconds: executionTimeSeconds
+        })
+        .eq('id', jobId);
+    }
     
     return new Response(
       JSON.stringify({
         success: false,
         error: error.message,
         timestamp: new Date().toISOString(),
+        executionTimeSeconds
       }),
       {
         status: 500,

@@ -55,6 +55,7 @@ export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retries, setRetries] = useState(0);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
   const fetchLiveData = useCallback(async () => {
     if (!enabled) return;
@@ -63,7 +64,7 @@ export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
       setLoading(true);
       setError(null);
 
-      console.log('Fetching live data with LEFT JOIN...');
+      console.log('Fetching live data with enhanced real-time updates...');
 
       // Fetch ALL vehicles with their latest positions using LEFT JOIN
       const { data: vehiclesData, error: vehiclesError } = await supabase
@@ -134,20 +135,28 @@ export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
       console.log('Transformed positions:', transformedPositions.length);
       setPositions(transformedPositions);
 
-      // Calculate comprehensive fleet metrics
+      // Calculate comprehensive fleet metrics with real-time awareness
       const totalDevices = allVehicles.length;
       const vehiclesWithGPS = vehiclesWithPositions.length;
       const vehiclesWithoutGPS = vehiclesWithoutPositions.length;
       
       const now = Date.now();
       const fiveMinutesAgo = now - (5 * 60 * 1000);
+      const thirtySecondsAgo = now - (30 * 1000); // For real-time active detection
+      
+      // Enhanced active device detection for real-time updates
+      const recentlyActiveDevices = transformedPositions.filter(p => 
+        p.updatetime > thirtySecondsAgo
+      ).length;
       
       const activeDevices = transformedPositions.filter(p => 
         p.updatetime > fiveMinutesAgo
       ).length;
       
       const movingVehicles = transformedPositions.filter(p => p.moving === 1).length;
-      const parkedDevices = transformedPositions.filter(p => p.moving === 0).length;
+      const parkedDevices = transformedPositions.filter(p => 
+        p.moving === 0 && p.updatetime > fiveMinutesAgo
+      ).length;
       const offlineVehicles = vehiclesWithGPS - activeDevices;
       const totalDistance = transformedPositions.reduce((sum, p) => sum + p.totaldistance, 0);
       
@@ -169,8 +178,14 @@ export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
       };
 
       setMetrics(newMetrics);
+      setLastSyncTime(new Date());
 
-      console.log('Comprehensive fleet metrics:', newMetrics);
+      console.log('Enhanced real-time fleet metrics:', {
+        ...newMetrics,
+        recentlyActiveDevices,
+        lastSyncTime: new Date().toISOString()
+      });
+      
       setRetries(0);
     } catch (err) {
       console.error('Error fetching GPS51 live data:', err);
@@ -190,8 +205,31 @@ export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
 
     fetchLiveData();
 
+    // Enhanced refresh interval for real-time updates
     const interval = setInterval(fetchLiveData, refreshInterval);
-    return () => clearInterval(interval);
+    
+    // Set up real-time subscription for position updates
+    const positionChannel = supabase
+      .channel('vehicle-positions-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'vehicle_positions'
+        },
+        (payload) => {
+          console.log('Real-time position update received:', payload);
+          // Trigger a data refresh when positions are updated
+          setTimeout(fetchLiveData, 1000); // Small delay to ensure consistency
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(positionChannel);
+    };
   }, [fetchLiveData, refreshInterval, enabled]);
 
   const refresh = useCallback(() => {
@@ -205,6 +243,7 @@ export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
     metrics,
     loading,
     error,
+    lastSyncTime,
     refresh
   };
 };
