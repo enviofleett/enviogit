@@ -232,7 +232,7 @@ export class GPS51Client {
     }
   }
 
-  async authenticate(credentials: GPS51AuthCredentials): Promise<{ success: boolean; user?: GPS51User; error?: string }> {
+  async authenticate(credentials: GPS51AuthCredentials): Promise<{ success: boolean; user?: GPS51User; error?: string; access_token?: string }> {
     try {
       console.log('GPS51 Authentication Debug Info:', { 
         username: credentials.username,
@@ -263,7 +263,8 @@ export class GPS51Client {
         console.log('GPS51 Authentication successful');
         return {
           success: true,
-          user: this.user || undefined
+          user: this.user || undefined,
+          access_token: result.token // Return the token as access_token for backward compatibility
         };
       } else {
         console.error('GPS51 Authentication failed:', result.error);
@@ -532,7 +533,7 @@ export class GPS51Client {
     return this.token;
   }
 
-  async getValidToken(): Promise<any> {
+  async getValidToken(): Promise<{ access_token: string } | null> {
     if (this.isAuthenticated() && this.token) {
       return { access_token: this.token };
     }

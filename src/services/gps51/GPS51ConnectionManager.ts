@@ -36,10 +36,10 @@ export class GPS51ConnectionManager {
       console.log('4. Attempting authentication...');
       const authResult = await this.authService.authenticate(authCredentials);
       
-      if (!authResult.success || !authResult.access_token) {
-        throw new Error(`Authentication failed: ${authResult.error || 'No token received'}`);
+      if (!authResult.success) {
+        throw new Error(`Authentication failed: ${authResult.error || 'Unknown error'}`);
       }
-      
+
       console.log('5. Authentication successful');
       
       // Test the connection by calling the sync function
