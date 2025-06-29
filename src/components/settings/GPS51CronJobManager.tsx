@@ -2,32 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Clock, Play, Pause, Activity, Database, AlertCircle } from 'lucide-react';
-
-interface CronJobStatus {
-  jobname: string;
-  schedule: string;
-  active: boolean;
-  last_run: string | null;
-  next_run: string | null;
-}
-
-interface SyncJobLog {
-  id: string;
-  priority: number;
-  started_at: string;
-  completed_at: string | null;
-  success: boolean | null;
-  vehicles_processed: number;
-  positions_stored: number;
-  error_message: string | null;
-  execution_time_seconds: number | null;
-}
+import { Clock, Activity } from 'lucide-react';
+import { CronJobStatus, SyncJobLog } from './types/cronJobTypes';
+import { CronJobCard } from './components/CronJobCard';
+import { SyncJobLogs } from './components/SyncJobLogs';
 
 export const GPS51CronJobManager = () => {
   const [cronJobs, setCronJobs] = useState<CronJobStatus[]>([]);
@@ -78,29 +58,26 @@ export const GPS51CronJobManager = () => {
           }
         ]);
       } else {
-        // Parse the JSON data returned from the function
+        // Handle both array and JSON string responses
         if (Array.isArray(cronData)) {
-          setCronJobs(cronData as CronJobStatus[]);
+          setCronJobs(cronData as unknown as CronJobStatus[]);
         } else {
-          // Handle case where cronData might be a JSON string
           const parsedData = typeof cronData === 'string' ? JSON.parse(cronData) : cronData;
-          setCronJobs(Array.isArray(parsedData) ? parsedData : []);
+          setCronJobs(Array.isArray(parsedData) ? parsedData as CronJobStatus[] : []);
         }
       }
 
-      // Get sync job logs using raw SQL query since the table might not be in types yet
+      // Get sync job logs
       const { data: logsData, error: logsError } = await supabase
-        .from('gps51_sync_jobs' as any)
+        .from('gps51_sync_jobs')
         .select('*')
         .order('started_at', { ascending: false })
         .limit(20);
 
       if (logsError) {
         console.error('Error fetching sync logs:', logsError);
-        // Set empty array if there's an error
         setSyncLogs([]);
       } else {
-        // Filter and map the data to ensure it matches our SyncJobLog interface
         const filteredLogs = (logsData || []).filter((log: any) => 
           log.priority !== undefined && log.started_at !== undefined
         ).map((log: any) => ({
@@ -138,8 +115,7 @@ export const GPS51CronJobManager = () => {
     try {
       console.log(`${enable ? 'Enabling' : 'Disabling'} cron job: ${jobName}`);
       
-      // This would call a function to enable/disable cron jobs
-      // For now, we'll just update the local state
+      // Update local state for now
       setCronJobs(prev => prev.map(job => 
         job.jobname === jobName ? { ...job, active: enable } : job
       ));
@@ -156,55 +132,6 @@ export const GPS51CronJobManager = () => {
         variant: "destructive",
       });
     }
-  };
-
-  const getJobConfig = (jobName: string) => {
-    const configs = {
-      'gps51-sync-priority-1': { 
-        name: 'Active/Moving Vehicles', 
-        interval: '30 seconds', 
-        color: 'destructive',
-        priority: 1
-      },
-      'gps51-sync-priority-2': { 
-        name: 'Assigned Vehicles', 
-        interval: '2 minutes', 
-        color: 'default',
-        priority: 2
-      },
-      'gps51-sync-priority-3': { 
-        name: 'Available Vehicles', 
-        interval: '5 minutes', 
-        color: 'secondary',
-        priority: 3
-      },
-      'gps51-sync-priority-4': { 
-        name: 'Inactive Vehicles', 
-        interval: '15 minutes', 
-        color: 'outline',
-        priority: 4
-      }
-    };
-    return configs[jobName as keyof typeof configs] || { 
-      name: jobName, 
-      interval: 'Unknown', 
-      color: 'default',
-      priority: 0
-    };
-  };
-
-  const formatRelativeTime = (dateString: string | null) => {
-    if (!dateString) return 'Never';
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = Math.abs(now.getTime() - date.getTime());
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffSecs = Math.floor((diffMs % 60000) / 1000);
-    
-    if (diffMins > 0) {
-      return `${diffMins}m ${diffSecs}s ago`;
-    }
-    return `${diffSecs}s ago`;
   };
 
   useEffect(() => {
@@ -236,87 +163,16 @@ export const GPS51CronJobManager = () => {
           </Button>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {cronJobs.map(job => {
-              const config = getJobConfig(job.jobname);
-              return (
-                <Card key={job.jobname} className="border-2">
-                  <CardContent className="pt-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <Badge variant={config.color as any}>
-                        Priority {config.priority}
-                      </Badge>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={job.active}
-                          onCheckedChange={(checked) => toggleCronJob(job.jobname, checked)}
-                        />
-                        {job.active ? (
-                          <Play className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <Pause className="h-4 w-4 text-gray-400" />
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <div className="text-sm font-medium">{config.name}</div>
-                      <div className="text-xs text-gray-500">
-                        Every {config.interval}
-                      </div>
-                      <div className="text-xs">
-                        <div>Last run: {formatRelativeTime(job.last_run)}</div>
-                        <div>Next run: {formatRelativeTime(job.next_run)}</div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+            {cronJobs.map(job => (
+              <CronJobCard
+                key={job.jobname}
+                job={job}
+                onToggle={toggleCronJob}
+              />
+            ))}
           </div>
 
-          {syncLogs.length > 0 && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Database className="h-4 w-4" />
-                  Recent Sync Executions
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="h-64">
-                  <div className="space-y-2">
-                    {syncLogs.map((log) => (
-                      <div key={log.id} className="flex items-center justify-between p-2 border rounded text-sm">
-                        <div className="flex items-center gap-2">
-                          <Badge variant={log.success ? 'default' : 'destructive'}>
-                            P{log.priority}
-                          </Badge>
-                          {log.success ? (
-                            <span className="text-green-600">✓</span>
-                          ) : log.success === false ? (
-                            <AlertCircle className="h-4 w-4 text-red-600" />
-                          ) : (
-                            <Clock className="h-4 w-4 text-yellow-600" />
-                          )}
-                          <span>
-                            {log.vehicles_processed} vehicles, {log.positions_stored} positions
-                          </span>
-                          {log.error_message && (
-                            <span className="text-red-600 text-xs truncate max-w-[200px]">
-                              {log.error_message}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {log.execution_time_seconds}s • {new Date(log.started_at).toLocaleTimeString()}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          )}
+          <SyncJobLogs logs={syncLogs} />
         </CardContent>
       </Card>
     </div>
