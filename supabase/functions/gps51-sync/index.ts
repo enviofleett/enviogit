@@ -311,26 +311,35 @@ serve(async (req) => {
 
     console.log(`Found ${positions.length} positions`);
 
-    // Step 4: Sync vehicles to database
+    // Step 4: Sync vehicles to database with GPS51 device IDs
     let vehiclesSynced = 0;
+    const deviceToVehicleMap = new Map<string, string>(); // deviceid -> vehicle_id mapping
+    
     for (const device of devices) {
       try {
         const vehicleData = {
           license_plate: device.devicename,
+          gps51_device_id: device.deviceid, // Store GPS51 device ID for position mapping
           brand: 'GPS51',
           model: `Device ${device.devicetype}`,
           type: mapDeviceTypeToVehicleType(device.devicetype),
-          status: device.isfree === 1 ? 'available' : 'assigned',
+          status: (device.isfree === 1 ? 'available' : 'assigned') as 'available' | 'inactive' | 'maintenance' | 'assigned',
           notes: `Device ID: ${device.deviceid}, SIM: ${device.simnum}`,
           updated_at: new Date().toISOString(),
         };
 
-        const { error: vehicleError } = await supabase
-          .from('vehicles')
-          .upsert(vehicleData, { onConflict: 'license_plate' });
+        console.log(`Syncing vehicle: ${device.devicename} with GPS51 ID: ${device.deviceid}`);
 
-        if (!vehicleError) {
+        const { data: vehicleResult, error: vehicleError } = await supabase
+          .from('vehicles')
+          .upsert(vehicleData, { onConflict: 'license_plate' })
+          .select('id')
+          .single();
+
+        if (!vehicleError && vehicleResult) {
           vehiclesSynced++;
+          deviceToVehicleMap.set(device.deviceid, vehicleResult.id);
+          console.log(`Successfully synced vehicle ${device.devicename} -> ${vehicleResult.id}`);
         } else {
           console.warn(`Error syncing vehicle ${device.deviceid}:`, vehicleError);
         }
@@ -339,49 +348,78 @@ serve(async (req) => {
       }
     }
 
-    // Step 5: Store positions
+    console.log(`Vehicle sync completed: ${vehiclesSynced} vehicles synced`);
+    console.log('Device to Vehicle mapping:', Array.from(deviceToVehicleMap.entries()));
+
+    // Step 5: Store positions using GPS51 device ID mapping
     let positionsStored = 0;
     for (const position of positions) {
       try {
-        const { data: vehicle } = await supabase
+        console.log(`Processing position for GPS51 device: ${position.deviceid}`);
+
+        // Find vehicle by GPS51 device ID
+        const { data: vehicle, error: vehicleQueryError } = await supabase
           .from('vehicles')
           .select('id')
-          .eq('license_plate', position.deviceid)
+          .eq('gps51_device_id', position.deviceid)
           .single();
 
+        if (vehicleQueryError) {
+          console.warn(`Error finding vehicle for device ${position.deviceid}:`, vehicleQueryError);
+          continue;
+        }
+
         if (vehicle) {
+          const positionData = {
+            vehicle_id: vehicle.id,
+            latitude: position.callat,
+            longitude: position.callon,
+            speed: position.speed,
+            heading: position.course,
+            timestamp: new Date(position.updatetime).toISOString(),
+            ignition_status: position.moving === 1,
+            fuel_level: position.voltagepercent,
+            engine_temperature: position.temp1,
+            address: position.strstatus,
+            recorded_at: new Date().toISOString()
+          };
+
+          console.log(`Storing position for vehicle ${vehicle.id}:`, {
+            deviceId: position.deviceid,
+            lat: position.callat,
+            lon: position.callon,
+            speed: position.speed,
+            moving: position.moving
+          });
+
           const { error: positionError } = await supabase
             .from('vehicle_positions')
-            .insert({
-              vehicle_id: vehicle.id,
-              latitude: position.callat,
-              longitude: position.callon,
-              speed: position.speed,
-              heading: position.course,
-              timestamp: new Date(position.updatetime).toISOString(),
-              ignition_status: position.moving === 1,
-              fuel_level: position.voltagepercent,
-              engine_temperature: position.temp1,
-              address: position.strstatus,
-              recorded_at: new Date().toISOString()
-            });
+            .insert(positionData);
 
           if (!positionError) {
             positionsStored++;
+            console.log(`Successfully stored position for device ${position.deviceid}`);
+          } else {
+            console.warn(`Failed to store position for device ${position.deviceid}:`, positionError);
           }
+        } else {
+          console.warn(`No vehicle found for GPS51 device ID: ${position.deviceid}`);
         }
       } catch (err) {
         console.warn(`Error storing position for ${position.deviceid}:`, err);
       }
     }
 
+    console.log(`Position storage completed: ${positionsStored} positions stored`);
     console.log('GPS51 sync completed successfully');
+    
     return new Response(
       JSON.stringify({
         success: true,
         vehiclesSynced,
         positionsStored,
         devicesFound: devices.length,
+        positionsFound: positions.length,
         timestamp: new Date().toISOString(),
       }),
       {

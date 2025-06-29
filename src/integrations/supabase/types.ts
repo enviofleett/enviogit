@@ -2366,6 +2366,7 @@ export type Database = {
         Row: {
           brand: string | null
           created_at: string
+          gps51_device_id: string | null
           id: string
           license_plate: string
           model: string | null
@@ -2377,6 +2378,7 @@ export type Database = {
         Insert: {
           brand?: string | null
           created_at?: string
+          gps51_device_id?: string | null
           id?: string
           license_plate: string
           model?: string | null
@@ -2388,6 +2390,7 @@ export type Database = {
         Update: {
           brand?: string | null
           created_at?: string
+          gps51_device_id?: string | null
           id?: string
           license_plate?: string
           model?: string | null

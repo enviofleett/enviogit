@@ -17,6 +17,7 @@ export interface GPS51SyncResult {
   vehiclesSynced: number;
   positionsStored: number;
   devicesFound: number;
+  positionsFound?: number;
   error?: string;
 }
 
@@ -121,12 +122,15 @@ export class GPS51ConfigService {
       const positions = await gps51Client.getRealtimePositions(deviceIds);
       console.log(`Found ${positions.length} positions from GPS51`);
 
-      // Store vehicles in Supabase
+      // Store vehicles in Supabase with GPS51 device IDs
       let vehiclesSynced = 0;
+      const deviceToVehicleMap = new Map<string, string>();
+      
       for (const device of devices) {
         try {
           const vehicleData = {
             license_plate: device.devicename,
+            gps51_device_id: device.deviceid, // Store GPS51 device ID for position mapping
             brand: 'GPS51',
             model: `Device ${device.devicetype}`,
             type: this.mapDeviceTypeToVehicleType(device.devicetype),
@@ -135,14 +139,20 @@ export class GPS51ConfigService {
             updated_at: new Date().toISOString()
           };
 
-          const { error } = await supabase
+          console.log(`Syncing vehicle: ${device.devicename} with GPS51 ID: ${device.deviceid}`);
+
+          const { data: vehicleResult, error } = await supabase
             .from('vehicles')
             .upsert(vehicleData, {
               onConflict: 'license_plate'
-            });
+            })
+            .select('id')
+            .single();
 
-          if (!error) {
+          if (!error && vehicleResult) {
             vehiclesSynced++;
+            deviceToVehicleMap.set(device.deviceid, vehicleResult.id);
+            console.log(`Successfully synced vehicle ${device.devicename} -> ${vehicleResult.id}`);
           } else {
             console.warn(`Failed to sync vehicle ${device.deviceid}:`, error);
           }
@@ -151,16 +161,23 @@ export class GPS51ConfigService {
         }
       }
 
-      // Store positions in Supabase
+      // Store positions using GPS51 device ID mapping
       let positionsStored = 0;
       for (const position of positions) {
         try {
-          // First, find the vehicle by device name/license plate
-          const { data: vehicle } = await supabase
+          console.log(`Processing position for GPS51 device: ${position.deviceid}`);
+
+          // Find vehicle by GPS51 device ID instead of license plate
+          const { data: vehicle, error: vehicleQueryError } = await supabase
             .from('vehicles')
             .select('id')
-            .eq('license_plate', position.deviceid)
+            .eq('gps51_device_id', position.deviceid)
             .single();
+
+          if (vehicleQueryError) {
+            console.warn(`Error finding vehicle for device ${position.deviceid}:`, vehicleQueryError);
+            continue;
+          }
 
           if (vehicle) {
             const positionData = {
@@ -179,15 +196,26 @@ export class GPS51ConfigService {
               recorded_at: new Date().toISOString()
             };
 
+            console.log(`Storing position for vehicle ${vehicle.id}:`, {
+              deviceId: position.deviceid,
+              lat: position.callat,
+              lon: position.callon,
+              speed: position.speed,
+              moving: position.moving
+            });
+
             const { error } = await supabase
               .from('vehicle_positions')
               .insert(positionData);
 
             if (!error) {
               positionsStored++;
+              console.log(`Successfully stored position for device ${position.deviceid}`);
             } else {
-              console.warn(`Failed to store position for ${position.deviceid}:`, error);
+              console.warn(`Failed to store position for device ${position.deviceid}:`, error);
             }
+          } else {
+            console.warn(`No vehicle found for GPS51 device ID: ${position.deviceid}`);
           }
         } catch (err) {
           console.warn(`Error storing position for ${position.deviceid}:`, err);
@@ -200,7 +228,8 @@ export class GPS51ConfigService {
         success: true,
         vehiclesSynced,
         positionsStored,
-        devicesFound: devices.length
+        devicesFound: devices.length,
+        positionsFound: positions.length
       };
 
     } catch (error) {
