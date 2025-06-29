@@ -14,22 +14,31 @@ const Dashboard = () => {
   const { vehicles: gps51Vehicles, loading: gps51Loading } = useGPS51Data();
 
   // Transform GPS51 data to match existing VehicleCard interface
-  const vehicles = gps51Vehicles.map(vehicle => ({
-    id: vehicle.id,
-    name: `${vehicle.brand || 'GPS51'} ${vehicle.model || 'Vehicle'}`,
-    status: vehicle.status === 'available' ? 'online' as const :
-            vehicle.status === 'maintenance' ? 'maintenance' as const : 'offline' as const,
-    location: vehicle.latest_position ? 
-      `${vehicle.latest_position.latitude.toFixed(4)}, ${vehicle.latest_position.longitude.toFixed(4)}` : 
-      'Unknown',
-    speed: vehicle.latest_position?.speed || 0,
-    fuel: vehicle.latest_position?.fuel_level || 0,
-    temperature: vehicle.latest_position?.engine_temperature || 0,
-    lastUpdate: vehicle.latest_position ? 
-      new Date(vehicle.latest_position.timestamp).toLocaleString() : 
-      'No data',
-    aiScore: 85 // Will be calculated based on real telemetry data
-  }));
+  const vehicles = gps51Vehicles.map(vehicle => {
+    const hasGPS = !!vehicle.latest_position;
+    
+    return {
+      id: vehicle.id,
+      name: `${vehicle.brand || 'GPS51'} ${vehicle.model || 'Vehicle'}`,
+      status: vehicle.status === 'available' ? 'online' as const :
+              vehicle.status === 'maintenance' ? 'maintenance' as const : 'offline' as const,
+      location: hasGPS ? 
+        `${vehicle.latest_position!.latitude.toFixed(4)}, ${vehicle.latest_position!.longitude.toFixed(4)}` : 
+        'Unknown',
+      speed: hasGPS ? vehicle.latest_position!.speed : 0,
+      fuel: hasGPS ? (vehicle.latest_position!.fuel_level || 0) : 0,
+      temperature: hasGPS ? (vehicle.latest_position!.engine_temperature || 0) : 0,
+      lastUpdate: hasGPS ? 
+        new Date(vehicle.latest_position!.timestamp).toLocaleString() : 
+        'No data',
+      aiScore: hasGPS ? 85 : 0, // Will be calculated based on real telemetry data
+      hasGPS: hasGPS
+    };
+  });
+
+  // Separate vehicles with and without GPS for better display
+  const vehiclesWithGPS = vehicles.filter(v => v.hasGPS);
+  const vehiclesWithoutGPS = vehicles.filter(v => !v.hasGPS);
 
   return (
     <div className="flex h-screen bg-slate-100">
@@ -40,7 +49,7 @@ const Dashboard = () => {
         
         <main className="flex-1 overflow-auto p-6">
           <div className="space-y-6">
-            {/* Add GPS51 sync button */}
+            {/* Header with sync button */}
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold text-slate-900">Fleet Dashboard</h2>
               <GPS51SyncButton />
@@ -56,11 +65,18 @@ const Dashboard = () => {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-semibold text-slate-900">
-                  {gps51Loading ? 'Loading GPS51 Fleet...' : 'GPS51 Fleet Status'}
+                  {gps51Loading ? 'Loading Fleet...' : 'Fleet Status'}
                 </h3>
-                <div className="flex items-center space-x-2 text-sm text-slate-600">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                  <span>Live GPS51 data</span>
+                <div className="flex items-center space-x-4 text-sm text-slate-600">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                    <span>{vehiclesWithGPS.length} with GPS</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
+                    <span>{vehiclesWithoutGPS.length} offline</span>
+                  </div>
+                  <span>{vehicles.length} total</span>
                 </div>
               </div>
               
@@ -72,13 +88,46 @@ const Dashboard = () => {
                 </div>
               ) : vehicles.length === 0 ? (
                 <div className="text-center py-12 bg-white rounded-lg border border-slate-200">
-                  <p className="text-slate-500">No GPS51 vehicles found. Click "Sync GPS51" to load data.</p>
+                  <p className="text-slate-500">No vehicles found. Click "Sync GPS51" to load data.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {vehicles.map((vehicle) => (
-                    <VehicleCard key={vehicle.id} vehicle={vehicle} />
-                  ))}
+                <div className="space-y-6">
+                  {/* Vehicles with GPS first */}
+                  {vehiclesWithGPS.length > 0 && (
+                    <div>
+                      <h4 className="text-lg font-medium text-slate-900 mb-4 flex items-center space-x-2">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span>Vehicles with GPS Tracking ({vehiclesWithGPS.length})</span>
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {vehiclesWithGPS.map((vehicle) => (
+                          <VehicleCard key={vehicle.id} vehicle={vehicle} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Vehicles without GPS */}
+                  {vehiclesWithoutGPS.length > 0 && (
+                    <div>
+                      <h4 className="text-lg font-medium text-slate-700 mb-4 flex items-center space-x-2">
+                        <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
+                        <span>Vehicles without GPS ({vehiclesWithoutGPS.length})</span>
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {vehiclesWithoutGPS.slice(0, 8).map((vehicle) => (
+                          <VehicleCard key={vehicle.id} vehicle={vehicle} />
+                        ))}
+                      </div>
+                      {vehiclesWithoutGPS.length > 8 && (
+                        <div className="text-center py-4">
+                          <p className="text-sm text-slate-500">
+                            Showing 8 of {vehiclesWithoutGPS.length} vehicles without GPS data
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

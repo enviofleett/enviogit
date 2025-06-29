@@ -3,7 +3,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, Zap, Settings, Shield } from 'lucide-react';
+import { MapPin, Zap, Settings, Wifi, WifiOff } from 'lucide-react';
 
 interface VehicleCardProps {
   vehicle: {
@@ -16,6 +16,7 @@ interface VehicleCardProps {
     temperature: number;
     lastUpdate: string;
     aiScore: number;
+    hasGPS?: boolean;
   };
 }
 
@@ -38,16 +39,27 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle }) => {
     }
   };
 
+  const hasGPSData = vehicle.hasGPS !== false && vehicle.location !== 'Unknown' && vehicle.lastUpdate !== 'No data';
+
   return (
-    <Card className="hover:shadow-lg transition-shadow duration-200 border-slate-200">
+    <Card className={`hover:shadow-lg transition-shadow duration-200 border-slate-200 ${
+      !hasGPSData ? 'bg-slate-50/50' : ''
+    }`}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold text-slate-900">{vehicle.name}</CardTitle>
+          <div className="flex items-center space-x-2">
+            <CardTitle className="text-lg font-semibold text-slate-900">{vehicle.name}</CardTitle>
+            {hasGPSData ? (
+              <Wifi className="w-4 h-4 text-green-600" />
+            ) : (
+              <WifiOff className="w-4 h-4 text-slate-400" />
+            )}
+          </div>
           {getStatusBadge(vehicle.status)}
         </div>
         <div className="flex items-center space-x-2 text-sm text-slate-600">
           <div className={`w-2 h-2 rounded-full ${getStatusColor(vehicle.status)} ${vehicle.status === 'online' ? 'animate-pulse' : ''}`}></div>
-          <span>{vehicle.lastUpdate}</span>
+          <span>{hasGPSData ? vehicle.lastUpdate : 'No GPS data'}</span>
         </div>
       </CardHeader>
       
@@ -55,10 +67,14 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle }) => {
         <div className="space-y-4">
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center space-x-2">
-              <MapPin className="w-4 h-4 text-slate-400" />
-              <span className="text-slate-600">{vehicle.location}</span>
+              <MapPin className={`w-4 h-4 ${hasGPSData ? 'text-slate-400' : 'text-slate-300'}`} />
+              <span className={`${hasGPSData ? 'text-slate-600' : 'text-slate-400'}`}>
+                {hasGPSData ? vehicle.location : 'Location unknown'}
+              </span>
             </div>
-            <span className="font-medium">{vehicle.speed} km/h</span>
+            <span className={`font-medium ${hasGPSData ? 'text-slate-900' : 'text-slate-400'}`}>
+              {hasGPSData ? `${vehicle.speed} km/h` : '-- km/h'}
+            </span>
           </div>
           
           <div className="grid grid-cols-2 gap-4">
@@ -67,31 +83,44 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle }) => {
               <div className="flex items-center space-x-2">
                 <div className="flex-1 bg-slate-200 rounded-full h-2">
                   <div 
-                    className={`h-2 rounded-full ${vehicle.fuel > 50 ? 'bg-green-500' : vehicle.fuel > 25 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                    style={{ width: `${vehicle.fuel}%` }}
+                    className={`h-2 rounded-full ${
+                      hasGPSData && vehicle.fuel > 0
+                        ? vehicle.fuel > 50 ? 'bg-green-500' : vehicle.fuel > 25 ? 'bg-yellow-500' : 'bg-red-500'
+                        : 'bg-slate-300'
+                    }`}
+                    style={{ width: hasGPSData && vehicle.fuel > 0 ? `${vehicle.fuel}%` : '0%' }}
                   ></div>
                 </div>
-                <span className="text-sm font-medium">{vehicle.fuel}%</span>
+                <span className={`text-sm font-medium ${hasGPSData ? 'text-slate-900' : 'text-slate-400'}`}>
+                  {hasGPSData && vehicle.fuel > 0 ? `${vehicle.fuel}%` : '--'}
+                </span>
               </div>
             </div>
             
             <div className="space-y-1">
               <div className="text-xs text-slate-500">AI Efficiency</div>
               <div className="flex items-center space-x-2">
-                <Zap className="w-4 h-4 text-blue-500" />
-                <span className="text-sm font-medium text-blue-600">{vehicle.aiScore}/100</span>
+                <Zap className={`w-4 h-4 ${hasGPSData ? 'text-blue-500' : 'text-slate-300'}`} />
+                <span className={`text-sm font-medium ${hasGPSData ? 'text-blue-600' : 'text-slate-400'}`}>
+                  {hasGPSData ? `${vehicle.aiScore}/100` : '--'}
+                </span>
               </div>
             </div>
           </div>
           
           <div className="flex space-x-2 pt-2">
-            <Button size="sm" variant="outline" className="flex-1">
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className={`flex-1 ${!hasGPSData ? 'opacity-50 cursor-not-allowed' : ''}`}
+              disabled={!hasGPSData}
+            >
               <MapPin className="w-4 h-4 mr-1" />
-              Track
+              {hasGPSData ? 'Track' : 'No GPS'}
             </Button>
             <Button size="sm" variant="outline" className="flex-1">
               <Settings className="w-4 h-4 mr-1" />
-              Control
+              Settings
             </Button>
           </div>
         </div>

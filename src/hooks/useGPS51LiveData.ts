@@ -34,6 +34,8 @@ export interface FleetMetrics {
   offlineVehicles: number;
   totalDistance: number;
   averageSpeed: number;
+  vehiclesWithGPS: number;
+  vehiclesWithoutGPS: number;
 }
 
 export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
@@ -46,7 +48,9 @@ export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
     parkedDevices: 0,
     offlineVehicles: 0,
     totalDistance: 0,
-    averageSpeed: 0
+    averageSpeed: 0,
+    vehiclesWithGPS: 0,
+    vehiclesWithoutGPS: 0
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,56 +63,84 @@ export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
       setLoading(true);
       setError(null);
 
-      // Fetch latest positions with vehicle information including GPS51 device IDs
-      const { data: positionsData, error: positionsError } = await supabase
-        .from('vehicle_positions')
+      console.log('Fetching live data with LEFT JOIN...');
+
+      // Fetch ALL vehicles with their latest positions using LEFT JOIN
+      const { data: vehiclesData, error: vehiclesError } = await supabase
+        .from('vehicles')
         .select(`
           *,
-          vehicles!inner(
-            id,
-            license_plate,
-            gps51_device_id,
-            brand,
-            model,
-            type,
-            status
+          vehicle_positions!left(
+            *
           )
         `)
-        .order('timestamp', { ascending: false });
+        .order('updated_at', { ascending: false });
 
-      if (positionsError) {
-        console.error('Error fetching position data:', positionsError);
-        throw positionsError;
+      if (vehiclesError) {
+        console.error('Error fetching vehicles with positions:', vehiclesError);
+        throw vehiclesError;
       }
 
-      console.log('Fetched position data:', positionsData?.length || 0, 'records');
+      console.log('Fetched vehicles data:', vehiclesData?.length || 0, 'vehicles');
 
-      // Transform to GPS51Position format using GPS51 device IDs
-      const transformedPositions: GPS51Position[] = positionsData?.map(pos => ({
-        deviceid: pos.vehicles.gps51_device_id || pos.vehicles.license_plate, // Use GPS51 device ID or fallback to license plate
-        callat: Number(pos.latitude),
-        callon: Number(pos.longitude),
-        updatetime: new Date(pos.timestamp).getTime(),
-        speed: Number(pos.speed || 0),
-        moving: pos.ignition_status ? 1 : 0,
-        strstatus: pos.address || pos.ignition_status ? 'Moving' : 'Stopped',
-        totaldistance: 0,
-        course: Number(pos.heading || 0),
-        altitude: Number(pos.altitude || 0),
-        radius: Number(pos.accuracy || 0),
-        temp1: pos.engine_temperature ? Number(pos.engine_temperature) : undefined,
-        fuel: pos.fuel_level ? Number(pos.fuel_level) : undefined,
-        voltage: pos.battery_level ? Number(pos.battery_level) : undefined
-      })) || [];
+      // Separate vehicles with and without GPS data
+      const allVehicles = vehiclesData || [];
+      const vehiclesWithPositions = allVehicles.filter(v => 
+        Array.isArray(v.vehicle_positions) ? v.vehicle_positions.length > 0 : !!v.vehicle_positions
+      );
+      const vehiclesWithoutPositions = allVehicles.filter(v => 
+        Array.isArray(v.vehicle_positions) ? v.vehicle_positions.length === 0 : !v.vehicle_positions
+      );
+
+      console.log('Vehicles breakdown:', {
+        total: allVehicles.length,
+        withPositions: vehiclesWithPositions.length,
+        withoutPositions: vehiclesWithoutPositions.length
+      });
+
+      // Transform vehicles with positions to GPS51Position format
+      const transformedPositions: GPS51Position[] = [];
+      
+      for (const vehicle of vehiclesWithPositions) {
+        const positions = Array.isArray(vehicle.vehicle_positions) 
+          ? vehicle.vehicle_positions 
+          : [vehicle.vehicle_positions];
+        
+        // Get the latest position for each vehicle
+        if (positions.length > 0) {
+          const latestPosition = positions.sort((a, b) => 
+            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          )[0];
+
+          transformedPositions.push({
+            deviceid: vehicle.gps51_device_id || vehicle.license_plate,
+            callat: Number(latestPosition.latitude),
+            callon: Number(latestPosition.longitude),
+            updatetime: new Date(latestPosition.timestamp).getTime(),
+            speed: Number(latestPosition.speed || 0),
+            moving: latestPosition.ignition_status ? 1 : 0,
+            strstatus: latestPosition.address || (latestPosition.ignition_status ? 'Moving' : 'Stopped'),
+            totaldistance: 0,
+            course: Number(latestPosition.heading || 0),
+            altitude: Number(latestPosition.altitude || 0),
+            radius: Number(latestPosition.accuracy || 0),
+            temp1: latestPosition.engine_temperature ? Number(latestPosition.engine_temperature) : undefined,
+            fuel: latestPosition.fuel_level ? Number(latestPosition.fuel_level) : undefined,
+            voltage: latestPosition.battery_level ? Number(latestPosition.battery_level) : undefined
+          });
+        }
+      }
 
       console.log('Transformed positions:', transformedPositions.length);
-
       setPositions(transformedPositions);
 
-      // Calculate fleet metrics
-      const totalDevices = transformedPositions.length;
+      // Calculate comprehensive fleet metrics
+      const totalDevices = allVehicles.length;
+      const vehiclesWithGPS = vehiclesWithPositions.length;
+      const vehiclesWithoutGPS = vehiclesWithoutPositions.length;
+      
       const now = Date.now();
-      const fiveMinutesAgo = now - (5 * 60 * 1000); // 5 minutes threshold for active devices
+      const fiveMinutesAgo = now - (5 * 60 * 1000);
       
       const activeDevices = transformedPositions.filter(p => 
         p.updatetime > fiveMinutesAgo
@@ -116,7 +148,7 @@ export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
       
       const movingVehicles = transformedPositions.filter(p => p.moving === 1).length;
       const parkedDevices = transformedPositions.filter(p => p.moving === 0).length;
-      const offlineVehicles = totalDevices - activeDevices;
+      const offlineVehicles = vehiclesWithGPS - activeDevices;
       const totalDistance = transformedPositions.reduce((sum, p) => sum + p.totaldistance, 0);
       
       const movingDevicesWithSpeed = transformedPositions.filter(p => p.moving === 1 && p.speed > 0);
@@ -124,25 +156,21 @@ export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
         ? movingDevicesWithSpeed.reduce((sum, p) => sum + p.speed, 0) / movingDevicesWithSpeed.length
         : 0;
 
-      setMetrics({
+      const newMetrics = {
         totalDevices,
         activeDevices,
         movingVehicles,
         parkedDevices,
         offlineVehicles,
         totalDistance,
-        averageSpeed: Math.round(averageSpeed)
-      });
+        averageSpeed: Math.round(averageSpeed),
+        vehiclesWithGPS,
+        vehiclesWithoutGPS
+      };
 
-      console.log('Fleet metrics calculated:', {
-        totalDevices,
-        activeDevices,
-        movingVehicles,
-        parkedDevices,
-        offlineVehicles,
-        averageSpeed: Math.round(averageSpeed)
-      });
+      setMetrics(newMetrics);
 
+      console.log('Comprehensive fleet metrics:', newMetrics);
       setRetries(0);
     } catch (err) {
       console.error('Error fetching GPS51 live data:', err);
@@ -167,6 +195,7 @@ export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
   }, [fetchLiveData, refreshInterval, enabled]);
 
   const refresh = useCallback(() => {
+    console.log('Manually refreshing live data...');
     setRetries(0);
     fetchLiveData();
   }, [fetchLiveData]);

@@ -1,23 +1,28 @@
 
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Monitor, Zap, Shield, Settings } from 'lucide-react';
+import { Monitor, Zap, Shield, Settings, MapPin } from 'lucide-react';
 import { useGPS51Data } from '@/hooks/useGPS51Data';
+import { useGPS51LiveData } from '@/hooks/useGPS51LiveData';
 
 const FleetStats = () => {
-  const { vehicles, loading } = useGPS51Data();
+  const { vehicles, loading: vehiclesLoading } = useGPS51Data();
+  const { metrics, loading: metricsLoading } = useGPS51LiveData();
 
-  // Calculate real-time fleet statistics
-  const activeVehicles = vehicles.filter(v => v.latest_position?.isMoving).length;
+  const loading = vehiclesLoading || metricsLoading;
+
+  // Calculate additional stats from vehicle data
   const totalVehicles = vehicles.length;
-  const vehiclesWithGPS = vehicles.filter(v => v.latest_position).length;
+  const vehiclesWithPositions = vehicles.filter(v => v.latest_position).length;
+  const vehiclesWithoutPositions = totalVehicles - vehiclesWithPositions;
+  const activeVehicles = vehicles.filter(v => v.latest_position?.isMoving).length;
   const maintenanceVehicles = vehicles.filter(v => v.status === 'maintenance').length;
 
   const stats = [
     {
-      title: 'Total Vehicles',
+      title: 'Total Fleet',
       value: loading ? '...' : totalVehicles.toString(),
-      change: `${vehiclesWithGPS} with GPS data`,
+      change: `${vehiclesWithPositions} with GPS data`,
       icon: Monitor,
       color: 'text-blue-600',
       bgColor: 'bg-blue-100'
@@ -31,20 +36,20 @@ const FleetStats = () => {
       bgColor: 'bg-green-100'
     },
     {
+      title: 'GPS Tracking',
+      value: loading ? '...' : vehiclesWithPositions.toString(),
+      change: `${vehiclesWithoutPositions} offline`,
+      icon: MapPin,
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-100'
+    },
+    {
       title: 'Maintenance',
       value: loading ? '...' : maintenanceVehicles.toString(),
       change: 'Scheduled',
       icon: Settings,
       color: 'text-yellow-600',
       bgColor: 'bg-yellow-100'
-    },
-    {
-      title: 'GPS Coverage',
-      value: loading ? '...' : `${Math.round((vehiclesWithGPS / Math.max(totalVehicles, 1)) * 100)}%`,
-      change: 'Real-time tracking',
-      icon: Shield,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-100'
     }
   ];
 
