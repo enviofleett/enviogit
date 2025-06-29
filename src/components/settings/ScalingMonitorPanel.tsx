@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -52,17 +51,17 @@ const ScalingMonitorPanel: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const getStatusColor = (value: number, thresholds: { warning: number; critical: number }): string => {
+  const getStatusColor = (value: number, thresholds: { warning: number; critical: number }): "destructive" | "default" | "secondary" | "outline" => {
     if (value >= thresholds.critical) return 'destructive';
-    if (value >= thresholds.warning) return 'warning';
+    if (value >= thresholds.warning) return 'secondary';
     return 'default';
   };
 
-  const getPriorityColor = (priority: string): string => {
+  const getPriorityColor = (priority: string): "destructive" | "default" | "secondary" | "outline" => {
     switch (priority) {
       case 'high': return 'destructive';
-      case 'medium': return 'warning';
-      case 'low': return 'secondary';
+      case 'medium': return 'secondary';
+      case 'low': return 'outline';
       default: return 'default';
     }
   };
