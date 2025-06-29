@@ -41,6 +41,8 @@ const RealTimeGPS51Status: React.FC<RealTimeGPS51StatusProps> = ({ enabled, onTo
     return status.lastUpdate.toLocaleTimeString();
   };
 
+  const isConfigurationError = status.error?.includes('not configured');
+
   return (
     <Card className="border-slate-200">
       <CardHeader className="pb-3">
@@ -68,9 +70,21 @@ const RealTimeGPS51Status: React.FC<RealTimeGPS51StatusProps> = ({ enabled, onTo
           <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
             <div className="flex items-start space-x-2">
               <AlertCircle className="w-4 h-4 text-red-500 mt-0.5" />
-              <div>
+              <div className="flex-1">
                 <p className="text-sm font-medium text-red-800">Connection Error</p>
                 <p className="text-xs text-red-600 mt-1">{status.error}</p>
+                {isConfigurationError && (
+                  <div className="mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.location.href = '/settings'}
+                      className="text-xs h-7"
+                    >
+                      Configure GPS51
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -81,7 +95,7 @@ const RealTimeGPS51Status: React.FC<RealTimeGPS51StatusProps> = ({ enabled, onTo
             variant="outline"
             size="sm"
             onClick={forceSync}
-            disabled={!enabled || !status.isConnected}
+            disabled={!enabled}
           >
             <RefreshCw className="w-4 h-4 mr-1" />
             Force Sync

@@ -38,20 +38,37 @@ export const useGPS51RealTimeSync = (enableSync: boolean = true) => {
   const [liveData, setLiveData] = useState<RealTimeGPS51Data[]>([]);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const authService = GPS51AuthService.getInstance();
+  const initializationRef = useRef<boolean>(false);
 
   const syncGPS51RealTimeData = useCallback(async () => {
     try {
       console.log('🔄 Starting GPS51 real-time sync...');
       
-      // Verify GPS51 connection and credentials
-      const isConfigured = gps51ConfigService.isConfigured();
-      if (!isConfigured) {
-        throw new Error('GPS51 not configured. Please set up credentials.');
+      // Initialize configuration if not done already
+      if (!initializationRef.current) {
+        await gps51ConfigService.initializeFromAuth();
+        initializationRef.current = true;
       }
 
-      const isAuthenticated = authService.isAuthenticated();
+      // Verify GPS51 connection and credentials
+      const isConfigured = await gps51ConfigService.isConfigured();
+      if (!isConfigured) {
+        throw new Error('GPS51 not configured. Please set up credentials in Settings.');
+      }
+
+      // Get configuration for authentication
+      const credentials = await gps51ConfigService.getCredentials();
+      console.log('✅ GPS51 credentials retrieved, checking authentication...');
+
+      // Ensure we're authenticated
+      let isAuthenticated = authService.isAuthenticated();
       if (!isAuthenticated) {
-        throw new Error('GPS51 authentication required. Please reconnect.');
+        console.log('🔐 Authenticating with GPS51...');
+        const authResult = await gps51Client.authenticate(credentials);
+        if (!authResult.success) {
+          throw new Error(`Authentication failed: ${authResult.error}`);
+        }
+        console.log('✅ GPS51 authentication successful');
       }
 
       // Get valid token for GPS51 API calls
@@ -187,6 +204,11 @@ export const useGPS51RealTimeSync = (enableSync: boolean = true) => {
   const forceSync = useCallback(() => {
     syncGPS51RealTimeData();
   }, [syncGPS51RealTimeData]);
+
+  // Initialize configuration on mount
+  useEffect(() => {
+    gps51ConfigService.initializeFromAuth();
+  }, []);
 
   return {
     status,
