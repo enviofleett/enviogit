@@ -1,9 +1,11 @@
 
 import { useEffect, useState } from 'react';
 import GPS51LiveDashboard from '@/components/dashboard/GPS51LiveDashboard';
+import GPS51AntiOverloadDashboard from '@/components/dashboard/GPS51AntiOverloadDashboard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Activity, Wifi, Users, MapPin } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Activity, Wifi, Users, MapPin, Shield } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 const Index = () => {
@@ -121,8 +123,27 @@ const Index = () => {
         </CardContent>
       </Card>
 
-      {/* Live Data Dashboard */}
-      <GPS51LiveDashboard />
+      {/* Tabbed Dashboard Interface */}
+      <Tabs defaultValue="live-data" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="live-data" className="flex items-center gap-2">
+            <Activity className="h-4 w-4" />
+            Live Data
+          </TabsTrigger>
+          <TabsTrigger value="protection" className="flex items-center gap-2">
+            <Shield className="h-4 w-4" />
+            Anti-Overload Protection
+          </TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="live-data" className="mt-6">
+          <GPS51LiveDashboard />
+        </TabsContent>
+        
+        <TabsContent value="protection" className="mt-6">
+          <GPS51AntiOverloadDashboard />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
