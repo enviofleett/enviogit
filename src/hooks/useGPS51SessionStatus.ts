@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { gps51ConfigService } from '@/services/gp51/GPS51ConfigService';
 import { GPS51AuthService } from '@/services/gp51/GPS51AuthService';
+import { gps51StartupService } from '@/services/gps51/GPS51StartupService';
 import { SessionStatus } from './types/sessionBridgeTypes';
 
 export const useGPS51SessionStatus = () => {
@@ -44,15 +45,67 @@ export const useGPS51SessionStatus = () => {
       }
     };
 
+    // Initial status check
     checkStatus();
-    const interval = setInterval(checkStatus, 30000); // Check every 30 seconds
 
-    return () => clearInterval(interval);
+    // Listen for live data updates to update sync status
+    const handleLiveDataUpdate = (event: CustomEvent) => {
+      setStatus(prev => ({
+        ...prev,
+        lastSync: new Date(),
+        syncStatus: 'success',
+        connectionHealth: 'good'
+      }));
+    };
+
+    // Listen for token refresh events
+    const handleTokenRefresh = () => {
+      checkStatus();
+    };
+
+    // Set up event listeners
+    window.addEventListener('gps51-live-data-update', handleLiveDataUpdate as EventListener);
+    window.addEventListener('gps51-token-refresh-needed', handleTokenRefresh);
+
+    // Check status every 30 seconds
+    const interval = setInterval(checkStatus, 30000);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('gps51-live-data-update', handleLiveDataUpdate as EventListener);
+      window.removeEventListener('gps51-token-refresh-needed', handleTokenRefresh);
+    };
   }, [authService]);
 
   const updateStatus = (updates: Partial<SessionStatus>) => {
     setStatus(prev => ({ ...prev, ...updates }));
   };
 
-  return { status, updateStatus };
+  const forceRefresh = async () => {
+    try {
+      setStatus(prev => ({ ...prev, syncStatus: 'syncing' }));
+      
+      const refreshed = await gps51StartupService.refreshAuthentication();
+      if (refreshed) {
+        setStatus(prev => ({
+          ...prev,
+          lastSync: new Date(),
+          syncStatus: 'success',
+          connectionHealth: 'good',
+          error: null
+        }));
+      } else {
+        throw new Error('Authentication refresh failed');
+      }
+    } catch (error) {
+      setStatus(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Refresh failed',
+        syncStatus: 'error',
+        connectionHealth: 'poor'
+      }));
+    }
+  };
+
+  return { status, updateStatus, forceRefresh };
 };
