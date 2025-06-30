@@ -2,7 +2,7 @@
 import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GPS51CredentialsForm } from './GPS51CredentialsForm';
-import { GPS51DeviceManager } from './GPS51DeviceManager';
+import GPS51DeviceManager from './GPS51DeviceManager';
 import { GPS51CronJobManager } from './GPS51CronJobManager';
 import { GPS51RealTimeActivationPanel } from './GPS51RealTimeActivationPanel';
 import { GPS51DebugPanel } from './GPS51DebugPanel';
