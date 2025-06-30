@@ -1,5 +1,5 @@
 
-import { GPS51AuthManager } from './GPS51AuthManager';
+import { GPS51AuthManager } from '../gps51/GPS51AuthManager';
 import { GPS51Credentials } from './GPS51CredentialsManager';
 import { GPS51AuthToken } from './GPS51TokenManager';
 
