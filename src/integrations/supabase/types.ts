@@ -562,44 +562,6 @@ export type Database = {
         }
         Relationships: []
       }
-      devices: {
-        Row: {
-          assigned_user_id: string | null
-          created_at: string | null
-          device_id: string
-          device_name: string | null
-          gps51_group_id: string | null
-          id: string
-          last_seen_at: string | null
-        }
-        Insert: {
-          assigned_user_id?: string | null
-          created_at?: string | null
-          device_id: string
-          device_name?: string | null
-          gps51_group_id?: string | null
-          id?: string
-          last_seen_at?: string | null
-        }
-        Update: {
-          assigned_user_id?: string | null
-          created_at?: string | null
-          device_id?: string
-          device_name?: string | null
-          gps51_group_id?: string | null
-          id?: string
-          last_seen_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "devices_assigned_user_id_fkey"
-            columns: ["assigned_user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       gps51_sync_jobs: {
         Row: {
           completed_at: string | null
@@ -1177,56 +1139,6 @@ export type Database = {
           },
         ]
       }
-      positions: {
-        Row: {
-          battery_voltage: number | null
-          created_at: string | null
-          device_id: string | null
-          heading: number | null
-          id: number
-          ignition_on: boolean | null
-          latitude: number
-          longitude: number
-          raw_data: Json | null
-          speed_kph: number | null
-          timestamp: string
-        }
-        Insert: {
-          battery_voltage?: number | null
-          created_at?: string | null
-          device_id?: string | null
-          heading?: number | null
-          id?: never
-          ignition_on?: boolean | null
-          latitude: number
-          longitude: number
-          raw_data?: Json | null
-          speed_kph?: number | null
-          timestamp: string
-        }
-        Update: {
-          battery_voltage?: number | null
-          created_at?: string | null
-          device_id?: string | null
-          heading?: number | null
-          id?: never
-          ignition_on?: boolean | null
-          latitude?: number
-          longitude?: number
-          raw_data?: Json | null
-          speed_kph?: number | null
-          timestamp?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "positions_device_id_fkey"
-            columns: ["device_id"]
-            isOneToOne: false
-            referencedRelation: "devices"
-            referencedColumns: ["device_id"]
-          },
-        ]
-      }
       privacy_settings: {
         Row: {
           analytics_consent: boolean | null
@@ -1564,54 +1476,6 @@ export type Database = {
             columns: ["registration_id"]
             isOneToOne: false
             referencedRelation: "subscriber_registrations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      shared_tracks: {
-        Row: {
-          created_at: string | null
-          device_id: string | null
-          expires_at: string | null
-          generated_by_user_id: string | null
-          id: string
-          shared_url: string | null
-          sharing_duration_minutes: number | null
-          sharing_interval_minutes: number | null
-        }
-        Insert: {
-          created_at?: string | null
-          device_id?: string | null
-          expires_at?: string | null
-          generated_by_user_id?: string | null
-          id?: string
-          shared_url?: string | null
-          sharing_duration_minutes?: number | null
-          sharing_interval_minutes?: number | null
-        }
-        Update: {
-          created_at?: string | null
-          device_id?: string | null
-          expires_at?: string | null
-          generated_by_user_id?: string | null
-          id?: string
-          shared_url?: string | null
-          sharing_duration_minutes?: number | null
-          sharing_interval_minutes?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "shared_tracks_device_id_fkey"
-            columns: ["device_id"]
-            isOneToOne: false
-            referencedRelation: "devices"
-            referencedColumns: ["device_id"]
-          },
-          {
-            foreignKeyName: "shared_tracks_generated_by_user_id_fkey"
-            columns: ["generated_by_user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -2417,39 +2281,6 @@ export type Database = {
         }
         Relationships: []
       }
-      users: {
-        Row: {
-          created_at: string | null
-          email: string | null
-          gps51_username: string
-          id: string
-          nickname: string | null
-          password_hash: string
-          phone: string | null
-          user_type: number | null
-        }
-        Insert: {
-          created_at?: string | null
-          email?: string | null
-          gps51_username: string
-          id?: string
-          nickname?: string | null
-          password_hash: string
-          phone?: string | null
-          user_type?: number | null
-        }
-        Update: {
-          created_at?: string | null
-          email?: string | null
-          gps51_username?: string
-          id?: string
-          nickname?: string | null
-          password_hash?: string
-          phone?: string | null
-          user_type?: number | null
-        }
-        Relationships: []
-      }
       vehicle_assignments: {
         Row: {
           assigned_at: string
@@ -2605,50 +2436,6 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
-      }
-      video_records: {
-        Row: {
-          channel: number | null
-          created_at: string | null
-          device_id: string | null
-          end_time: string | null
-          gps51_record_id: string | null
-          id: string
-          media_type: number | null
-          start_time: string | null
-          storage_type: number | null
-        }
-        Insert: {
-          channel?: number | null
-          created_at?: string | null
-          device_id?: string | null
-          end_time?: string | null
-          gps51_record_id?: string | null
-          id?: string
-          media_type?: number | null
-          start_time?: string | null
-          storage_type?: number | null
-        }
-        Update: {
-          channel?: number | null
-          created_at?: string | null
-          device_id?: string | null
-          end_time?: string | null
-          gps51_record_id?: string | null
-          id?: string
-          media_type?: number | null
-          start_time?: string | null
-          storage_type?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "video_records_device_id_fkey"
-            columns: ["device_id"]
-            isOneToOne: false
-            referencedRelation: "devices"
-            referencedColumns: ["device_id"]
-          },
-        ]
       }
     }
     Views: {

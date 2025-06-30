@@ -1,151 +1,138 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+import React, { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { RefreshCw, Database, Wifi, AlertCircle, CheckCircle, Clock } from 'lucide-react';
-import { useGPS51SessionBridge } from '@/hooks/useGPS51SessionBridge';
-import { gps51Client } from '@/services/gps51/GPS51Client';
-import { GPS51DataService } from '@/services/gps51/GPS51DataService';
+import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { Bug, RefreshCw, Database, MapPin, AlertTriangle, CheckCircle } from 'lucide-react';
 
-export const GPS51DebugPanel: React.FC = () => {
-  const { status } = useGPS51SessionBridge();
-  const [debugData, setDebugData] = useState<any>(null);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [connectionTest, setConnectionTest] = useState<any>(null);
+interface DebugStats {
+  totalVehicles: number;
+  vehiclesWithGPS51Id: number;
+  vehiclesWithPositions: number;
+  totalPositions: number;
+  latestPositionTime: string | null;
+  oldestPositionTime: string | null;
+}
 
-  const addLog = (message: string) => {
-    const timestamp = new Date().toLocaleTimeString();
-    setLogs(prev => [...prev.slice(-49), `[${timestamp}] ${message}`]);
-  };
+interface SyncResult {
+  success: boolean;
+  statistics?: any;
+  details?: any;
+  error?: string;
+  timestamp: string;
+}
 
-  const refreshDebugData = async () => {
-    setIsRefreshing(true);
-    addLog('Starting debug data refresh...');
-    
+export const GPS51DebugPanel = () => {
+  const [stats, setStats] = useState<DebugStats | null>(null);
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const { toast } = useToast();
+
+  const fetchDebugStats = async () => {
+    setLoading(true);
     try {
-      // Get client status
-      const clientStatus = {
-        isAuthenticated: gps51Client.isAuthenticated(),
-        token: gps51Client.getToken() ? 'Present' : 'Missing',
-        user: gps51Client.getUser(),
-        lastActivity: new Date().toISOString() // Fallback since getLastActivity doesn't exist
+      // Get vehicle statistics
+      const { data: vehicles, error: vehiclesError } = await supabase
+        .from('vehicles')
+        .select('id, gps51_device_id');
+
+      if (vehiclesError) throw vehiclesError;
+
+      // Get position statistics
+      const { data: positions, error: positionsError } = await supabase
+        .from('vehicle_positions')
+        .select('vehicle_id, timestamp')
+        .order('timestamp', { ascending: false });
+
+      if (positionsError) throw positionsError;
+
+      // Get vehicles with positions
+      const { data: vehiclesWithPositions, error: vwpError } = await supabase
+        .from('vehicles')
+        .select('id')
+        .in('id', [...new Set(positions?.map(p => p.vehicle_id) || [])]);
+
+      if (vwpError) throw vwpError;
+
+      const debugStats: DebugStats = {
+        totalVehicles: vehicles?.length || 0,
+        vehiclesWithGPS51Id: vehicles?.filter(v => v.gps51_device_id).length || 0,
+        vehiclesWithPositions: vehiclesWithPositions?.length || 0,
+        totalPositions: positions?.length || 0,
+        latestPositionTime: positions?.[0]?.timestamp || null,
+        oldestPositionTime: positions?.[positions.length - 1]?.timestamp || null
       };
 
-      // Test database connection
-      const { data: dbTest, error: dbError } = await supabase
-        .from('users')
-        .select('count')
-        .limit(1);
-
-      const databaseStatus = {
-        connected: !dbError,
-        error: dbError?.message,
-        testResult: dbTest ? 'Success' : 'Failed'
-      };
-
-      // Get stored data counts - simplified since getInstance doesn't exist
-      const storedData = {
-        users: 0,
-        devices: 0,
-        positions: 0
-      };
-
-      try {
-        const { count: userCount } = await supabase.from('users').select('*', { count: 'exact', head: true });
-        const { count: deviceCount } = await supabase.from('devices').select('*', { count: 'exact', head: true });
-        const { count: positionCount } = await supabase.from('positions').select('*', { count: 'exact', head: true });
-        
-        storedData.users = userCount || 0;
-        storedData.devices = deviceCount || 0;
-        storedData.positions = positionCount || 0;
-      } catch (countError) {
-        console.error('Error getting counts:', countError);
-      }
-
-      setDebugData({
-        client: clientStatus,
-        database: databaseStatus,
-        storedData,
-        sessionStatus: status,
-        timestamp: new Date().toISOString()
+      setStats(debugStats);
+      
+      toast({
+        title: "Debug Stats Updated",
+        description: `Found ${debugStats.totalVehicles} vehicles, ${debugStats.vehiclesWithPositions} with positions`,
       });
-
-      addLog('Debug data refresh completed successfully');
     } catch (error) {
-      console.error('Debug refresh failed:', error);
-      addLog(`Debug refresh failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Error fetching debug stats:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch debug statistics",
+        variant: "destructive",
+      });
     } finally {
-      setIsRefreshing(false);
+      setLoading(false);
     }
   };
 
-  const testConnection = async () => {
-    addLog('Testing GPS51 connection...');
-    
+  const triggerTestSync = async () => {
+    setSyncing(true);
     try {
-      const testResult = {
-        timestamp: new Date().toISOString(),
-        steps: []
-      };
+      // Get GPS51 credentials from localStorage
+      const apiUrl = localStorage.getItem('gps51_api_url');
+      const username = localStorage.getItem('gps51_username');
+      const password = localStorage.getItem('gps51_password_hash');
 
-      // Test 1: Authentication
-      testResult.steps.push({
-        step: 'Authentication',
-        status: gps51Client.isAuthenticated() ? 'success' : 'failed',
-        details: gps51Client.isAuthenticated() ? 'Client is authenticated' : 'Client not authenticated'
-      });
-
-      // Test 2: Get device list
-      try {
-        const devices = await gps51Client.getDeviceList();
-        testResult.steps.push({
-          step: 'Device List',
-          status: 'success',
-          details: `Found ${devices.length} devices`
-        });
-      } catch (error) {
-        testResult.steps.push({
-          step: 'Device List',
-          status: 'failed',
-          details: error instanceof Error ? error.message : 'Unknown error'
-        });
+      if (!apiUrl || !username || !password) {
+        throw new Error('GPS51 credentials not configured. Please configure them first.');
       }
 
-      setConnectionTest(testResult);
-      addLog('Connection test completed');
+      const { data, error } = await supabase.functions.invoke('gps51-sync', {
+        body: {
+          apiUrl,
+          username,
+          password
+        }
+      });
+
+      if (error) throw error;
+
+      setSyncResult(data);
+      
+      // Auto-refresh stats after sync
+      setTimeout(fetchDebugStats, 1000);
+
+      toast({
+        title: "Test Sync Completed",
+        description: `Synced ${data.statistics?.vehiclesSynced || 0} vehicles, ${data.statistics?.positionsStored || 0} positions`,
+      });
     } catch (error) {
-      addLog(`Connection test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Test sync error:', error);
+      toast({
+        title: "Test Sync Failed",
+        description: error instanceof Error ? error.message : 'Unknown error occurred',
+        variant: "destructive",
+      });
+    } finally {
+      setSyncing(false);
     }
   };
 
-  const performSync = async () => {
-    addLog('Starting manual sync...');
-    
-    try {
-      // Simplified sync since getInstance doesn't exist
-      addLog('Sync completed: manual sync not fully implemented');
-    } catch (error) {
-      addLog(`Sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
-
-  const clearLogs = () => {
-    setLogs([]);
-    addLog('Logs cleared');
-  };
-
-  useEffect(() => {
-    refreshDebugData();
-  }, []);
-
-  const getStatusIcon = (condition: boolean) => {
-    return condition ? 
-      <CheckCircle className="h-4 w-4 text-green-500" /> : 
-      <AlertCircle className="h-4 w-4 text-red-500" />;
+  const getStatusColor = (value: number, total: number) => {
+    const ratio = total > 0 ? value / total : 0;
+    if (ratio === 0) return 'destructive';
+    if (ratio < 0.5) return 'outline';
+    return 'default';
   };
 
   return (
@@ -153,243 +140,144 @@ export const GPS51DebugPanel: React.FC = () => {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5" />
+            <Bug className="h-5 w-5" />
             GPS51 Debug Panel
           </CardTitle>
-          <CardDescription>
-            Debug information, connection testing, and system diagnostics for GPS51 integration.
-          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex gap-2 mb-4">
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
             <Button 
-              onClick={refreshDebugData} 
-              disabled={isRefreshing}
+              onClick={fetchDebugStats}
+              disabled={loading}
               variant="outline"
-              size="sm"
+              className="flex items-center gap-2"
             >
-              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-              Refresh Data
+              <Database className="h-4 w-4" />
+              {loading ? 'Loading...' : 'Refresh Stats'}
             </Button>
+            
             <Button 
-              onClick={testConnection}
-              variant="outline"
-              size="sm"
+              onClick={triggerTestSync}
+              disabled={syncing}
+              className="flex items-center gap-2"
             >
-              <Wifi className="h-4 w-4 mr-2" />
-              Test Connection
-            </Button>
-            <Button 
-              onClick={performSync}
-              variant="outline"
-              size="sm"
-            >
-              <Database className="h-4 w-4 mr-2" />
-              Manual Sync
+              <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Syncing...' : 'Test Sync'}
             </Button>
           </div>
 
-          <Tabs defaultValue="status" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="status">System Status</TabsTrigger>
-              <TabsTrigger value="data">Stored Data</TabsTrigger>
-              <TabsTrigger value="connection">Connection Test</TabsTrigger>
-              <TabsTrigger value="logs">Activity Logs</TabsTrigger>
-            </TabsList>
+          {stats && (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Total Vehicles</div>
+                <Badge variant="default" className="text-lg">
+                  {stats.totalVehicles}
+                </Badge>
+              </div>
 
-            <TabsContent value="status">
-              {debugData && (
-                <div className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-sm">GPS51 Client</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">Authenticated:</span>
-                          <div className="flex items-center gap-2">
-                            {getStatusIcon(debugData.client.isAuthenticated)}
-                            <Badge variant={debugData.client.isAuthenticated ? 'default' : 'destructive'}>
-                              {debugData.client.isAuthenticated ? 'Yes' : 'No'}
-                            </Badge>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">Token:</span>
-                          <Badge variant={debugData.client.token === 'Present' ? 'default' : 'secondary'}>
-                            {debugData.client.token}
-                          </Badge>
-                        </div>
-                        {debugData.client.user && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">User:</span>
-                            <span className="text-sm text-muted-foreground">
-                              {debugData.client.user.gps51_username || 'Unknown'}
-                            </span>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
+              <div className="space-y-2">
+                <div className="text-sm font-medium">With GPS51 ID</div>
+                <Badge variant={getStatusColor(stats.vehiclesWithGPS51Id, stats.totalVehicles)} className="text-lg">
+                  {stats.vehiclesWithGPS51Id}
+                </Badge>
+              </div>
 
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-sm">Database</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">Connected:</span>
-                          <div className="flex items-center gap-2">
-                            {getStatusIcon(debugData.database.connected)}
-                            <Badge variant={debugData.database.connected ? 'default' : 'destructive'}>
-                              {debugData.database.connected ? 'Yes' : 'No'}
-                            </Badge>
-                          </div>
-                        </div>
-                        {debugData.database.error && (
-                          <div className="text-xs text-red-600">
-                            {debugData.database.error}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
+              <div className="space-y-2">
+                <div className="text-sm font-medium">With Positions</div>
+                <Badge variant={getStatusColor(stats.vehiclesWithPositions, stats.totalVehicles)} className="text-lg">
+                  {stats.vehiclesWithPositions}
+                </Badge>
+              </div>
 
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm">Session Status</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      <div className="grid gap-2 md:grid-cols-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">Configured:</span>
-                          <Badge variant={status.isConfigured ? 'default' : 'secondary'}>
-                            {status.isConfigured ? 'Yes' : 'No'}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">Connected:</span>
-                          <Badge variant={status.isConnected ? 'default' : 'secondary'}>
-                            {status.isConnected ? 'Yes' : 'No'}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">Authenticated:</span>
-                          <Badge variant={status.isAuthenticated ? 'default' : 'secondary'}>
-                            {status.isAuthenticated ? 'Yes' : 'No'}
-                          </Badge>
-                        </div>
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Total Positions</div>
+                <Badge variant={stats.totalPositions > 0 ? 'default' : 'destructive'} className="text-lg">
+                  {stats.totalPositions}
+                </Badge>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Latest Position</div>
+                <div className="text-xs text-gray-600">
+                  {stats.latestPositionTime 
+                    ? new Date(stats.latestPositionTime).toLocaleString()
+                    : 'No positions'
+                  }
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Position Coverage</div>
+                <Badge variant={getStatusColor(stats.vehiclesWithPositions, stats.vehiclesWithGPS51Id)} className="text-lg">
+                  {stats.vehiclesWithGPS51Id > 0 
+                    ? Math.round((stats.vehiclesWithPositions / stats.vehiclesWithGPS51Id) * 100)
+                    : 0
+                  }%
+                </Badge>
+              </div>
+            </div>
+          )}
+
+          {syncResult && (
+            <Card className="mt-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  {syncResult.success ? (
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4 text-red-600" />
+                  )}
+                  Last Sync Result
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {syncResult.success ? (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>Devices Found: <strong>{syncResult.statistics?.devicesFound || 0}</strong></div>
+                      <div>Positions Retrieved: <strong>{syncResult.statistics?.positionsRetrieved || 0}</strong></div>
+                      <div>Vehicles Synced: <strong>{syncResult.statistics?.vehiclesSynced || 0}</strong></div>
+                      <div>Positions Stored: <strong>{syncResult.statistics?.positionsStored || 0}</strong></div>
+                    </div>
+                    
+                    {syncResult.details && (
+                      <div className="text-xs text-gray-600 mt-2">
+                        Success Rates: Vehicle {syncResult.details.vehicleSyncSuccessRate}%, 
+                        Position {syncResult.details.positionStorageSuccessRate}%
                       </div>
-                      {status.lastSync && (
-                        <div className="flex items-center gap-2 pt-2">
-                          <Clock className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm text-muted-foreground">
-                            Last Sync: {status.lastSync.toLocaleString()}
-                          </span>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="data">
-              {debugData?.storedData && (
-                <div className="grid gap-4 md:grid-cols-3">
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm">Users</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{debugData.storedData.users}</div>
-                      <p className="text-xs text-muted-foreground">Total users stored</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm">Devices</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{debugData.storedData.devices}</div>
-                      <p className="text-xs text-muted-foreground">Total devices stored</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm">Positions</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{debugData.storedData.positions}</div>
-                      <p className="text-xs text-muted-foreground">Total positions stored</p>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="connection">
-              {connectionTest && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">Connection Test Results</CardTitle>
-                    <CardDescription className="text-xs">
-                      Performed at {new Date(connectionTest.timestamp).toLocaleString()}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {connectionTest.steps.map((step: any, index: number) => (
-                        <div key={index} className="flex items-center justify-between p-3 border rounded">
-                          <div className="flex items-center gap-2">
-                            {getStatusIcon(step.status === 'success')}
-                            <span className="font-medium text-sm">{step.step}</span>
-                          </div>
-                          <div className="text-right">
-                            <Badge variant={step.status === 'success' ? 'default' : 'destructive'}>
-                              {step.status}
-                            </Badge>
-                            <div className="text-xs text-muted-foreground mt-1">
-                              {step.details}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </TabsContent>
-
-            <TabsContent value="logs">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm">Activity Logs</CardTitle>
-                    <Button onClick={clearLogs} variant="outline" size="sm">
-                      Clear Logs
-                    </Button>
+                    )}
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <ScrollArea className="h-[300px] w-full">
-                    <div className="space-y-1">
-                      {logs.map((log, index) => (
-                        <div key={index} className="text-xs font-mono p-2 bg-gray-50 rounded">
-                          {log}
-                        </div>
-                      ))}
-                      {logs.length === 0 && (
-                        <div className="text-xs text-muted-foreground p-2">
-                          No logs available. Activity will appear here.
-                        </div>
-                      )}
+                ) : (
+                  <div className="text-red-600 text-sm">
+                    Error: {syncResult.error}
+                  </div>
+                )}
+                <div className="text-xs text-gray-500 mt-2">
+                  {new Date(syncResult.timestamp).toLocaleString()}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {stats && stats.vehiclesWithPositions === 0 && stats.vehiclesWithGPS51Id > 0 && (
+            <Card className="border-yellow-200 bg-yellow-50">
+              <CardContent className="pt-4">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                  <div className="space-y-2">
+                    <div className="font-medium text-yellow-800">Position Data Issue Detected</div>
+                    <div className="text-sm text-yellow-700">
+                      You have {stats.vehiclesWithGPS51Id} vehicles with GPS51 device IDs but no position data. 
+                      This suggests an issue with the position sync process.
                     </div>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+                    <div className="text-xs text-yellow-600">
+                      Try running a test sync to debug the issue.
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </CardContent>
       </Card>
     </div>

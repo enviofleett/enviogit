@@ -1,161 +1,150 @@
 
 import { useState, useEffect, useCallback } from 'react';
-import { GPS51DataService, GPS51User, GPS51Device, GPS51Position } from '@/services/gps51/GPS51DataService';
-import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
-export interface UseGPS51DataOptions {
-  userId?: string;
-  deviceId?: string;
-  autoRefresh?: boolean;
-  refreshInterval?: number;
+// Define the VehiclePosition type
+export interface VehiclePosition {
+  vehicle_id: string;
+  latitude: number;
+  longitude: number;
+  speed: number;
+  timestamp: string;
+  status: string;
+  isMoving: boolean;
+  ignition_status?: boolean;
+  heading?: number;
+  fuel_level?: number;
+  engine_temperature?: number;
 }
 
-export const useGPS51Data = (options: UseGPS51DataOptions = {}) => {
-  const { userId, deviceId, autoRefresh = false, refreshInterval = 30000 } = options;
-  
-  const [user, setUser] = useState<GPS51User | null>(null);
-  const [devices, setDevices] = useState<GPS51Device[]>([]);
-  const [positions, setPositions] = useState<GPS51Position[]>([]);
+// Define the VehicleData type - updated to include 'bike'
+export interface VehicleData {
+  id: string;
+  brand: string;
+  model: string;
+  license_plate: string;
+  status: 'inactive' | 'available' | 'assigned' | 'maintenance';
+  type: 'bike' | 'sedan' | 'truck' | 'van' | 'motorcycle' | 'other';
+  created_at: string;
+  updated_at: string;
+  notes: string;
+  gps51_device_id?: string;
+  latest_position: VehiclePosition | null;
+}
+
+export const useGPS51Data = () => {
+  const [vehicles, setVehicles] = useState<VehicleData[]>([]);
+  const [vehiclePositions, setVehiclePositions] = useState<VehiclePosition[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  const { toast } = useToast();
 
-  // Load user data
-  const loadUser = useCallback(async (username: string) => {
+  const fetchVehicleData = useCallback(async () => {
     try {
       setLoading(true);
-      const userData = await GPS51DataService.getUserByUsername(username);
-      setUser(userData);
-      return userData;
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to load user';
-      setError(errorMsg);
-      toast({
-        title: "Error",
-        description: errorMsg,
-        variant: "destructive",
-      });
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
+      setError(null);
 
-  // Load devices for user
-  const loadDevices = useCallback(async (userIdToLoad?: string) => {
-    if (!userIdToLoad && !userId) return;
-    
-    try {
-      setLoading(true);
-      const devicesData = await GPS51DataService.getUserDevices(userIdToLoad || userId!);
-      setDevices(devicesData);
-      return devicesData;
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to load devices';
-      setError(errorMsg);
-      toast({
-        title: "Error",
-        description: errorMsg,
-        variant: "destructive",
-      });
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  }, [userId, toast]);
+      console.log('Fetching vehicles with LEFT JOIN...');
 
-  // Load positions for device or devices
-  const loadPositions = useCallback(async (deviceIds?: string[], limit = 100) => {
-    const idsToLoad = deviceIds || (deviceId ? [deviceId] : devices.map(d => d.device_id));
-    if (idsToLoad.length === 0) return;
+      // Fetch ALL vehicles with their latest positions using LEFT JOIN
+      const { data: vehiclesRaw, error: vehiclesError } = await supabase
+        .from('vehicles')
+        .select(`
+          *,
+          vehicle_positions!left(
+            vehicle_id, latitude, longitude, speed, timestamp, address, ignition_status, heading, fuel_level, engine_temperature
+          )
+        `)
+        .order('updated_at', { ascending: false });
 
-    try {
-      setLoading(true);
-      const positionsData = await GPS51DataService.getLatestPositions(idsToLoad);
-      setPositions(positionsData);
-      return positionsData;
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to load positions';
-      setError(errorMsg);
-      toast({
-        title: "Error",
-        description: errorMsg,
-        variant: "destructive",
-      });
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  }, [deviceId, devices, toast]);
-
-  // Get latest position for a specific device
-  const getLatestPosition = useCallback(async (targetDeviceId: string) => {
-    try {
-      return await GPS51DataService.getLatestPositionForDevice(targetDeviceId);
-    } catch (err) {
-      console.error('Failed to get latest position:', err);
-      return null;
-    }
-  }, []);
-
-  // Get historical positions for a device
-  const getHistoricalPositions = useCallback(async (
-    targetDeviceId: string,
-    startTime?: string,
-    endTime?: string,
-    limit = 100
-  ) => {
-    try {
-      return await GPS51DataService.getDevicePositions(targetDeviceId, limit, startTime, endTime);
-    } catch (err) {
-      console.error('Failed to get historical positions:', err);
-      return [];
-    }
-  }, []);
-
-  // Refresh all data
-  const refresh = useCallback(async () => {
-    if (userId) {
-      const devicesData = await loadDevices(userId);
-      if (devicesData && devicesData.length > 0) {
-        await loadPositions(devicesData.map(d => d.device_id));
+      if (vehiclesError) {
+        console.error('Error fetching vehicles:', vehiclesError);
+        throw vehiclesError;
       }
-    }
-  }, [userId, loadDevices, loadPositions]);
 
-  // Auto-refresh effect
-  useEffect(() => {
-    if (autoRefresh && userId) {
-      refresh();
-      const interval = setInterval(refresh, refreshInterval);
-      return () => clearInterval(interval);
-    }
-  }, [autoRefresh, userId, refreshInterval, refresh]);
+      console.log('Raw vehicles data:', vehiclesRaw?.length || 0, 'vehicles found');
 
-  // Initial load effect
-  useEffect(() => {
-    if (userId) {
-      loadDevices(userId);
+      if (vehiclesRaw) {
+        const transformedVehicles: VehicleData[] = vehiclesRaw.map(vehicle => {
+          console.log(`Processing vehicle: ${vehicle.license_plate}, positions:`, vehicle.vehicle_positions);
+          
+          // Handle both array and single position data, get the most recent
+          let latestPositionRaw = null;
+          if (Array.isArray(vehicle.vehicle_positions) && vehicle.vehicle_positions.length > 0) {
+            // Sort by timestamp to get the latest
+            latestPositionRaw = vehicle.vehicle_positions.sort((a, b) => 
+              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+            )[0];
+          } else if (vehicle.vehicle_positions && !Array.isArray(vehicle.vehicle_positions)) {
+            latestPositionRaw = vehicle.vehicle_positions;
+          }
+
+          let latestPosition: VehiclePosition | null = null;
+          if (latestPositionRaw) {
+            latestPosition = {
+              vehicle_id: vehicle.id,
+              latitude: Number(latestPositionRaw.latitude),
+              longitude: Number(latestPositionRaw.longitude),
+              speed: Number(latestPositionRaw.speed || 0),
+              timestamp: latestPositionRaw.timestamp,
+              status: latestPositionRaw.address || 'Unknown location',
+              isMoving: latestPositionRaw.ignition_status || false,
+              ignition_status: latestPositionRaw.ignition_status || false,
+              heading: latestPositionRaw.heading ? Number(latestPositionRaw.heading) : undefined,
+              fuel_level: latestPositionRaw.fuel_level ? Number(latestPositionRaw.fuel_level) : undefined,
+              engine_temperature: latestPositionRaw.engine_temperature ? Number(latestPositionRaw.engine_temperature) : undefined,
+            };
+          }
+
+          return {
+            id: vehicle.id,
+            brand: vehicle.brand || 'Unknown',
+            model: vehicle.model || 'Unknown',
+            license_plate: vehicle.license_plate,
+            status: vehicle.status,
+            type: vehicle.type,
+            created_at: vehicle.created_at,
+            updated_at: vehicle.updated_at,
+            notes: vehicle.notes || '',
+            gps51_device_id: vehicle.gps51_device_id,
+            latest_position: latestPosition,
+          };
+        });
+
+        console.log('Transformed vehicles:', transformedVehicles.length, 'total');
+        console.log('Vehicles with positions:', transformedVehicles.filter(v => v.latest_position).length);
+
+        setVehicles(transformedVehicles);
+        
+        // Extract all positions for the separate positions array
+        const allPositions: VehiclePosition[] = transformedVehicles
+          .filter(v => v.latest_position !== null)
+          .map(v => v.latest_position as VehiclePosition);
+        
+        setVehiclePositions(allPositions);
+        console.log('Vehicle positions extracted:', allPositions.length);
+      }
+    } catch (err) {
+      console.error('Error fetching vehicle data:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setLoading(false);
     }
-  }, [userId, loadDevices]);
+  }, []);
+
+  useEffect(() => {
+    fetchVehicleData();
+  }, [fetchVehicleData]);
+
+  const refresh = useCallback(() => {
+    console.log('Manually refreshing vehicle data...');
+    fetchVehicleData();
+  }, [fetchVehicleData]);
 
   return {
-    user,
-    devices,
-    positions,
+    vehicles,
+    vehiclePositions,
     loading,
     error,
-    loadUser,
-    loadDevices,
-    loadPositions,
-    getLatestPosition,
-    getHistoricalPositions,
-    refresh,
-    // Helper methods
-    getDeviceById: useCallback((id: string) => devices.find(d => d.device_id === id), [devices]),
-    getPositionsForDevice: useCallback((id: string) => positions.filter(p => p.device_id === id), [positions]),
-    getActiveDevices: useCallback(() => devices.filter(d => d.last_seen_at && 
-      new Date(d.last_seen_at).getTime() > Date.now() - 5 * 60 * 1000), [devices])
+    refresh
   };
 };

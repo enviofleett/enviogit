@@ -1,29 +1,144 @@
-
-import { useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useIntelligentFiltering } from '../useIntelligentFiltering';
+import { useWebSocketConnection } from './useWebSocketConnection';
+import { useIntelligentFiltering } from './useIntelligentFiltering';
 import { scalingService } from '@/services/scaling/ScalingService';
 import { costOptimizationService } from '@/services/optimization/CostOptimizationService';
 import { advancedAnalyticsService } from '@/services/analytics/AdvancedAnalyticsService';
-import { GPS51Position, FleetMetrics } from './types';
 
-export const useDataFetcher = (
-  enableIntelligentFiltering: boolean,
-  maxRetries: number,
-  retries: number,
-  setLoading: React.Dispatch<React.SetStateAction<boolean>>,
-  setError: React.Dispatch<React.SetStateAction<string | null>>,
-  setPositions: React.Dispatch<React.SetStateAction<GPS51Position[]>>,
-  setMetrics: React.Dispatch<React.SetStateAction<FleetMetrics>>,
-  setLastSyncTime: React.Dispatch<React.SetStateAction<Date | null>>,
-  setRetries: React.Dispatch<React.SetStateAction<number>>
-) => {
+export interface GPS51Position {
+  deviceid: string;
+  callat: number;
+  callon: number;
+  updatetime: number;
+  speed: number;
+  moving: number;
+  strstatus: string;
+  totaldistance: number;
+  course: number;
+  altitude: number;
+  radius: number;
+  temp1?: number;
+  temp2?: number;
+  voltage?: number;
+  fuel?: number;
+}
+
+export interface LiveDataOptions {
+  enabled?: boolean;
+  refreshInterval?: number;
+  maxRetries?: number;
+  enableWebSocket?: boolean;
+  enableIntelligentFiltering?: boolean;
+}
+
+export interface FleetMetrics {
+  totalDevices: number;
+  activeDevices: number;
+  movingVehicles: number;
+  parkedDevices: number;
+  offlineVehicles: number;
+  totalDistance: number;
+  averageSpeed: number;
+  vehiclesWithGPS: number;
+  vehiclesWithoutGPS: number;
+  realTimeConnected: boolean;
+  lastUpdateTime: Date | null;
+}
+
+export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
+  const { 
+    enabled = true, 
+    refreshInterval = 30000, 
+    maxRetries = 3,
+    enableWebSocket = true,
+    enableIntelligentFiltering = true
+  } = options;
+
+  const [positions, setPositions] = useState<GPS51Position[]>([]);
+  const [metrics, setMetrics] = useState<FleetMetrics>({
+    totalDevices: 0,
+    activeDevices: 0,
+    movingVehicles: 0,
+    parkedDevices: 0,
+    offlineVehicles: 0,
+    totalDistance: 0,
+    averageSpeed: 0,
+    vehiclesWithGPS: 0,
+    vehiclesWithoutGPS: 0,
+    realTimeConnected: false,
+    lastUpdateTime: null
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [retries, setRetries] = useState(0);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+
+  // Initialize intelligent filtering
   const {
     shouldSyncPosition,
-    determineUpdateFrequency
+    determineUpdateFrequency,
+    getVehiclesByPriority
   } = useIntelligentFiltering();
 
+  // Handle WebSocket position updates
+  const handlePositionUpdate = useCallback((vehicleId: string, position: any) => {
+    console.log('Real-time position update received:', vehicleId, position);
+    
+    setPositions(prev => {
+      const existingIndex = prev.findIndex(p => p.deviceid === vehicleId);
+      const newPosition: GPS51Position = {
+        deviceid: vehicleId,
+        callat: position.latitude,
+        callon: position.longitude,
+        updatetime: new Date(position.timestamp).getTime(),
+        speed: position.speed || 0,
+        moving: position.ignition_status ? 1 : 0,
+        strstatus: position.address || 'Unknown',
+        totaldistance: 0,
+        course: position.heading || 0,
+        altitude: position.altitude || 0,
+        radius: position.accuracy || 0,
+        fuel: position.fuel_level,
+        temp1: position.engine_temperature,
+        voltage: position.battery_level
+      };
+
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        updated[existingIndex] = newPosition;
+        return updated;
+      } else {
+        return [...prev, newPosition];
+      }
+    });
+
+    // Update last sync time for real-time updates
+    setLastSyncTime(new Date());
+  }, []);
+
+  const handleConnectionChange = useCallback((connected: boolean) => {
+    setMetrics(prev => ({
+      ...prev,
+      realTimeConnected: connected,
+      lastUpdateTime: connected ? new Date() : prev.lastUpdateTime
+    }));
+  }, []);
+
+  // Initialize WebSocket connection
+  const {
+    connected: wsConnected,
+    subscribeToVehicles,
+    requestVehicleUpdate
+  } = useWebSocketConnection({
+    autoReconnect: enableWebSocket,
+    onPositionUpdate: handlePositionUpdate,
+    onConnectionChange: handleConnectionChange
+  });
+
   const fetchLiveData = useCallback(async () => {
+    if (!enabled) return;
+    
     try {
       setLoading(true);
       setError(null);
@@ -35,9 +150,9 @@ export const useDataFetcher = (
 
       // Update scaling metrics
       scalingService.updateMetrics({
-        activeVehicles: 0,
+        activeVehicles: 0, // Will be updated below
         apiCallsPerMinute: 1,
-        averageResponseTime: Date.now(),
+        averageResponseTime: Date.now(), // Start time for response measurement
         errorRate: 0,
         memoryUsage: 0,
         cpuUsage: 0
@@ -71,8 +186,9 @@ export const useDataFetcher = (
         Array.isArray(v.vehicle_positions) ? v.vehicle_positions.length === 0 : !v.vehicle_positions
       );
 
-      // Transform vehicles with positions
+      // Transform vehicles with positions and apply advanced optimization
       const transformedPositions: GPS51Position[] = [];
+      const vehicleIds: string[] = [];
       
       for (const vehicle of vehiclesWithPositions) {
         const positions = Array.isArray(vehicle.vehicle_positions) 
@@ -141,24 +257,31 @@ export const useDataFetcher = (
             // Cache the position for cost optimization
             costOptimizationService.setCachedPosition(vehicle.id, gps51Position, 30000);
           }
+
+          vehicleIds.push(vehicle.id);
         }
       }
 
       console.log('Transformed positions after Phase 5 filtering:', transformedPositions.length);
       setPositions(transformedPositions);
 
-      // Calculate comprehensive fleet metrics
+      // Subscribe to real-time updates for active vehicles if WebSocket is enabled
+      if (enableWebSocket && wsConnected && vehicleIds.length > 0) {
+        subscribeToVehicles(vehicleIds);
+      }
+
+      // Calculate comprehensive fleet metrics with Phase 5 enhancements
       const endTime = Date.now();
       const responseTime = endTime - startTime;
 
       // Update scaling metrics with actual values
       scalingService.updateMetrics({
         activeVehicles: allVehicles.length,
-        apiCallsPerMinute: 1,
+        apiCallsPerMinute: 1, // This would be accumulated over time
         averageResponseTime: responseTime,
         errorRate: 0,
-        memoryUsage: Math.floor(Math.random() * 20) + 60,
-        cpuUsage: Math.floor(Math.random() * 15) + 40
+        memoryUsage: Math.floor(Math.random() * 20) + 60, // Simulated
+        cpuUsage: Math.floor(Math.random() * 15) + 40 // Simulated
       });
 
       const totalDevices = allVehicles.length;
@@ -167,6 +290,7 @@ export const useDataFetcher = (
       
       const now = Date.now();
       const fiveMinutesAgo = now - (5 * 60 * 1000);
+      const thirtySecondsAgo = now - (30 * 1000);
       
       const activeDevices = transformedPositions.filter(p => 
         p.updatetime > fiveMinutesAgo
@@ -194,7 +318,7 @@ export const useDataFetcher = (
         averageSpeed: Math.round(averageSpeed),
         vehiclesWithGPS,
         vehiclesWithoutGPS,
-        realTimeConnected: false,
+        realTimeConnected: wsConnected,
         lastUpdateTime: new Date()
       };
 
@@ -213,7 +337,7 @@ export const useDataFetcher = (
         errorRate: (retries + 1) / maxRetries,
         activeVehicles: 0,
         apiCallsPerMinute: 0,
-        averageResponseTime: 5000,
+        averageResponseTime: 5000, // High response time for errors
         memoryUsage: 0,
         cpuUsage: 0
       });
@@ -225,19 +349,47 @@ export const useDataFetcher = (
     } finally {
       setLoading(false);
     }
-  }, [
-    enableIntelligentFiltering,
-    maxRetries,
-    retries,
-    setLoading,
-    setError,
-    setPositions,
-    setMetrics,
-    setLastSyncTime,
-    setRetries,
-    shouldSyncPosition,
-    determineUpdateFrequency
-  ]);
+  }, [enabled, maxRetries, retries, enableIntelligentFiltering, enableWebSocket, wsConnected, subscribeToVehicles, shouldSyncPosition, determineUpdateFrequency]);
 
-  return { fetchLiveData };
+  useEffect(() => {
+    if (!enabled) return;
+
+    fetchLiveData();
+
+    // Use intelligent refresh interval
+    const interval = setInterval(fetchLiveData, refreshInterval);
+    
+    return () => {
+      clearInterval(interval);
+    };
+  }, [fetchLiveData, refreshInterval, enabled]);
+
+  const refresh = useCallback(() => {
+    console.log('Manually refreshing live data...');
+    setRetries(0);
+    fetchLiveData();
+  }, [fetchLiveData]);
+
+  const triggerPrioritySync = useCallback((vehicleIds: string[]) => {
+    if (enableWebSocket && wsConnected) {
+      requestVehicleUpdate(vehicleIds);
+    }
+  }, [enableWebSocket, wsConnected, requestVehicleUpdate]);
+
+  return {
+    positions,
+    metrics,
+    loading,
+    error,
+    lastSyncTime,
+    refresh,
+    triggerPrioritySync,
+    intelligentFiltering: enableIntelligentFiltering ? {
+      getVehiclesByPriority
+    } : null,
+    // Phase 5 additions
+    scalingMetrics: scalingService.getMetrics(),
+    budgetStatus: costOptimizationService.getBudgetStatus(),
+    optimizationInsights: advancedAnalyticsService.generateOptimizationInsights()
+  };
 };
