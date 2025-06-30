@@ -1,67 +1,64 @@
+
 import { useEffect, useState } from 'react';
-import GPS51LiveDataDashboard from '@/components/dashboard/GPS51LiveDataDashboard';
+import GPS51LiveDashboard from '@/components/dashboard/GPS51LiveDashboard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Activity, Wifi, Users, MapPin } from 'lucide-react';
-import { gps51StartupService } from '@/services/gps51/GPS51StartupService';
+import { supabase } from '@/integrations/supabase/client';
 
 const Index = () => {
-  const [systemStatus, setSystemStatus] = useState({
-    isInitialized: false,
-    isLiveDataActive: false,
-    vehicleCount: 0,
+  const [systemStats, setSystemStats] = useState({
+    totalVehicles: 0,
+    totalPositions: 0,
+    recentPositions: 0,
     lastUpdate: null as Date | null
   });
 
   useEffect(() => {
-    const checkSystemStatus = () => {
-      const isInitialized = gps51StartupService.isSystemInitialized();
-      const liveDataService = gps51StartupService.getLiveDataService();
-      const serviceStatus = liveDataService.getServiceStatus();
-      const currentState = liveDataService.getCurrentState();
-      
-      setSystemStatus({
-        isInitialized,
-        isLiveDataActive: serviceStatus.isPolling,
-        vehicleCount: currentState.devices.length,
-        lastUpdate: currentState.lastUpdate
-      });
+    const fetchSystemStats = async () => {
+      try {
+        // Get total vehicles
+        const { count: vehicleCount } = await supabase
+          .from('vehicles')
+          .select('*', { count: 'exact' });
+
+        // Get total positions
+        const { count: positionCount } = await supabase
+          .from('vehicle_positions')
+          .select('*', { count: 'exact' });
+
+        // Get recent positions (last hour)
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        const { count: recentCount } = await supabase
+          .from('vehicle_positions')
+          .select('*', { count: 'exact' })
+          .gte('timestamp', oneHourAgo);
+
+        // Get last update time
+        const { data: lastPosition } = await supabase
+          .from('vehicle_positions')
+          .select('timestamp')
+          .order('timestamp', { ascending: false })
+          .limit(1)
+          .single();
+
+        setSystemStats({
+          totalVehicles: vehicleCount || 0,
+          totalPositions: positionCount || 0,
+          recentPositions: recentCount || 0,
+          lastUpdate: lastPosition ? new Date(lastPosition.timestamp) : null
+        });
+      } catch (error) {
+        console.error('Error fetching system stats:', error);
+      }
     };
 
-    // Initial check
-    checkSystemStatus();
-
-    // Listen for live data updates
-    const handleLiveDataUpdate = (event: CustomEvent) => {
-      const data = event.detail;
-      setSystemStatus(prev => ({
-        ...prev,
-        vehicleCount: data.devices.length,
-        lastUpdate: data.lastUpdate,
-        isLiveDataActive: true
-      }));
-    };
-
-    window.addEventListener('gps51-live-data-update', handleLiveDataUpdate as EventListener);
-
-    // Check status every 10 seconds
-    const interval = setInterval(checkSystemStatus, 10000);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('gps51-live-data-update', handleLiveDataUpdate as EventListener);
-    };
+    fetchSystemStats();
+    
+    // Refresh stats every minute
+    const interval = setInterval(fetchSystemStats, 60000);
+    return () => clearInterval(interval);
   }, []);
-
-  const getStatusBadge = () => {
-    if (systemStatus.isInitialized && systemStatus.isLiveDataActive) {
-      return <Badge className="bg-green-100 text-green-800">Live & Active</Badge>;
-    } else if (systemStatus.isInitialized) {
-      return <Badge className="bg-blue-100 text-blue-800">Connected</Badge>;
-    } else {
-      return <Badge variant="secondary">Initializing</Badge>;
-    }
-  };
 
   const formatLastUpdate = (date: Date | null) => {
     if (!date) return 'Never';
@@ -76,7 +73,7 @@ const Index = () => {
 
   return (
     <div className="p-6 space-y-6">
-      {/* System Status Header */}
+      {/* System Overview Header */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
@@ -84,7 +81,7 @@ const Index = () => {
               <Activity className="h-5 w-5" />
               GPS51 Fleet Management System
             </div>
-            {getStatusBadge()}
+            <Badge className="bg-blue-100 text-blue-800">Live System</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -92,28 +89,24 @@ const Index = () => {
             <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
               <Users className="h-8 w-8 text-blue-600" />
               <div>
-                <p className="text-sm text-slate-600">Live Vehicles</p>
-                <p className="text-2xl font-bold">{systemStatus.vehicleCount.toLocaleString()}</p>
+                <p className="text-sm text-slate-600">Total Vehicles</p>
+                <p className="text-2xl font-bold">{systemStats.totalVehicles.toLocaleString()}</p>
               </div>
             </div>
             
             <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
-              <Wifi className="h-8 w-8 text-green-600" />
+              <MapPin className="h-8 w-8 text-green-600" />
               <div>
-                <p className="text-sm text-slate-600">Connection</p>
-                <p className="text-lg font-bold">
-                  {systemStatus.isInitialized ? 'Connected' : 'Connecting...'}
-                </p>
+                <p className="text-sm text-slate-600">Total Positions</p>
+                <p className="text-2xl font-bold">{systemStats.totalPositions.toLocaleString()}</p>
               </div>
             </div>
             
             <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
-              <MapPin className="h-8 w-8 text-purple-600" />
+              <Wifi className="h-8 w-8 text-purple-600" />
               <div>
-                <p className="text-sm text-slate-600">Live Data</p>
-                <p className="text-lg font-bold">
-                  {systemStatus.isLiveDataActive ? 'Active' : 'Starting...'}
-                </p>
+                <p className="text-sm text-slate-600">Recent (1hr)</p>
+                <p className="text-2xl font-bold">{systemStats.recentPositions.toLocaleString()}</p>
               </div>
             </div>
             
@@ -121,7 +114,7 @@ const Index = () => {
               <Activity className="h-8 w-8 text-orange-600" />
               <div>
                 <p className="text-sm text-slate-600">Last Update</p>
-                <p className="text-lg font-bold">{formatLastUpdate(systemStatus.lastUpdate)}</p>
+                <p className="text-lg font-bold">{formatLastUpdate(systemStats.lastUpdate)}</p>
               </div>
             </div>
           </div>
@@ -129,18 +122,7 @@ const Index = () => {
       </Card>
 
       {/* Live Data Dashboard */}
-      {systemStatus.isInitialized ? (
-        <GPS51LiveDataDashboard />
-      ) : (
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <span className="ml-2">Initializing GPS51 system...</span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <GPS51LiveDashboard />
     </div>
   );
 };
