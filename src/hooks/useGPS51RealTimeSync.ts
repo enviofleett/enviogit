@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { gps51ConfigService } from '@/services/gp51/GPS51ConfigService';
 import { GPS51AuthService } from '@/services/gp51/GPS51AuthService';
@@ -77,9 +76,9 @@ export const useGPS51RealTimeSync = (enableSync: boolean = true) => {
         return;
       }
 
-      // Get real-time positions from GPS51
+      // Get real-time positions from GPS51 - FIXED: destructure the response
       const deviceIds = devices.map(d => d.deviceid);
-      const positions = await gps51Client.getRealtimePositions(deviceIds);
+      const { positions, lastQueryTime } = await gps51Client.getRealtimePositions(deviceIds);
       console.log(`📍 Received ${positions.length} live positions from GPS51`);
 
       // Transform GPS51 data to our format
