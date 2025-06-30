@@ -22,44 +22,43 @@ export class GPS51ApiClient {
     params: Record<string, any> = {}, 
     method: 'GET' | 'POST' = 'POST'
   ): Promise<GPS51ApiResponse> {
-    // Build URL with action and token as query parameters
-    const url = new URL(this.baseURL);
-    url.searchParams.append('action', action);
-    url.searchParams.append('token', token);
-
     try {
       console.log(`GPS51 API Request: ${action}`, { 
-        url: url.toString(), 
+        baseURL: this.baseURL,
         method,
-        params,
-        baseURL: this.baseURL
+        hasToken: !!token,
+        tokenLength: token?.length || 0,
+        paramsKeys: Object.keys(params)
       });
       
       const requestOptions: RequestInit = {
-        method: method,
+        method: 'POST', // GPS51 API uses POST for all requests
         headers: {
+          'Content-Type': 'application/json',
           'Accept': 'application/json',
         }
       };
 
-      // For POST requests, send parameters in JSON body
-      if (method === 'POST' && Object.keys(params).length > 0) {
-        requestOptions.headers = {
-          ...requestOptions.headers,
-          'Content-Type': 'application/json',
-        };
-        requestOptions.body = JSON.stringify(params);
-        
-        console.log('GPS51 POST Request Details:', {
-          url: url.toString(),
-          method: 'POST',
-          headers: requestOptions.headers,
-          body: requestOptions.body,
-          bodyObject: params
-        });
-      }
+      // Construct JSON body with action, token, and parameters
+      const requestBody = {
+        action: action,
+        token: token,
+        ...params
+      };
+
+      requestOptions.body = JSON.stringify(requestBody);
       
-      const response = await fetch(url.toString(), requestOptions);
+      console.log('GPS51 POST Request Details:', {
+        url: this.baseURL,
+        method: 'POST',
+        headers: requestOptions.headers,
+        bodyKeys: Object.keys(requestBody),
+        action: requestBody.action,
+        hasToken: !!requestBody.token,
+        tokenPreview: requestBody.token ? requestBody.token.substring(0, 8) + '...' : 'none'
+      });
+      
+      const response = await fetch(this.baseURL, requestOptions);
       
       const responseText = await response.text();
       console.log(`GPS51 API Raw Response (${action}):`, {
@@ -67,8 +66,8 @@ export class GPS51ApiClient {
         statusText: response.statusText,
         contentType: response.headers.get('Content-Type'),
         contentLength: response.headers.get('Content-Length'),
-        rawBody: responseText,
-        bodyLength: responseText.length,
+        rawBodyLength: responseText.length,
+        rawBodyPreview: responseText.substring(0, 200),
         isJSON: responseText.trim().startsWith('{') || responseText.trim().startsWith('[')
       });
 
@@ -109,7 +108,7 @@ export class GPS51ApiClient {
     } catch (error) {
       console.error(`GPS51 API Error (${action}):`, {
         error: error.message,
-        url: url.toString(),
+        url: this.baseURL,
         params,
         retryCount: this.retryCount,
         maxRetries: this.maxRetries

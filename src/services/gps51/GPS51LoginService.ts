@@ -2,6 +2,7 @@
 import { GPS51LoginParams, GPS51LoginValidator } from './GPS51LoginValidator';
 import { GPS51LoginRequest, GPS51LoginResponse } from './GPS51LoginRequest';
 import { GPS51LoginProcessor, GPS51LoginResult } from './GPS51LoginProcessor';
+import { analyzeGPS51Response, quickLogGPS51Response } from './GPS51ResponseAnalyzer';
 
 /**
  * GPS51 Login Service
@@ -23,17 +24,30 @@ export class GPS51LoginService {
       
       // Step 2: Construct API request URL and body (with MD5 password hashing)
       const { apiUrl, requestBody } = GPS51LoginRequest.constructRequest(params);
-      console.log('GPS51LoginService: Request constructed successfully');
+      console.log('GPS51LoginService: Request constructed successfully for POST with JSON body');
       
       // Step 3: Make HTTP POST request to GPS51 API
       const response = await GPS51LoginRequest.makeApiRequest(apiUrl, requestBody);
       console.log('GPS51LoginService: API request completed successfully');
       
-      // Step 4: Process response and return result
+      // Step 4: Analyze response using the response analyzer
+      quickLogGPS51Response(response, 'login-service');
+      const analysis = analyzeGPS51Response(response, 'login-service-processing');
+      
+      console.log('GPS51LoginService: Response analysis completed:', {
+        isSuccess: analysis.status.isSuccess,
+        hasToken: analysis.token.found,
+        tokenValid: analysis.token.isValid,
+        statusValue: analysis.status.value,
+        causeValue: analysis.cause.value
+      });
+      
+      // Step 5: Process response and return result
       const result = GPS51LoginProcessor.processResponse(response);
       console.log('GPS51LoginService: Login process completed:', {
         success: result.success,
         hasToken: !!result.token,
+        tokenLength: result.token?.length || 0,
         hasError: !!result.error
       });
       

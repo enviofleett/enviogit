@@ -29,25 +29,32 @@ export class GPS51LoginProcessor {
    * @returns Processed login result
    */
   static processResponse(response: GPS51LoginResponse): GPS51LoginResult {
-    // Use response analyzer for detailed logging
-    quickLogGPS51Response(response, 'login-request');
-    const analysis = analyzeGPS51Response(response, 'login-processing');
+    console.log('GPS51LoginProcessor: Starting response processing...');
     
-    console.log('GPS51LoginProcessor: Analysis complete:', {
+    // Use response analyzer for detailed logging and analysis
+    quickLogGPS51Response(response, 'login-processor');
+    const analysis = analyzeGPS51Response(response, 'login-processor-detailed');
+    
+    console.log('GPS51LoginProcessor: Comprehensive analysis complete:', {
       isSuccess: analysis.status.isSuccess,
-      hasToken: analysis.token.isValid,
+      hasToken: analysis.token.found,
+      tokenValid: analysis.token.isValid,
+      tokenLength: analysis.token.length,
       statusValue: analysis.status.value,
-      causeValue: analysis.cause.value
+      causeValue: analysis.cause.value,
+      hasUser: analysis.user.found,
+      userValue: analysis.user.value
     });
 
-    // Check for successful login (status: 0)
-    if (analysis.status.isSuccess) {
-      console.log('GPS51LoginProcessor: Login successful:', {
-        hasToken: analysis.token.found,
+    // Check for successful login using analyzed data
+    if (analysis.status.isSuccess && analysis.token.isValid) {
+      console.log('GPS51LoginProcessor: Login successful - extracting token and user data:', {
+        tokenFound: analysis.token.found,
         tokenValid: analysis.token.isValid,
-        tokenLength: analysis.token.value?.length || 0,
+        tokenLength: analysis.token.length,
+        tokenPreview: analysis.token.value ? analysis.token.value.substring(0, 8) + '...' : 'none',
         hasUser: analysis.user.found,
-        userInfo: analysis.user.value
+        username: analysis.user.value?.username || 'not found'
       });
       
       return {
@@ -58,18 +65,33 @@ export class GPS51LoginProcessor {
       };
     }
     
-    // Handle failed login
+    // Handle failed login with detailed error information
     const errorMessage = analysis.cause.value || `Login failed with status: ${analysis.status.value}`;
     
-    console.log('GPS51LoginProcessor: Login failed:', {
+    console.error('GPS51LoginProcessor: Login failed - detailed error analysis:', {
       status: analysis.status.value,
+      statusType: analysis.status.type,
       cause: analysis.cause.value,
-      errorMessage
+      causeType: analysis.cause.type,
+      message: analysis.message.value,
+      errorMessage,
+      tokenFound: analysis.token.found,
+      tokenValid: analysis.token.isValid
     });
+    
+    // Add specific error guidance based on status codes
+    let enhancedErrorMessage = errorMessage;
+    if (analysis.status.value === 8901) {
+      enhancedErrorMessage += ' - Parameter validation failed. Check username, password hash format, from, and type values.';
+    } else if (analysis.status.value === 1) {
+      enhancedErrorMessage += ' - Invalid credentials or account issue. Verify username and password.';
+    } else if (analysis.status.value === 8903) {
+      enhancedErrorMessage += ' - Account temporarily locked due to multiple failed attempts.';
+    }
     
     return {
       success: false,
-      error: errorMessage,
+      error: enhancedErrorMessage,
       status: analysis.status.value || -1,
       cause: analysis.cause.value || undefined
     };

@@ -26,7 +26,7 @@ export class GPS51LoginRequest {
   private static readonly REQUEST_TIMEOUT = 30000; // 30 seconds
 
   /**
-   * Constructs the API request URL and body
+   * Constructs the API request URL and body for POST request
    * @param params - Login parameters
    * @returns Object containing URL and request body
    */
@@ -34,31 +34,34 @@ export class GPS51LoginRequest {
     // Hash the password using MD5
     const hashedPassword = GPS51PasswordUtils.hashPassword(params.plainPassword);
     
-    // Construct API URL with action parameter
-    const apiUrl = `${this.BASE_URL}?action=login`;
+    // GPS51 API expects POST request to base URL (no query parameters)
+    const apiUrl = this.BASE_URL;
     
-    // Construct request body
+    // Construct request body with action and all parameters
     const requestBody = {
+      action: 'login',
       username: params.username.trim(),
       password: hashedPassword,
       from: params.from.trim().toUpperCase(),
       type: params.type.trim().toUpperCase()
     };
     
-    console.log('GPS51LoginRequest: Request construction:', {
+    console.log('GPS51LoginRequest: Request construction for POST:', {
       url: apiUrl,
       bodyKeys: Object.keys(requestBody),
       username: requestBody.username,
       passwordHashed: true,
+      passwordLength: hashedPassword.length,
       from: requestBody.from,
-      type: requestBody.type
+      type: requestBody.type,
+      action: requestBody.action
     });
     
     return { apiUrl, requestBody };
   }
 
   /**
-   * Makes HTTP POST request to GPS51 API
+   * Makes HTTP POST request to GPS51 API with JSON body
    * @param apiUrl - The API endpoint URL
    * @param requestBody - The request payload
    * @returns Promise resolving to API response
@@ -68,7 +71,11 @@ export class GPS51LoginRequest {
     const timeoutId = setTimeout(() => controller.abort(), this.REQUEST_TIMEOUT);
     
     try {
-      console.log('GPS51LoginRequest: Making API request to:', apiUrl);
+      console.log('GPS51LoginRequest: Making POST request to:', apiUrl);
+      console.log('GPS51LoginRequest: POST body:', {
+        ...requestBody,
+        password: 'hashed'
+      });
       
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -87,14 +94,25 @@ export class GPS51LoginRequest {
         status: response.status,
         statusText: response.statusText,
         ok: response.ok,
-        headers: Object.fromEntries(response.headers.entries())
+        contentType: response.headers.get('Content-Type')
       });
       
       if (!response.ok) {
         throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
       }
       
-      const jsonResponse = await response.json();
+      const responseText = await response.text();
+      console.log('GPS51LoginRequest: Raw response text:', responseText);
+      
+      const jsonResponse = JSON.parse(responseText);
+      console.log('GPS51LoginRequest: Parsed JSON response:', {
+        status: jsonResponse.status,
+        hasToken: !!jsonResponse.token,
+        tokenLength: jsonResponse.token?.length || 0,
+        hasUser: !!jsonResponse.user,
+        cause: jsonResponse.cause
+      });
+      
       return jsonResponse as GPS51LoginResponse;
       
     } catch (error) {

@@ -31,6 +31,7 @@ export class GPS51AuthenticationManager {
         type: credentials.type 
       });
 
+      // Validate that password is MD5 hash format
       if (!GPS51Utils.validateMD5Hash(credentials.password)) {
         console.warn('Password does not appear to be a valid MD5 hash. Expected 32 lowercase hex characters.');
         console.log('Password validation details:', GPS51Utils.getPasswordValidationInfo(credentials.password));
@@ -63,12 +64,23 @@ export class GPS51AuthenticationManager {
         }
       });
 
-      const requestToken = GPS51Utils.generateToken();
-      const response = await this.apiClient.makeRequest('login', requestToken, loginParams, 'POST');
+      // For login, we don't have a token yet, so we pass empty string
+      // The login action will return the token we need for subsequent calls
+      const response = await this.apiClient.makeRequest('login', '', loginParams, 'POST');
 
       // Use response analyzer for comprehensive analysis
       quickLogGPS51Response(response, 'authentication');
       const analysis = analyzeGPS51Response(response, 'authentication');
+
+      console.log('GPS51 Authentication Analysis Complete:', {
+        isSuccess: analysis.status.isSuccess,
+        statusValue: analysis.status.value,
+        hasToken: analysis.token.found,
+        tokenValid: analysis.token.isValid,
+        tokenLength: analysis.token.length,
+        hasUser: analysis.user.found,
+        cause: analysis.cause.value
+      });
 
       if (analysis.status.isSuccess && analysis.token.isValid) {
         console.log('GPS51 Authentication successful:', {
@@ -82,13 +94,14 @@ export class GPS51AuthenticationManager {
           token: analysis.token.value || undefined
         };
       } else {
-        console.error('GPS51 Authentication failed - analysis:', {
+        console.error('GPS51 Authentication failed - detailed analysis:', {
           statusFound: analysis.status.found,
           statusValue: analysis.status.value,
           statusIsSuccess: analysis.status.isSuccess,
           tokenFound: analysis.token.found,
           tokenValid: analysis.token.isValid,
-          causeValue: analysis.cause.value
+          causeValue: analysis.cause.value,
+          messageValue: analysis.message.value
         });
         
         let errorMessage = analysis.cause.value || `Authentication failed with status: ${analysis.status.value}`;
