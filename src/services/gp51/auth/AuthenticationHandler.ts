@@ -7,8 +7,14 @@ export class AuthenticationHandler {
     try {
       console.log('GPS51AuthService: Starting authentication...');
       
-      // Pass the full credentials object as the client expects
-      const result = await gps51Client.authenticate(credentials);
+      // Ensure all required properties are present for the GPS51 client
+      const authCredentials = {
+        ...credentials,
+        from: credentials.from || 'WEB',
+        type: credentials.type || 'USER'
+      };
+      
+      const result = await gps51Client.authenticate(authCredentials);
 
       if (!result.success) {
         throw new Error(result.error || 'Authentication failed');
