@@ -47,7 +47,7 @@ const GPS51LiveDashboard: React.FC = () => {
           ignition_status,
           fuel_level,
           address,
-          vehicles (
+          vehicles!vehicle_positions_vehicle_id_fkey (
             license_plate,
             brand,
             model,
@@ -62,7 +62,13 @@ const GPS51LiveDashboard: React.FC = () => {
         return;
       }
 
-      setLivePositions(data || []);
+      // Transform the data to match our interface
+      const transformedData = data?.map(item => ({
+        ...item,
+        vehicle: item.vehicles as any // Cast to match our interface
+      })) || [];
+
+      setLivePositions(transformedData);
     } catch (error) {
       console.error('Failed to fetch live positions:', error);
     } finally {

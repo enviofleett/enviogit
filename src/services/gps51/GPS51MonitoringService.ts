@@ -100,13 +100,14 @@ export class GPS51MonitoringService {
 
       // Check active device count (devices with positions in last hour)
       const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-      const { data: activeDevices } = await supabase
+      const { data: activeDevicesData } = await supabase
         .from('vehicle_positions')
         .select('vehicle_id')
-        .gte('timestamp', oneHourAgo.toISOString())
-        .group('vehicle_id');
+        .gte('timestamp', oneHourAgo.toISOString());
 
-      const activeDeviceCount = activeDevices?.length || 0;
+      // Get unique vehicle IDs by manually filtering the array
+      const uniqueVehicleIds = [...new Set(activeDevicesData?.map(pos => pos.vehicle_id) || [])];
+      const activeDeviceCount = uniqueVehicleIds.length;
 
       // Determine overall health
       const isHealthy = hasRecentSync && 
