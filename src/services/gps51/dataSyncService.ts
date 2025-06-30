@@ -1,6 +1,6 @@
 
 import { GPS51SyncResult } from './interfaces';
-import { GPS51AuthService } from './GPS51AuthService';
+import { GPS51AuthService } from '../gp51/GPS51AuthService';
 import { gps51Client } from './GPS51Client';
 import { GPS51DeviceTypeMapper } from './deviceTypeMapper';
 import { supabase } from '@/integrations/supabase/client';

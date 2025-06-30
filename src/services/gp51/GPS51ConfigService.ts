@@ -1,8 +1,8 @@
 
 import { GPS51AuthService, GPS51Credentials } from './GPS51AuthService';
-import { GPS51Config, GPS51SyncResult } from './interfaces';
-import { GPS51ConfigStorage } from './configStorage';
-import { GPS51DataSyncService } from './dataSyncService';
+import { GPS51Config, GPS51SyncResult } from '../gps51/interfaces';
+import { GPS51ConfigStorage } from '../gps51/configStorage';
+import { GPS51DataSyncService } from '../gps51/dataSyncService';
 
 export class GPS51ConfigService {
   private static instance: GPS51ConfigService;
@@ -82,4 +82,4 @@ export class GPS51ConfigService {
 export const gps51ConfigService = GPS51ConfigService.getInstance();
 
 // Re-export interfaces for backward compatibility
-export type { GPS51Config, GPS51SyncResult } from './interfaces';
+export type { GPS51Config, GPS51SyncResult } from '../gps51/interfaces';
