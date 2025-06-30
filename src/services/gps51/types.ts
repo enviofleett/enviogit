@@ -12,20 +12,58 @@ export interface GPS51Vehicle {
   updatedAt: string;
 }
 
+// Enhanced GPS51Position interface with all API specification fields
 export interface GPS51Position {
-  vehicleId: string;
-  latitude: number;
-  longitude: number;
-  altitude?: number;
+  deviceid: string;
+  devicetime: number;
+  arrivedtime?: number;
+  updatetime: number;
+  validpoistiontime?: number;
+  callat: number;
+  callon: number;
+  altitude: number;
+  radius?: number;
   speed: number;
-  heading: number;
-  accuracy?: number;
-  timestamp: string;
-  address?: string;
-  ignition: boolean;
+  course: number;
+  totaldistance: number;
+  status: number;
+  moving: number;
+  strstatus: string;
+  strstatusen?: string;
+  alarm?: number;
+  stralarm?: string;
+  stralarmsen?: string;
+  gotsrc?: string;
+  rxlevel?: number;
+  gpsvalidnum?: number;
+  parklat?: number;
+  parklon?: number;
+  parktime?: number;
+  parkduration?: number;
+  // Fuel related fields
+  totaloil?: number;
+  masteroil?: number;
+  slaveoil?: number;
+  // Temperature fields
+  temp1?: number;
+  temp2?: number;
+  temp3?: number;
+  temp4?: number;
+  // Humidity fields
+  humi1?: number;
+  humi2?: number;
+  // Voltage and power
+  voltage?: number;
+  voltagev?: number;
+  voltagepercent?: number;
+  // IO and status fields
+  iostatus?: number;
+  currentoverspeedstate?: number;
+  rotatestatus?: number;
+  loadstatus?: number;
+  weight?: number;
+  reportmode?: number;
   fuel?: number;
-  temperature?: number;
-  batteryLevel?: number;
 }
 
 export interface GPS51Telemetry {
@@ -55,7 +93,7 @@ export interface GPS51Geofence {
 export interface GPS51Device {
   deviceid: string;
   devicename: string;
-  devicetype: string; // Changed from number to string
+  devicetype: string;
   simnum: string;
   lastactivetime: number;
   isfree: number;
@@ -72,7 +110,6 @@ export interface GPS51Device {
   totaldistance?: number;
   altitude?: number;
   radius?: number;
-  // New fields from API specification
   overduetime?: string;
   expirenotifytime?: string;
   remark?: string;
@@ -84,7 +121,7 @@ export interface GPS51Device {
 
 // Enhanced GPS51 Group interface matching API specification
 export interface GPS51Group {
-  groupid: string; // Ensure string type
+  groupid: string;
   groupname: string;
   remark?: string;
   shared?: number;
@@ -93,9 +130,9 @@ export interface GPS51Group {
 
 // Enhanced API Response interface
 export interface GPS51ApiResponse {
-  status: number | string; // Support both for flexibility
+  status: number | string;
   message?: string;
-  cause?: string; // Added cause field for detailed error info
+  cause?: string;
   data?: any;
   token?: string;
   user?: GPS51User;
