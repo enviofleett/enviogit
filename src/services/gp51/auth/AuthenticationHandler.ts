@@ -8,7 +8,7 @@ export class AuthenticationHandler {
       console.log('GPS51AuthService: Starting authentication...');
       
       // Use only the username parameter as the client expects
-      const result = await gps51Client.authenticate(credentials.username, credentials.password);
+      const result = await gps51Client.authenticate(credentials.username);
 
       if (!result.success) {
         throw new Error(result.error || 'Authentication failed');
