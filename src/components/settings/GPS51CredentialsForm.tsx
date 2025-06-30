@@ -1,13 +1,16 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Eye, EyeOff, Save, TestTube, Trash2, CheckCircle, AlertCircle, Bug } from 'lucide-react';
+import { CheckCircle, AlertCircle, Bug } from 'lucide-react';
 import { useGPS51SessionBridge } from '@/hooks/useGPS51SessionBridge';
 import { md5 } from 'js-md5';
+import { CredentialsFormFields } from './components/CredentialsFormFields';
+import { CredentialsFormActions } from './components/CredentialsFormActions';
+import { CredentialsFormStatus } from './components/CredentialsFormStatus';
+import { CredentialsFormDebug } from './components/CredentialsFormDebug';
+import { CredentialsFormNotes } from './components/CredentialsFormNotes';
 
 export const GPS51CredentialsForm = () => {
   const [formData, setFormData] = useState({
@@ -359,211 +362,37 @@ export const GPS51CredentialsForm = () => {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="apiUrl">API URL *</Label>
-          <Input
-            id="apiUrl"
-            type="url"
-            placeholder="https://api.gps51.com/openapi"
-            value={formData.apiUrl}
-            onChange={(e) => handleInputChange('apiUrl', e.target.value)}
-          />
-          <p className="text-xs text-gray-500">
-            ⚠️ Must use <strong>api.gps51.com/openapi</strong> endpoint (NEW endpoint - /webapi is deprecated)
-          </p>
-        </div>
+        <CredentialsFormFields
+          formData={formData}
+          showPassword={showPassword}
+          onInputChange={handleInputChange}
+          onTogglePassword={() => setShowPassword(!showPassword)}
+        />
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="from">Platform *</Label>
-            <Select value={formData.from} onValueChange={(value: 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN') => handleInputChange('from', value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select platform" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="WEB">WEB</SelectItem>
-                <SelectItem value="ANDROID">ANDROID</SelectItem>
-                <SelectItem value="IPHONE">IPHONE</SelectItem>
-                <SelectItem value="WEIXIN">WEIXIN</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        <CredentialsFormDebug
+          showDebug={showDebug}
+          debugInfo={debugInfo}
+        />
 
-          <div className="space-y-2">
-            <Label htmlFor="type">Login Type *</Label>
-            <Select value={formData.type} onValueChange={(value: 'USER' | 'DEVICE') => handleInputChange('type', value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="USER">USER</SelectItem>
-                <SelectItem value="DEVICE">DEVICE</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+        <CredentialsFormNotes />
 
-        <div className="space-y-2">
-          <Label htmlFor="username">Username *</Label>
-          <Input
-            id="username"
-            type="text"
-            placeholder="Your GPS51 username"
-            value={formData.username}
-            onChange={(e) => handleInputChange('username', e.target.value)}
-          />
-        </div>
+        <CredentialsFormActions
+          onSave={handleSave}
+          onTestConnection={handleTestConnection}
+          onSyncData={handleSyncData}
+          onClearConfiguration={handleClearConfiguration}
+          isLoading={isLoading}
+          isTesting={isTesting}
+          isAuthenticated={status.isAuthenticated}
+          isConfigured={status.isConfigured}
+          syncStatus={status.syncStatus}
+          formData={formData}
+        />
 
-        <div className="space-y-2">
-          <Label htmlFor="password">Password *</Label>
-          <div className="relative">
-            <Input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Your GPS51 password"
-              value={formData.password}
-              onChange={(e) => handleInputChange('password', e.target.value)}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-              onClick={() => setShowPassword(!showPassword)}
-            >
-              {showPassword ? (
-                <EyeOff className="h-4 w-4" />
-              ) : (
-                <Eye className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-          <p className="text-xs text-gray-500">
-            Will be automatically encrypted using MD5 if not already hashed
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="apiKey">API Key (Optional)</Label>
-          <Input
-            id="apiKey"
-            type="text"
-            placeholder="Your GPS51 API key (if required)"
-            value={formData.apiKey}
-            onChange={(e) => handleInputChange('apiKey', e.target.value)}
-          />
-        </div>
-
-        {/* Debug Information Panel */}
-        {showDebug && debugInfo && (
-          <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-md">
-            <h4 className="text-sm font-semibold text-gray-800 mb-2">🐛 Debug Information</h4>
-            <pre className="text-xs text-gray-600 overflow-auto max-h-40">
-              {JSON.stringify(debugInfo, null, 2)}
-            </pre>
-          </div>
-        )}
-
-        {/* Critical Configuration Notes */}
-        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-          <h4 className="text-sm font-semibold text-yellow-800 mb-2">⚠️ Critical Configuration Requirements</h4>
-          <ul className="text-xs text-yellow-700 space-y-1">
-            <li>• API URL must use <strong>api.gps51.com/openapi</strong> (NEW endpoint - /webapi is deprecated)</li>
-            <li>• Platform and Login Type values are case-sensitive</li>
-            <li>• Password will be MD5 encrypted automatically if needed</li>
-            <li>• Authentication uses POST method with JSON body</li>
-          </ul>
-        </div>
-
-        <div className="flex gap-2 pt-4">
-          <Button 
-            onClick={handleSave}
-            disabled={isLoading || isTesting}
-            className="flex items-center gap-2"
-          >
-            <Save className="h-4 w-4" />
-            {isLoading ? 'Saving...' : 'Save & Connect'}
-          </Button>
-          
-          <Button 
-            onClick={handleTestConnection}
-            disabled={isTesting || isLoading || !formData.apiUrl || !formData.username || !formData.password}
-            variant="outline"
-            className="flex items-center gap-2"
-          >
-            <TestTube className="h-4 w-4" />
-            {isTesting ? 'Testing...' : 'Test Connection'}
-          </Button>
-
-          {status.isAuthenticated && (
-            <Button 
-              onClick={handleSyncData}
-              disabled={status.syncStatus === 'syncing'}
-              variant="secondary"
-              className="flex items-center gap-2"
-            >
-              <Save className="h-4 w-4" />
-              {status.syncStatus === 'syncing' ? 'Syncing...' : 'Sync Data'}
-            </Button>
-          )}
-
-          {status.isConfigured && (
-            <Button 
-              onClick={handleClearConfiguration}
-              variant="destructive"
-              className="flex items-center gap-2"
-            >
-              <Trash2 className="h-4 w-4" />
-              Clear
-            </Button>
-          )}
-        </div>
-
-        {/* Enhanced Status Display */}
-        {status.error && (
-          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
-            <p className="text-sm text-red-800">
-              ❌ Connection failed: {status.error}
-            </p>
-            {showDebug && (
-              <details className="mt-2">
-                <summary className="text-xs text-red-600 cursor-pointer">Show technical details</summary>
-                <div className="mt-1 text-xs text-red-600">
-                  Last attempt: {new Date().toLocaleString()}<br/>
-                  Status: {status.syncStatus}<br/>
-                  Health: {status.connectionHealth}
-                </div>
-              </details>
-            )}
-          </div>
-        )}
-
-        {status.isAuthenticated && (
-          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
-            <p className="text-sm text-green-800">
-              ✅ Connected to GPS51 API
-              <span className="block text-xs mt-1">
-                Connection Health: {status.connectionHealth.toUpperCase()}
-              </span>
-              <span className="block text-xs mt-1">
-                Sync Status: {status.syncStatus.toUpperCase()}
-              </span>
-              {status.lastSync && (
-                <span className="block text-xs mt-1">
-                  Last sync: {status.lastSync.toLocaleString()}
-                </span>
-              )}
-            </p>
-          </div>
-        )}
-
-        {status.syncStatus === 'syncing' && (
-          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-            <p className="text-sm text-blue-800">
-              🔄 Syncing data from GPS51...
-            </p>
-          </div>
-        )}
+        <CredentialsFormStatus
+          status={status}
+          showDebug={showDebug}
+        />
       </CardContent>
     </Card>
   );
