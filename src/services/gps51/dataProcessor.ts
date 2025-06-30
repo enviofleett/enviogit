@@ -19,19 +19,19 @@ export class GPS51DataProcessor {
 
   static transformPosition(gps51Position: GPS51Position) {
     return {
-      vehicle_id: gps51Position.vehicleId,
-      latitude: gps51Position.latitude,
-      longitude: gps51Position.longitude,
+      vehicle_id: gps51Position.deviceid,
+      latitude: gps51Position.callat,
+      longitude: gps51Position.callon,
       speed: gps51Position.speed,
-      heading: gps51Position.heading,
+      heading: gps51Position.course,
       altitude: gps51Position.altitude || 0,
-      accuracy: gps51Position.accuracy || 0,
-      timestamp: new Date(gps51Position.timestamp).toISOString(),
-      address: gps51Position.address,
-      ignition_status: gps51Position.ignition,
-      fuel_level: gps51Position.fuel,
-      engine_temperature: gps51Position.temperature,
-      battery_level: gps51Position.batteryLevel,
+      accuracy: gps51Position.radius || 0,
+      timestamp: new Date(gps51Position.updatetime).toISOString(),
+      address: gps51Position.strstatus,
+      ignition_status: gps51Position.moving === 1,
+      fuel_level: gps51Position.totaloil,
+      engine_temperature: gps51Position.temp1,
+      battery_level: gps51Position.voltagepercent,
     };
   }
 
@@ -71,9 +71,9 @@ export class GPS51DataProcessor {
     let score = 100;
 
     // Fuel efficiency factor
-    if (telemetry?.fuelLevel) {
-      if (telemetry.fuelLevel < 20) score -= 15;
-      else if (telemetry.fuelLevel < 50) score -= 5;
+    if (position.totaloil !== undefined) {
+      if (position.totaloil < 20) score -= 15;
+      else if (position.totaloil < 50) score -= 5;
     }
 
     // Speed factor (penalize excessive speeding)
@@ -81,15 +81,15 @@ export class GPS51DataProcessor {
     else if (position.speed > 80) score -= 10;
 
     // Engine temperature factor
-    if (telemetry?.engineTemperature) {
-      if (telemetry.engineTemperature > 100) score -= 25;
-      else if (telemetry.engineTemperature > 90) score -= 10;
+    if (position.temp1 !== undefined) {
+      if (position.temp1 > 100) score -= 25;
+      else if (position.temp1 > 90) score -= 10;
     }
 
     // Battery health factor
-    if (telemetry?.batteryVoltage) {
-      if (telemetry.batteryVoltage < 11.5) score -= 15;
-      else if (telemetry.batteryVoltage < 12.0) score -= 5;
+    if (position.voltagev !== undefined) {
+      if (position.voltagev < 11.5) score -= 15;
+      else if (position.voltagev < 12.0) score -= 5;
     }
 
     return Math.max(0, Math.min(100, score));
