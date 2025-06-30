@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -5,7 +6,8 @@ import { GPS51CredentialsForm } from '@/components/settings/GPS51CredentialsForm
 import { GPS51DebugPanel } from '@/components/settings/GPS51DebugPanel';
 import { GPS51BatchSyncPanel } from '@/components/settings/GPS51BatchSyncPanel';
 import { GPS51CronJobManager } from '@/components/settings/GPS51CronJobManager';
-import { Settings as SettingsIcon, Database, Bell, Shield, Zap, Clock } from 'lucide-react';
+import GPS51DeviceManager from '@/components/settings/GPS51DeviceManager';
+import { Settings as SettingsIcon, Database, Bell, Shield, Zap, Clock, Monitor } from 'lucide-react';
 import ScalingMonitorPanel from '@/components/settings/ScalingMonitorPanel';
 
 const Settings = () => {
@@ -21,6 +23,7 @@ const Settings = () => {
       <Tabs defaultValue="credentials" className="space-y-6">
         <TabsList>
           <TabsTrigger value="credentials">Credentials</TabsTrigger>
+          <TabsTrigger value="devices">Devices</TabsTrigger>
           <TabsTrigger value="debug">Debug</TabsTrigger>
           <TabsTrigger value="batch">Batch Sync</TabsTrigger>
           <TabsTrigger value="scheduler">Scheduler</TabsTrigger>
@@ -30,6 +33,10 @@ const Settings = () => {
 
         <TabsContent value="credentials">
           <GPS51CredentialsForm />
+        </TabsContent>
+
+        <TabsContent value="devices">
+          <GPS51DeviceManager />
         </TabsContent>
 
         <TabsContent value="debug">

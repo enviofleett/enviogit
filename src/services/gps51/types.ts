@@ -51,6 +51,71 @@ export interface GPS51Geofence {
   };
 }
 
+// Enhanced GPS51 Device interface matching API specification
+export interface GPS51Device {
+  deviceid: string;
+  devicename: string;
+  devicetype: string; // Changed from number to string
+  simnum: string;
+  lastactivetime: number;
+  isfree: number;
+  allowedit: number;
+  icon: number;
+  callat?: number;
+  callon?: number;
+  speed?: number;
+  course?: number;
+  updatetime?: number;
+  status?: number;
+  moving?: number;
+  strstatus?: string;
+  totaldistance?: number;
+  altitude?: number;
+  radius?: number;
+  // New fields from API specification
+  overduetime?: string;
+  expirenotifytime?: string;
+  remark?: string;
+  creater?: string;
+  videochannelcount?: number;
+  stared?: string;
+  loginame?: string;
+}
+
+// Enhanced GPS51 Group interface matching API specification
+export interface GPS51Group {
+  groupid: string; // Ensure string type
+  groupname: string;
+  remark?: string;
+  shared?: number;
+  devices: GPS51Device[];
+}
+
+// Enhanced API Response interface
+export interface GPS51ApiResponse {
+  status: number | string; // Support both for flexibility
+  message?: string;
+  cause?: string; // Added cause field for detailed error info
+  data?: any;
+  token?: string;
+  user?: GPS51User;
+  devices?: GPS51Device[];
+  positions?: GPS51Position[];
+  groups?: GPS51Group[];
+  records?: GPS51Position[];
+  lastquerypositiontime?: number;
+}
+
+export interface GPS51User {
+  username: string;
+  usertype: number;
+  companyname: string;
+  showname: string;
+  multilogin: number;
+  logintime?: number;
+  expiretime?: number;
+}
+
 export interface GPS51ApiConfig {
   baseUrl: string;
   apiKey: string;

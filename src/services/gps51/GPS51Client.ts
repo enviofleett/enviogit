@@ -21,7 +21,7 @@ export interface GPS51User {
 export interface GPS51Device {
   deviceid: string;
   devicename: string;
-  devicetype: number;
+  devicetype: string; // Updated to string per API spec
   simnum: string;
   lastactivetime: number;
   isfree: number;
@@ -38,6 +38,14 @@ export interface GPS51Device {
   totaldistance?: number;
   altitude?: number;
   radius?: number;
+  // Enhanced fields from API specification
+  overduetime?: string;
+  expirenotifytime?: string;
+  remark?: string;
+  creater?: string;
+  videochannelcount?: number;
+  stared?: string;
+  loginame?: string;
 }
 
 export interface GPS51Position {
@@ -64,8 +72,9 @@ export interface GPS51Position {
 }
 
 export interface GPS51ApiResponse {
-  status: number;
+  status: number | string; // Enhanced to support both types
   message?: string;
+  cause?: string; // Added cause field for detailed error info
   data?: any;
   token?: string;
   user?: GPS51User;
@@ -77,10 +86,10 @@ export interface GPS51ApiResponse {
 }
 
 export interface GPS51Group {
-  groupid: number;
+  groupid: string; // Ensure string type per API spec
   groupname: string;
   remark?: string;
-  shared: number;
+  shared?: number;
   devices: GPS51Device[];
 }
 
@@ -103,7 +112,7 @@ export class GPS51Client {
   private maxRetries = 3;
   private retryDelay = 1000;
 
-  constructor(baseURL = 'https://api.gps51.com/openapi') {
+  constructor(baseURL = 'https://api.gps51.com/openapi') { // Updated default URL
     this.baseURL = baseURL;
   }
 
@@ -198,6 +207,7 @@ export class GPS51Client {
         console.log(`GPS51 API Parsed Response (${action}):`, {
           status: data.status,
           message: data.message,
+          cause: data.cause, // Enhanced logging for cause field
           hasToken: !!data.token,
           hasUser: !!data.user,
           hasData: !!data.data,
@@ -305,6 +315,7 @@ export class GPS51Client {
       console.log('GPS51 Login Response Analysis:', {
         status: response.status,
         message: response.message,
+        cause: response.cause, // Enhanced logging for cause field
         hasToken: !!response.token,
         hasUser: !!response.user,
         tokenLength: response.token?.length || 0,
@@ -333,6 +344,7 @@ export class GPS51Client {
         const errorDetails = {
           status: response.status,
           message: response.message,
+          cause: response.cause, // Include cause in error details
           expectedStatus: GPS51_STATUS.SUCCESS,
           hasToken: !!response.token,
           rawResponse: response
@@ -340,7 +352,7 @@ export class GPS51Client {
         
         console.error('GPS51 Authentication failed - detailed analysis:', errorDetails);
         
-        let errorMessage = response.message || `Authentication failed with status: ${response.status}`;
+        let errorMessage = response.message || response.cause || `Authentication failed with status: ${response.status}`;
         
         // Provide specific guidance for common error statuses
         if (response.status === 8901) {
@@ -374,39 +386,111 @@ export class GPS51Client {
     }
   }
 
+  // Enhanced getDeviceList method with comprehensive validation and error handling
   async getDeviceList(): Promise<GPS51Device[]> {
     this.ensureAuthenticated();
     
     try {
-      const response = await this.makeRequest('querymonitorlist', { username: this.user?.username || 'octopus' });
-      console.log('GPS51 Device List Response:', response);
+      console.log('=== GPS51 DEVICE LIST QUERY START ===');
+      console.log('Request parameters:', {
+        username: this.user?.username || 'unknown',
+        hasToken: !!this.token,
+        tokenLength: this.token?.length || 0
+      });
 
-      if (response.status === GPS51_STATUS.SUCCESS) {
-        // Handle the groups format from GPS51 API
+      const response = await this.makeRequest('querymonitorlist', { 
+        username: this.user?.username || 'octopus' 
+      });
+      
+      console.log('GPS51 Device List Response Analysis:', {
+        status: response.status,
+        statusType: typeof response.status,
+        message: response.message,
+        cause: response.cause,
+        hasGroups: !!response.groups,
+        groupsLength: Array.isArray(response.groups) ? response.groups.length : 0,
+        hasData: !!response.data,
+        hasDevices: !!response.devices,
+        responseKeys: Object.keys(response)
+      });
+
+      // Enhanced status validation with cause field handling
+      if (response.status === GPS51_STATUS.SUCCESS || response.status === '0' || response.status === 0) {
         let devices: GPS51Device[] = [];
         
         if (response.groups && Array.isArray(response.groups)) {
           console.log(`Processing ${response.groups.length} device groups`);
           
-          response.groups.forEach((group: GPS51Group) => {
-            console.log(`Group: ${group.groupname}, devices: ${group.devices?.length || 0}`);
+          response.groups.forEach((group: GPS51Group, index: number) => {
+            console.log(`Group ${index + 1}: ${group.groupname}`, {
+              groupId: group.groupid,
+              devicesCount: group.devices?.length || 0,
+              hasRemark: !!group.remark,
+              deviceIds: group.devices?.map(d => d.deviceid) || []
+            });
             
             if (group.devices && Array.isArray(group.devices)) {
-              devices = devices.concat(group.devices);
+              // Validate and enhance device data
+              const validatedDevices = group.devices.map((device: GPS51Device) => {
+                console.log(`Device validation:`, {
+                  deviceid: device.deviceid,
+                  devicename: device.devicename,
+                  devicetype: device.devicetype,
+                  hasAllFields: !!(device.deviceid && device.devicename),
+                  extraFields: {
+                    hasOverdueTime: !!device.overduetime,
+                    hasRemark: !!device.remark,
+                    hasCreater: !!device.creater,
+                    hasVideoChannelCount: device.videochannelcount !== undefined
+                  }
+                });
+                
+                return device;
+              });
+              
+              devices = devices.concat(validatedDevices);
             }
           });
         } else if (response.data || response.devices) {
-          // Fallback to old format
-          devices = response.data || response.devices || [];
+          // Fallback to old format with validation
+          const fallbackDevices = response.data || response.devices || [];
+          console.log('Using fallback device format:', {
+            deviceCount: Array.isArray(fallbackDevices) ? fallbackDevices.length : 0,
+            isArray: Array.isArray(fallbackDevices)
+          });
+          devices = Array.isArray(fallbackDevices) ? fallbackDevices : [];
         }
         
-        console.log(`Retrieved ${devices.length} devices from GPS51 groups format`);
+        console.log(`=== GPS51 DEVICE LIST QUERY SUCCESS ===`);
+        console.log(`Retrieved ${devices.length} devices total`);
+        console.log('Device summary:', {
+          totalDevices: devices.length,
+          deviceTypes: [...new Set(devices.map(d => d.devicetype))],
+          activeDevices: devices.filter(d => d.status === 1).length,
+          devicesWithRemark: devices.filter(d => d.remark).length,
+          devicesWithVideoChannels: devices.filter(d => d.videochannelcount && d.videochannelcount > 0).length
+        });
+        
         return devices;
       } else {
-        throw new Error(response.message || 'Failed to fetch device list');
+        // Enhanced error handling with cause field
+        const errorMessage = response.cause || response.message || `Failed to fetch device list - Status: ${response.status}`;
+        console.error('GPS51 Device List Error:', {
+          status: response.status,
+          message: response.message,
+          cause: response.cause,
+          fullResponse: response
+        });
+        throw new Error(errorMessage);
       }
     } catch (error) {
-      console.error('Failed to get device list:', error);
+      console.error('=== GPS51 DEVICE LIST QUERY ERROR ===');
+      console.error('Failed to get device list:', {
+        error: error.message,
+        stack: error.stack,
+        hasToken: !!this.token,
+        hasUser: !!this.user
+      });
       throw error;
     }
   }
