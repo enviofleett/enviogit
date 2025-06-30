@@ -1,7 +1,7 @@
 
-import { gps51ConfigService } from './GPS51ConfigService';
-import { GPS51AuthService } from './GPS51AuthService';
-import { GPS51Credentials } from './GPS51CredentialsManager';
+import { gps51ConfigService } from '../gp51/GPS51ConfigService';
+import { GPS51AuthService } from '../gp51/GPS51AuthService';
+import { GPS51Credentials } from '../gp51/GPS51CredentialsManager';
 
 export class GPS51ConnectionService {
   private authService = GPS51AuthService.getInstance();
