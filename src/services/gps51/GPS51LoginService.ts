@@ -1,5 +1,5 @@
-
 import { md5 } from 'js-md5';
+import { analyzeGPS51Response, quickLogGPS51Response } from './GPS51ResponseAnalyzer';
 
 /**
  * GPS51 Login Response Interface
@@ -163,17 +163,15 @@ export class GPS51LoginService {
       
       const jsonResponse = await response.json();
       
-      console.log('GPS51LoginService: JSON response parsed:', {
-        hasStatus: 'status' in jsonResponse,
-        status: jsonResponse.status,
-        hasCause: 'cause' in jsonResponse,
-        cause: jsonResponse.cause,
-        hasMessage: 'message' in jsonResponse,
-        message: jsonResponse.message,
-        hasToken: 'token' in jsonResponse,
-        tokenLength: jsonResponse.token?.length || 0,
-        hasUser: 'user' in jsonResponse,
-        responseKeys: Object.keys(jsonResponse)
+      // Use the response analyzer for detailed logging
+      quickLogGPS51Response(jsonResponse, 'login-request');
+      const analysis = analyzeGPS51Response(jsonResponse, 'login');
+      
+      console.log('GPS51LoginService: Analysis complete:', {
+        isSuccess: analysis.status.isSuccess,
+        hasToken: analysis.token.isValid,
+        statusValue: analysis.status.value,
+        causeValue: analysis.cause.value
       });
       
       return jsonResponse as GPS51LoginResponse;
@@ -200,49 +198,41 @@ export class GPS51LoginService {
    * @returns Processed login result
    */
   private static processResponse(response: GPS51LoginResponse): GPS51LoginResult {
-    // Log the status and cause fields explicitly for debugging
-    console.log('GPS51LoginService: Processing response - Status and Cause:', {
-      status: response.status,
-      cause: response.cause,
-      message: response.message
-    });
+    // Use response analyzer for comprehensive analysis
+    const analysis = analyzeGPS51Response(response, 'login-processing');
     
     // Check for successful login (status: 0)
-    if (response.status === 0) {
+    if (analysis.status.isSuccess) {
       console.log('GPS51LoginService: Login successful:', {
-        hasToken: !!response.token,
-        tokenLength: response.token?.length || 0,
-        hasUser: !!response.user,
-        userInfo: response.user ? {
-          username: response.user.username,
-          usertype: response.user.usertype,
-          companyname: response.user.companyname
-        } : null
+        hasToken: analysis.token.found,
+        tokenValid: analysis.token.isValid,
+        tokenLength: analysis.token.value?.length || 0,
+        hasUser: analysis.user.found,
+        userInfo: analysis.user.value
       });
       
       return {
         success: true,
-        token: response.token,
-        user: response.user,
-        status: response.status
+        token: analysis.token.value || undefined,
+        user: analysis.user.value || undefined,
+        status: analysis.status.value || 0
       };
     }
     
-    // Handle failed login (status: 1 or other non-zero values)
-    const errorMessage = response.cause || response.message || `Login failed with status: ${response.status}`;
+    // Handle failed login
+    const errorMessage = analysis.cause.value || `Login failed with status: ${analysis.status.value}`;
     
     console.log('GPS51LoginService: Login failed:', {
-      status: response.status,
-      cause: response.cause,
-      message: response.message,
+      status: analysis.status.value,
+      cause: analysis.cause.value,
       errorMessage
     });
     
     return {
       success: false,
       error: errorMessage,
-      status: response.status,
-      cause: response.cause
+      status: analysis.status.value || -1,
+      cause: analysis.cause.value || undefined
     };
   }
 

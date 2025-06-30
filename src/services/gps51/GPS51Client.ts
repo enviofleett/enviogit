@@ -2,6 +2,7 @@ import { GPS51AuthCredentials, GPS51User, GPS51Device, GPS51Position, GPS51Group
 import { GPS51_STATUS, GPS51_DEFAULTS } from './GPS51Constants';
 import { GPS51Utils } from './GPS51Utils';
 import { GPS51ApiClient } from './GPS51ApiClient';
+import { analyzeGPS51Response, quickLogGPS51Response } from './GPS51ResponseAnalyzer';
 
 export class GPS51Client {
   private apiClient: GPS51ApiClient;
@@ -42,9 +43,12 @@ export class GPS51Client {
         type: credentials.type
       };
 
-      console.log('Sending GPS51 login request with corrected parameters:', {
+      console.log('Sending GPS51 login request with parameters:', {
         method: 'POST',
-        loginParams,
+        loginParams: {
+          ...loginParams,
+          password: 'hashed'
+        },
         parameterValidation: {
           usernameLength: loginParams.username.length,
           passwordIsMD5: GPS51Utils.validateMD5Hash(loginParams.password),
@@ -57,27 +61,17 @@ export class GPS51Client {
       const requestToken = GPS51Utils.generateToken();
       const response = await this.apiClient.makeRequest('login', requestToken, loginParams, 'POST');
 
-      console.log('GPS51 Login Response Analysis:', {
-        status: response.status,
-        message: response.message,
-        cause: response.cause,
-        hasToken: !!response.token,
-        hasUser: !!response.user,
-        tokenLength: response.token?.length || 0,
-        userInfo: response.user ? {
-          username: response.user.username,
-          usertype: response.user.usertype,
-          companyname: response.user.companyname
-        } : null
-      });
+      // Use response analyzer for comprehensive analysis
+      quickLogGPS51Response(response, 'authentication');
+      const analysis = analyzeGPS51Response(response, 'authentication');
 
-      if (response.status === GPS51_STATUS.SUCCESS && response.token) {
-        this.token = response.token;
-        this.user = response.user || null;
+      if (analysis.status.isSuccess && analysis.token.isValid) {
+        this.token = analysis.token.value;
+        this.user = analysis.user.value || null;
         this.tokenExpiry = Date.now() + (GPS51_DEFAULTS.TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
         
         console.log('GPS51 Authentication successful:', {
-          token: this.token,
+          token: this.token ? 'Present (length: ' + this.token.length + ')' : 'Missing',
           user: this.user
         });
 
@@ -86,23 +80,23 @@ export class GPS51Client {
           user: this.user || undefined
         };
       } else {
-        const errorDetails = {
-          status: response.status,
-          message: response.message,
-          cause: response.cause,
-          expectedStatus: GPS51_STATUS.SUCCESS,
-          hasToken: !!response.token,
-          rawResponse: response
-        };
+        console.error('GPS51 Authentication failed - analysis:', {
+          statusFound: analysis.status.found,
+          statusValue: analysis.status.value,
+          statusIsSuccess: analysis.status.isSuccess,
+          tokenFound: analysis.token.found,
+          tokenValid: analysis.token.isValid,
+          causeValue: analysis.cause.value
+        });
         
-        console.error('GPS51 Authentication failed - detailed analysis:', errorDetails);
+        let errorMessage = analysis.cause.value || `Authentication failed with status: ${analysis.status.value}`;
         
-        let errorMessage = response.message || response.cause || `Authentication failed with status: ${response.status}`;
-        
-        if (response.status === 8901) {
+        if (analysis.status.value === 8901) {
           errorMessage += ' (Status 8901: Authentication parameter validation failed - check username, password hash, from, and type parameters)';
-        } else if (response.status === 1) {
+        } else if (analysis.status.value === 1) {
           errorMessage += ' (Status 1: Login failed - verify credentials and account status)';
+        } else if (analysis.status.value === 8903) {
+          errorMessage += ' (Status 8903: Account locked due to too many failed attempts)';
         }
         
         return {
