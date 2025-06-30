@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { gps51Client } from './GPS51Client';
 import { GPS51AuthService } from '../gp51/GPS51AuthService';
@@ -8,6 +7,9 @@ interface GPS51Device {
   deviceid: string;
   devicename?: string;
   groupId?: string;
+  devicetype?: number;
+  isfree?: number;
+  simnum?: string;
 }
 
 export interface SyncResult {
