@@ -1,5 +1,5 @@
 
-import { GPS51ConnectionService } from '@/services/gp51/GPS51ConnectionService';
+import { GPS51ConnectionService } from '@/services/gps51/GPS51ConnectionService';
 import { useGPS51SessionStatus } from './useGPS51SessionStatus';
 import { SessionStatus, GPS51ConnectionCredentials } from './types/sessionBridgeTypes';
 
