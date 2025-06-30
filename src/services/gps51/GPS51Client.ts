@@ -1,257 +1,17 @@
-import { md5 } from 'js-md5';
 
-export interface GPS51AuthCredentials {
-  username: string;
-  password: string;
-  from: 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN';
-  type: 'USER' | 'DEVICE';
-  apiUrl: string;
-}
-
-export interface GPS51User {
-  username: string;
-  usertype: number;
-  companyname: string;
-  showname: string;
-  multilogin: number;
-  logintime?: number;
-  expiretime?: number;
-}
-
-export interface GPS51Device {
-  deviceid: string;
-  devicename: string;
-  devicetype: string; // Updated to string per API spec
-  simnum: string;
-  lastactivetime: number;
-  isfree: number;
-  allowedit: number;
-  icon: number;
-  callat?: number;
-  callon?: number;
-  speed?: number;
-  course?: number;
-  updatetime?: number;
-  status?: number;
-  moving?: number;
-  strstatus?: string;
-  totaldistance?: number;
-  altitude?: number;
-  radius?: number;
-  // Enhanced fields from API specification
-  overduetime?: string;
-  expirenotifytime?: string;
-  remark?: string;
-  creater?: string;
-  videochannelcount?: number;
-  stared?: string;
-  loginame?: string;
-}
-
-export interface GPS51Position {
-  deviceid: string;
-  devicetime: number;
-  callat: number;
-  callon: number;
-  altitude: number;
-  speed: number;
-  course: number;
-  totaldistance: number;
-  status: number;
-  moving: number;
-  strstatus: string;
-  updatetime: number;
-  temp1?: number;
-  temp2?: number;
-  voltage?: number;
-  fuel?: number;
-  radius?: number;
-  gotsrc?: string;
-  rxlevel?: number;
-  voltagepercent?: number;
-}
-
-export interface GPS51ApiResponse {
-  status: number | string; // Enhanced to support both types
-  message?: string;
-  cause?: string; // Added cause field for detailed error info
-  data?: any;
-  token?: string;
-  user?: GPS51User;
-  devices?: GPS51Device[];
-  positions?: GPS51Position[];
-  groups?: GPS51Group[];
-  records?: GPS51Position[];
-  lastquerypositiontime?: number;
-}
-
-export interface GPS51Group {
-  groupid: string; // Ensure string type per API spec
-  groupname: string;
-  remark?: string;
-  shared?: number;
-  devices: GPS51Device[];
-}
-
-const GPS51_STATUS = {
-  SUCCESS: 0,
-  FAILED: 1,
-  PASSWORD_ERROR: 1,
-  OFFLINE_NOT_CACHE: 2,
-  OFFLINE_CACHED: 3,
-  TOKEN_INVALID: 4,
-  NO_PERMISSION: 5,
-} as const;
+import { GPS51AuthCredentials, GPS51User, GPS51Device, GPS51Position, GPS51Group, GPS51ApiResponse } from './GPS51Types';
+import { GPS51_STATUS, GPS51_DEFAULTS } from './GPS51Constants';
+import { GPS51Utils } from './GPS51Utils';
+import { GPS51ApiClient } from './GPS51ApiClient';
 
 export class GPS51Client {
-  private baseURL: string;
+  private apiClient: GPS51ApiClient;
   private token: string | null = null;
   private tokenExpiry: number | null = null;
   private user: GPS51User | null = null;
-  private retryCount = 0;
-  private maxRetries = 3;
-  private retryDelay = 1000;
 
-  constructor(baseURL = 'https://api.gps51.com/openapi') { // Updated default URL
-    this.baseURL = baseURL;
-  }
-
-  private generateToken(): string {
-    // Generate a proper random token using crypto
-    const array = new Uint8Array(16);
-    crypto.getRandomValues(array);
-    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
-  }
-
-  private validateMD5Hash(password: string): boolean {
-    // Check if password is a valid MD5 hash (32 lowercase hex characters)
-    const md5Regex = /^[a-f0-9]{32}$/;
-    return md5Regex.test(password);
-  }
-
-  private async makeRequest(
-    action: string, 
-    params: Record<string, any> = {}, 
-    method: 'GET' | 'POST' = 'POST'
-  ): Promise<GPS51ApiResponse> {
-    const requestToken = this.token || this.generateToken();
-    
-    // Build URL with action and token as query parameters
-    const url = new URL(this.baseURL);
-    url.searchParams.append('action', action);
-    url.searchParams.append('token', requestToken);
-
-    try {
-      console.log(`GPS51 API Request: ${action}`, { 
-        url: url.toString(), 
-        method,
-        params,
-        baseURL: this.baseURL,
-        // Log password validation for login requests
-        ...(action === 'login' && params.password ? {
-          passwordValidation: {
-            isValidMD5: this.validateMD5Hash(params.password),
-            passwordLength: params.password.length,
-            hasUppercase: /[A-Z]/.test(params.password),
-            hasLowercase: /[a-z]/.test(params.password),
-            hasNumbers: /[0-9]/.test(params.password),
-            hasSpecialChars: /[^a-zA-Z0-9]/.test(params.password)
-          }
-        } : {})
-      });
-      
-      const requestOptions: RequestInit = {
-        method: method,
-        headers: {
-          'Accept': 'application/json',
-        }
-      };
-
-      // For POST requests, send parameters in JSON body
-      if (method === 'POST' && Object.keys(params).length > 0) {
-        requestOptions.headers = {
-          ...requestOptions.headers,
-          'Content-Type': 'application/json',
-        };
-        requestOptions.body = JSON.stringify(params);
-        
-        console.log('GPS51 POST Request Details:', {
-          url: url.toString(),
-          method: 'POST',
-          headers: requestOptions.headers,
-          body: requestOptions.body,
-          bodyObject: params
-        });
-      }
-      
-      const response = await fetch(url.toString(), requestOptions);
-      
-      const responseText = await response.text();
-      console.log(`GPS51 API Raw Response (${action}):`, {
-        status: response.status,
-        statusText: response.statusText,
-        contentType: response.headers.get('Content-Type'),
-        contentLength: response.headers.get('Content-Length'),
-        rawBody: responseText,
-        bodyLength: responseText.length,
-        isJSON: responseText.trim().startsWith('{') || responseText.trim().startsWith('[')
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${responseText}`);
-      }
-
-      let data: GPS51ApiResponse;
-      try {
-        data = JSON.parse(responseText);
-        console.log(`GPS51 API Parsed Response (${action}):`, {
-          status: data.status,
-          message: data.message,
-          cause: data.cause, // Enhanced logging for cause field
-          hasToken: !!data.token,
-          hasUser: !!data.user,
-          hasData: !!data.data,
-          hasGroups: !!data.groups,
-          hasRecords: !!data.records,
-          dataType: Array.isArray(data.data) ? 'array' : typeof data.data,
-          dataLength: Array.isArray(data.data) ? data.data.length : undefined,
-          groupsLength: Array.isArray(data.groups) ? data.groups.length : undefined,
-          recordsLength: Array.isArray(data.records) ? data.records.length : undefined
-        });
-      } catch (parseError) {
-        console.warn('Non-JSON response received:', responseText);
-        data = {
-          status: GPS51_STATUS.SUCCESS,
-          message: responseText,
-          data: responseText
-        };
-      }
-
-      this.retryCount = 0;
-      this.retryDelay = 1000;
-
-      return data;
-    } catch (error) {
-      console.error(`GPS51 API Error (${action}):`, {
-        error: error.message,
-        url: url.toString(),
-        params,
-        retryCount: this.retryCount,
-        maxRetries: this.maxRetries
-      });
-      
-      if (this.retryCount < this.maxRetries) {
-        this.retryCount++;
-        const delay = this.retryDelay * Math.pow(2, this.retryCount - 1);
-        
-        console.log(`Retrying GPS51 request (${this.retryCount}/${this.maxRetries}) after ${delay}ms`);
-        
-        await new Promise(resolve => setTimeout(resolve, delay));
-        return this.makeRequest(action, params, method);
-      }
-
-      throw error;
-    }
+  constructor(baseURL = GPS51_DEFAULTS.BASE_URL) {
+    this.apiClient = new GPS51ApiClient(baseURL);
   }
 
   async authenticate(credentials: GPS51AuthCredentials): Promise<{ success: boolean; user?: GPS51User; error?: string }> {
@@ -260,34 +20,22 @@ export class GPS51Client {
         username: credentials.username,
         passwordProvided: !!credentials.password,
         passwordLength: credentials.password?.length || 0,
-        isPasswordMD5: this.validateMD5Hash(credentials.password || ''),
+        isPasswordMD5: GPS51Utils.validateMD5Hash(credentials.password || ''),
         apiUrl: credentials.apiUrl,
         from: credentials.from,
         type: credentials.type 
       });
 
       // Validate that password is already MD5 hashed
-      if (!this.validateMD5Hash(credentials.password)) {
+      if (!GPS51Utils.validateMD5Hash(credentials.password)) {
         console.warn('Password does not appear to be a valid MD5 hash. Expected 32 lowercase hex characters.');
-        console.log('Password validation details:', {
-          provided: credentials.password,
-          length: credentials.password.length,
-          isHex: /^[a-fA-F0-9]+$/.test(credentials.password),
-          isLowercase: credentials.password === credentials.password.toLowerCase()
-        });
+        console.log('Password validation details:', GPS51Utils.getPasswordValidationInfo(credentials.password));
       }
 
-      // Update base URL if provided - ensure it uses api.gps51.com with openapi
+      // Update base URL if provided
       if (credentials.apiUrl) {
-        if (credentials.apiUrl.includes('www.gps51.com')) {
-          console.warn('Correcting API URL from www.gps51.com to api.gps51.com');
-          this.baseURL = credentials.apiUrl.replace('www.gps51.com', 'api.gps51.com').replace('/webapi', '/openapi');
-        } else if (credentials.apiUrl.includes('/webapi')) {
-          console.warn('Migrating API URL from /webapi to /openapi endpoint');
-          this.baseURL = credentials.apiUrl.replace('/webapi', '/openapi');
-        } else {
-          this.baseURL = credentials.apiUrl;
-        }
+        const normalizedUrl = GPS51Utils.normalizeApiUrl(credentials.apiUrl);
+        this.apiClient.setBaseURL(normalizedUrl);
       }
 
       const loginParams = {
@@ -298,24 +46,24 @@ export class GPS51Client {
       };
 
       console.log('Sending GPS51 login request with corrected parameters:', {
-        baseURL: this.baseURL,
         method: 'POST',
         loginParams,
         parameterValidation: {
           usernameLength: loginParams.username.length,
-          passwordIsMD5: this.validateMD5Hash(loginParams.password),
+          passwordIsMD5: GPS51Utils.validateMD5Hash(loginParams.password),
           fromValue: loginParams.from,
           typeValue: loginParams.type,
           allRequiredPresent: !!(loginParams.username && loginParams.password && loginParams.from && loginParams.type)
         }
       });
 
-      const response = await this.makeRequest('login', loginParams, 'POST');
+      const requestToken = GPS51Utils.generateToken();
+      const response = await this.apiClient.makeRequest('login', requestToken, loginParams, 'POST');
 
       console.log('GPS51 Login Response Analysis:', {
         status: response.status,
         message: response.message,
-        cause: response.cause, // Enhanced logging for cause field
+        cause: response.cause,
         hasToken: !!response.token,
         hasUser: !!response.user,
         tokenLength: response.token?.length || 0,
@@ -329,7 +77,7 @@ export class GPS51Client {
       if (response.status === GPS51_STATUS.SUCCESS && response.token) {
         this.token = response.token;
         this.user = response.user || null;
-        this.tokenExpiry = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
+        this.tokenExpiry = Date.now() + (GPS51_DEFAULTS.TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
         
         console.log('GPS51 Authentication successful:', {
           token: this.token,
@@ -344,7 +92,7 @@ export class GPS51Client {
         const errorDetails = {
           status: response.status,
           message: response.message,
-          cause: response.cause, // Include cause in error details
+          cause: response.cause,
           expectedStatus: GPS51_STATUS.SUCCESS,
           hasToken: !!response.token,
           rawResponse: response
@@ -386,7 +134,6 @@ export class GPS51Client {
     }
   }
 
-  // Enhanced getDeviceList method with comprehensive validation and error handling
   async getDeviceList(): Promise<GPS51Device[]> {
     this.ensureAuthenticated();
     
@@ -398,7 +145,7 @@ export class GPS51Client {
         tokenLength: this.token?.length || 0
       });
 
-      const response = await this.makeRequest('querymonitorlist', { 
+      const response = await this.apiClient.makeRequest('querymonitorlist', this.token!, { 
         username: this.user?.username || 'octopus' 
       });
       
@@ -414,7 +161,6 @@ export class GPS51Client {
         responseKeys: Object.keys(response)
       });
 
-      // Enhanced status validation with cause field handling
       if (response.status === GPS51_STATUS.SUCCESS || response.status === '0' || response.status === 0) {
         let devices: GPS51Device[] = [];
         
@@ -430,7 +176,6 @@ export class GPS51Client {
             });
             
             if (group.devices && Array.isArray(group.devices)) {
-              // Validate and enhance device data
               const validatedDevices = group.devices.map((device: GPS51Device) => {
                 console.log(`Device validation:`, {
                   deviceid: device.deviceid,
@@ -452,7 +197,6 @@ export class GPS51Client {
             }
           });
         } else if (response.data || response.devices) {
-          // Fallback to old format with validation
           const fallbackDevices = response.data || response.devices || [];
           console.log('Using fallback device format:', {
             deviceCount: Array.isArray(fallbackDevices) ? fallbackDevices.length : 0,
@@ -473,7 +217,6 @@ export class GPS51Client {
         
         return devices;
       } else {
-        // Enhanced error handling with cause field
         const errorMessage = response.cause || response.message || `Failed to fetch device list - Status: ${response.status}`;
         console.error('GPS51 Device List Error:', {
           status: response.status,
@@ -500,7 +243,7 @@ export class GPS51Client {
     
     try {
       const params: any = {
-        deviceids: deviceids.length > 0 ? deviceids : [], // Send empty array for all devices
+        deviceids: deviceids.length > 0 ? deviceids : [],
         lastquerypositiontime: lastQueryTime || 0
       };
 
@@ -510,11 +253,10 @@ export class GPS51Client {
         lastQueryTime: params.lastquerypositiontime
       });
 
-      const response = await this.makeRequest('lastposition', params);
+      const response = await this.apiClient.makeRequest('lastposition', this.token!, params);
       console.log('GPS51 Position Response:', response);
 
       if (response.status === GPS51_STATUS.SUCCESS) {
-        // Handle different response formats
         let positions: GPS51Position[] = [];
         
         if (response.records && Array.isArray(response.records)) {
@@ -551,8 +293,7 @@ export class GPS51Client {
     }
 
     try {
-      // Try a simple API call to check if token is still valid
-      const response = await this.makeRequest('querymonitorlist', { username: this.user.username });
+      const response = await this.apiClient.makeRequest('querymonitorlist', this.token!, { username: this.user.username });
       
       if (response.status === GPS51_STATUS.SUCCESS) {
         return true;
@@ -595,9 +336,11 @@ export class GPS51Client {
     this.token = null;
     this.tokenExpiry = null;
     this.user = null;
-    this.retryCount = 0;
-    this.retryDelay = 1000;
+    this.apiClient.resetRetryState();
   }
 }
 
 export const gps51Client = new GPS51Client();
+
+// Re-export types for convenience
+export type { GPS51AuthCredentials, GPS51User, GPS51Device, GPS51Position, GPS51Group, GPS51ApiResponse } from './GPS51Types';
