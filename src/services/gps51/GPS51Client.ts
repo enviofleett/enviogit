@@ -1,4 +1,3 @@
-
 import { GPS51AuthCredentials, GPS51User, GPS51Device, GPS51Position, GPS51Group, GPS51ApiResponse } from './GPS51Types';
 import { GPS51_STATUS, GPS51_DEFAULTS } from './GPS51Constants';
 import { GPS51Utils } from './GPS51Utils';
@@ -26,13 +25,11 @@ export class GPS51Client {
         type: credentials.type 
       });
 
-      // Validate that password is already MD5 hashed
       if (!GPS51Utils.validateMD5Hash(credentials.password)) {
         console.warn('Password does not appear to be a valid MD5 hash. Expected 32 lowercase hex characters.');
         console.log('Password validation details:', GPS51Utils.getPasswordValidationInfo(credentials.password));
       }
 
-      // Update base URL if provided
       if (credentials.apiUrl) {
         const normalizedUrl = GPS51Utils.normalizeApiUrl(credentials.apiUrl);
         this.apiClient.setBaseURL(normalizedUrl);
@@ -40,7 +37,7 @@ export class GPS51Client {
 
       const loginParams = {
         username: credentials.username,
-        password: credentials.password, // Should already be MD5 hashed
+        password: credentials.password,
         from: credentials.from,
         type: credentials.type
       };
@@ -102,7 +99,6 @@ export class GPS51Client {
         
         let errorMessage = response.message || response.cause || `Authentication failed with status: ${response.status}`;
         
-        // Provide specific guidance for common error statuses
         if (response.status === 8901) {
           errorMessage += ' (Status 8901: Authentication parameter validation failed - check username, password hash, from, and type parameters)';
         } else if (response.status === 1) {
@@ -182,6 +178,8 @@ export class GPS51Client {
                   devicename: device.devicename,
                   devicetype: device.devicetype,
                   hasAllFields: !!(device.deviceid && device.devicename),
+                  lastactivetime: device.lastactivetime,
+                  isActiveRecently: device.lastactivetime ? (Date.now() - device.lastactivetime < 30 * 60 * 1000) : false,
                   extraFields: {
                     hasOverdueTime: !!device.overduetime,
                     hasRemark: !!device.remark,
@@ -207,11 +205,17 @@ export class GPS51Client {
         
         console.log(`=== GPS51 DEVICE LIST QUERY SUCCESS ===`);
         console.log(`Retrieved ${devices.length} devices total`);
-        console.log('Device summary:', {
+        
+        // Enhanced device analysis for live data troubleshooting
+        const activeDevices = devices.filter(d => d.lastactivetime && (Date.now() - d.lastactivetime < 30 * 60 * 1000));
+        const recentlyActiveDevices = devices.filter(d => d.lastactivetime && (Date.now() - d.lastactivetime < 2 * 60 * 60 * 1000));
+        
+        console.log('Device activity analysis:', {
           totalDevices: devices.length,
+          devicesWithLastActiveTime: devices.filter(d => d.lastactivetime).length,
+          activeDevices: activeDevices.length,
+          recentlyActiveDevices: recentlyActiveDevices.length,
           deviceTypes: [...new Set(devices.map(d => d.devicetype))],
-          activeDevices: devices.filter(d => d.status === 1).length,
-          devicesWithRemark: devices.filter(d => d.remark).length,
           devicesWithVideoChannels: devices.filter(d => d.videochannelcount && d.videochannelcount > 0).length
         });
         
@@ -238,38 +242,59 @@ export class GPS51Client {
     }
   }
 
-  async getRealtimePositions(deviceids: string[] = [], lastQueryTime?: number): Promise<GPS51Position[]> {
+  async getRealtimePositions(deviceids: string[] = [], lastQueryTime?: number): Promise<{positions: GPS51Position[], lastQueryTime: number}> {
     this.ensureAuthenticated();
     
     try {
+      // CRITICAL FIX: Handle lastquerypositiontime correctly
+      // For first call: use 0 or omit to get all available positions
+      // For subsequent calls: use the server's lastquerypositiontime from previous response
       const params: any = {
-        deviceids: deviceids.length > 0 ? deviceids : [],
-        lastquerypositiontime: lastQueryTime || 0
+        deviceids: deviceids.length > 0 ? deviceids : []
       };
 
-      console.log('GPS51 Position Request Parameters:', {
+      // Only add lastquerypositiontime if we have a valid value from previous server response
+      if (lastQueryTime !== undefined && lastQueryTime > 0) {
+        params.lastquerypositiontime = lastQueryTime;
+      } else {
+        // First call - omit parameter to get all available positions
+        console.log('GPS51 Position Request: First call - omitting lastquerypositiontime to get all available positions');
+      }
+
+      console.log('GPS51 Position Request Parameters (FIXED):', {
         deviceidsCount: params.deviceids.length,
-        deviceids: params.deviceids,
-        lastQueryTime: params.lastquerypositiontime
+        deviceids: params.deviceids.slice(0, 5), // Log first 5 for debugging
+        lastQueryTime: params.lastquerypositiontime,
+        isFirstCall: !params.lastquerypositiontime,
+        requestType: params.lastquerypositiontime ? 'incremental' : 'initial'
       });
 
       const response = await this.apiClient.makeRequest('lastposition', this.token!, params);
-      console.log('GPS51 Position Response:', response);
+      
+      console.log('GPS51 Position Response Analysis (FIXED):', {
+        status: response.status,
+        cause: response.cause,
+        hasRecords: !!response.records,
+        recordsLength: Array.isArray(response.records) ? response.records.length : 0,
+        serverLastQueryTime: response.lastquerypositiontime,
+        serverTimestamp: new Date(response.lastquerypositiontime).toISOString(),
+        responseKeys: Object.keys(response)
+      });
 
       if (response.status === GPS51_STATUS.SUCCESS) {
         let positions: GPS51Position[] = [];
         
         if (response.records && Array.isArray(response.records)) {
           positions = response.records;
-          console.log(`Retrieved ${positions.length} positions from records field`);
+          console.log(`GPS51 POSITION SUCCESS: Retrieved ${positions.length} positions from records field`);
         } else if (response.data && Array.isArray(response.data)) {
           positions = response.data;
-          console.log(`Retrieved ${positions.length} positions from data field`);
+          console.log(`GPS51 POSITION SUCCESS: Retrieved ${positions.length} positions from data field`);
         } else if (response.positions && Array.isArray(response.positions)) {
           positions = response.positions;
-          console.log(`Retrieved ${positions.length} positions from positions field`);
+          console.log(`GPS51 POSITION SUCCESS: Retrieved ${positions.length} positions from positions field`);
         } else {
-          console.warn('No position data found in response:', {
+          console.warn('GPS51 POSITION WARNING: No position data found in response:', {
             hasRecords: !!response.records,
             hasData: !!response.data,
             hasPositions: !!response.positions,
@@ -277,12 +302,37 @@ export class GPS51Client {
           });
         }
         
-        return positions;
+        // CRITICAL FIX: Return the server's lastquerypositiontime for next call
+        const serverLastQueryTime = response.lastquerypositiontime || lastQueryTime || 0;
+        
+        console.log('GPS51 Position Final Result:', {
+          positionsRetrieved: positions.length,
+          serverLastQueryTime,
+          nextCallTimestamp: new Date(serverLastQueryTime).toISOString()
+        });
+        
+        return {
+          positions,
+          lastQueryTime: serverLastQueryTime
+        };
       } else {
-        throw new Error(response.message || 'Failed to fetch realtime positions');
+        const errorMessage = response.message || response.cause || 'Failed to fetch realtime positions';
+        console.error('GPS51 Position API Error:', {
+          status: response.status,
+          message: response.message,
+          cause: response.cause,
+          fullResponse: response
+        });
+        throw new Error(errorMessage);
       }
     } catch (error) {
-      console.error('Failed to get realtime positions:', error);
+      console.error('GPS51 Position Request Failed:', {
+        error: error.message,
+        stack: error.stack,
+        deviceCount: deviceids.length,
+        lastQueryTime,
+        hasToken: !!this.token
+      });
       throw error;
     }
   }
