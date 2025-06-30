@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import GPS51LiveDataDashboard from '@/components/dashboard/GPS51LiveDataDashboard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,7 +15,7 @@ const Index = () => {
 
   useEffect(() => {
     const checkSystemStatus = () => {
-      const isInitialized = gps51StartupService.isInitialized();
+      const isInitialized = gps51StartupService.isSystemInitialized();
       const liveDataService = gps51StartupService.getLiveDataService();
       const serviceStatus = liveDataService.getServiceStatus();
       const currentState = liveDataService.getCurrentState();
