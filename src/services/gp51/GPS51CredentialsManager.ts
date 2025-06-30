@@ -26,36 +26,90 @@ export class GPS51CredentialsManager {
   clearCredentials(): void {
     this.credentials = null;
     localStorage.removeItem('gps51_credentials');
+    localStorage.removeItem('gps51_password_hash');
+    localStorage.removeItem('gps51_username');
+    localStorage.removeItem('gps51_api_url');
+    localStorage.removeItem('gps51_from');
+    localStorage.removeItem('gps51_type');
+    localStorage.removeItem('gps51_api_key');
   }
 
   private saveCredentialsToStorage(credentials: GPS51Credentials): void {
-    // Store non-sensitive credentials only
-    const safeCredentials = {
-      username: credentials.username,
-      apiUrl: credentials.apiUrl,
-      from: credentials.from,
-      type: credentials.type
-    };
-    localStorage.setItem('gps51_credentials', JSON.stringify(safeCredentials));
+    try {
+      // Store individual items for easy access
+      localStorage.setItem('gps51_api_url', credentials.apiUrl);
+      localStorage.setItem('gps51_username', credentials.username);
+      localStorage.setItem('gps51_password_hash', credentials.password); // Store the hashed password
+      localStorage.setItem('gps51_from', credentials.from || 'WEB');
+      localStorage.setItem('gps51_type', credentials.type || 'USER');
+      
+      if (credentials.apiKey) {
+        localStorage.setItem('gps51_api_key', credentials.apiKey);
+      }
+
+      // Store complete credentials object for restoration
+      const safeCredentials = {
+        username: credentials.username,
+        password: credentials.password, // This is already hashed
+        apiUrl: credentials.apiUrl,
+        from: credentials.from || 'WEB',
+        type: credentials.type || 'USER',
+        apiKey: credentials.apiKey
+      };
+      
+      localStorage.setItem('gps51_credentials', JSON.stringify(safeCredentials));
+      
+      console.log('GPS51CredentialsManager: Credentials saved to localStorage');
+    } catch (error) {
+      console.error('GPS51CredentialsManager: Failed to save credentials:', error);
+    }
   }
 
   private loadCredentialsFromStorage(): void {
-    const storedCreds = localStorage.getItem('gps51_credentials');
-    
-    if (storedCreds) {
-      try {
+    try {
+      const storedCreds = localStorage.getItem('gps51_credentials');
+      
+      if (storedCreds) {
         const creds = JSON.parse(storedCreds);
-        // Note: We don't store passwords, so this will be incomplete
         this.credentials = {
           username: creds.username,
-          password: '', // Password not stored for security
+          password: creds.password, // This should be the hashed password
           apiUrl: creds.apiUrl,
-          from: creds.from,
-          type: creds.type
+          from: creds.from || 'WEB',
+          type: creds.type || 'USER',
+          apiKey: creds.apiKey
         };
-      } catch (e) {
-        console.warn('Failed to parse stored GPS51 credentials');
+        
+        console.log('GPS51CredentialsManager: Credentials restored from localStorage');
+      } else {
+        // Fallback: try to load from individual items
+        const username = localStorage.getItem('gps51_username');
+        const passwordHash = localStorage.getItem('gps51_password_hash');
+        const apiUrl = localStorage.getItem('gps51_api_url');
+        
+        if (username && passwordHash && apiUrl) {
+          this.credentials = {
+            username,
+            password: passwordHash,
+            apiUrl,
+            from: (localStorage.getItem('gps51_from') as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN') || 'WEB',
+            type: (localStorage.getItem('gps51_type') as 'USER' | 'DEVICE') || 'USER',
+            apiKey: localStorage.getItem('gps51_api_key') || undefined
+          };
+          
+          console.log('GPS51CredentialsManager: Credentials restored from individual items');
+        }
       }
+    } catch (error) {
+      console.warn('GPS51CredentialsManager: Failed to load credentials from localStorage:', error);
+      this.credentials = null;
     }
+  }
+
+  hasStoredCredentials(): boolean {
+    return !!(localStorage.getItem('gps51_credentials') || 
+              (localStorage.getItem('gps51_username') && 
+               localStorage.getItem('gps51_password_hash') && 
+               localStorage.getItem('gps51_api_url')));
   }
 }

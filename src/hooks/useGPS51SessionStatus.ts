@@ -25,13 +25,17 @@ export const useGPS51SessionStatus = () => {
         const isAuthenticated = isConfigured && authService.isAuthenticated();
         const token = isAuthenticated ? await authService.getValidToken() : null;
         
+        // Get initialization status
+        const initStatus = gps51StartupService.getInitializationStatus();
+        
         setStatus(prev => ({
           ...prev,
           isConnected: !!token,
           isAuthenticated,
           isConfigured,
           error: null,
-          connectionHealth: token ? 'good' : 'lost'
+          connectionHealth: token ? 'good' : (isConfigured ? 'poor' : 'lost'),
+          syncStatus: initStatus.liveDataActive ? 'success' : 'idle'
         }));
       } catch (error) {
         console.error('GPS51 status check failed:', error);
@@ -40,7 +44,8 @@ export const useGPS51SessionStatus = () => {
           error: error instanceof Error ? error.message : 'Unknown error',
           isConnected: false,
           isAuthenticated: false,
-          connectionHealth: 'lost'
+          connectionHealth: 'lost',
+          syncStatus: 'error'
         }));
       }
     };
@@ -54,18 +59,27 @@ export const useGPS51SessionStatus = () => {
         ...prev,
         lastSync: new Date(),
         syncStatus: 'success',
-        connectionHealth: 'good'
+        connectionHealth: 'good',
+        isConnected: true
       }));
     };
 
     // Listen for token refresh events
     const handleTokenRefresh = () => {
-      checkStatus();
+      console.log('Token refresh event received, checking status...');
+      setTimeout(checkStatus, 1000); // Small delay to allow token refresh to complete
+    };
+
+    // Listen for authentication events
+    const handleAuthenticationEvent = () => {
+      console.log('Authentication event received, checking status...');
+      setTimeout(checkStatus, 500);
     };
 
     // Set up event listeners
     window.addEventListener('gps51-live-data-update', handleLiveDataUpdate as EventListener);
     window.addEventListener('gps51-token-refresh-needed', handleTokenRefresh);
+    window.addEventListener('gps51-authentication-changed', handleAuthenticationEvent);
 
     // Check status every 30 seconds
     const interval = setInterval(checkStatus, 30000);
@@ -74,6 +88,7 @@ export const useGPS51SessionStatus = () => {
       clearInterval(interval);
       window.removeEventListener('gps51-live-data-update', handleLiveDataUpdate as EventListener);
       window.removeEventListener('gps51-token-refresh-needed', handleTokenRefresh);
+      window.removeEventListener('gps51-authentication-changed', handleAuthenticationEvent);
     };
   }, [authService]);
 
@@ -92,7 +107,9 @@ export const useGPS51SessionStatus = () => {
           lastSync: new Date(),
           syncStatus: 'success',
           connectionHealth: 'good',
-          error: null
+          error: null,
+          isAuthenticated: true,
+          isConnected: true
         }));
       } else {
         throw new Error('Authentication refresh failed');
@@ -107,5 +124,39 @@ export const useGPS51SessionStatus = () => {
     }
   };
 
-  return { status, updateStatus, forceRefresh };
+  const forceRestart = async () => {
+    try {
+      setStatus(prev => ({ ...prev, syncStatus: 'syncing' }));
+      
+      const restarted = await gps51StartupService.restart();
+      if (restarted) {
+        setStatus(prev => ({
+          ...prev,
+          lastSync: new Date(),
+          syncStatus: 'success',
+          connectionHealth: 'good',
+          error: null,
+          isAuthenticated: true,
+          isConnected: true
+        }));
+      } else {
+        throw new Error('System restart failed');
+      }
+    } catch (error) {
+      setStatus(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Restart failed',
+        syncStatus: 'error',
+        connectionHealth: 'poor'
+      }));
+    }
+  };
+
+  return { 
+    status, 
+    updateStatus, 
+    forceRefresh, 
+    forceRestart,
+    initializationStatus: gps51StartupService.getInitializationStatus()
+  };
 };

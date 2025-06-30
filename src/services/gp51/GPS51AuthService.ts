@@ -29,6 +29,13 @@ export class GPS51AuthService {
     return this.authManager.refreshToken();
   }
 
+  async restoreAuthentication(): Promise<boolean> {
+    if (typeof this.authManager.restoreAuthentication === 'function') {
+      return this.authManager.restoreAuthentication();
+    }
+    return false;
+  }
+
   logout(): void {
     this.authManager.logout();
   }
@@ -47,6 +54,10 @@ export class GPS51AuthService {
 
   getClient() {
     return this.authManager.getClient();
+  }
+
+  getAuthManager() {
+    return this.authManager;
   }
 }
 
