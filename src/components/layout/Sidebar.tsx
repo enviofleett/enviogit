@@ -5,23 +5,12 @@ import {
   Monitor, 
   MapPin, 
   Settings, 
-  Bell, 
-  Database, 
-  Zap,
-  Shield,
-  Users,
-  Wrench
+  Zap
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Fleet Overview', href: '/', icon: Monitor },
   { name: 'Live Tracking', href: '/tracking', icon: MapPin },
-  { name: 'Maintenance', href: '/maintenance', icon: Wrench },
-  { name: 'Geofencing', href: '/geofencing', icon: Shield },
-  { name: 'Analytics', href: '/analytics', icon: Database },
-  { name: 'Alerts', href: '/alerts', icon: Bell },
-  { name: 'Drivers', href: '/drivers', icon: Users },
-  { name: 'AI Insights', href: '/insights', icon: Zap },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 

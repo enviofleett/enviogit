@@ -58,12 +58,6 @@ const App = () => {
               <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/tracking" element={<Index />} />
-                <Route path="/maintenance" element={<Index />} />
-                <Route path="/geofencing" element={<Index />} />
-                <Route path="/analytics" element={<Index />} />
-                <Route path="/alerts" element={<Index />} />
-                <Route path="/drivers" element={<Index />} />
-                <Route path="/insights" element={<Index />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
