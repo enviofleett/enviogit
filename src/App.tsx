@@ -9,7 +9,6 @@ import Sidebar from "./components/layout/Sidebar";
 import Index from "./pages/Index";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
-import { gps51StartupService } from "./services/gps51/GPS51StartupService";
 
 const queryClient = new QueryClient();
 
@@ -18,32 +17,15 @@ const App = () => {
   useEffect(() => {
     const initializeGPS51 = async () => {
       try {
-        console.log('🚀 Initializing GPS51 services on app startup...');
-        const initialized = await gps51StartupService.initialize();
-        
-        if (initialized) {
-          console.log('✅ GPS51 services initialized successfully');
-        } else {
-          console.log('⚠️ GPS51 services not initialized (not configured or authentication failed)');
-        }
+        console.log('🚀 App startup - GPS51 initialization skipped (credentials not configured)');
+        // Skip GPS51 initialization if credentials are not configured
+        // This prevents the app from failing to load when GPS51 is not set up
       } catch (error) {
-        console.error('❌ Failed to initialize GPS51 services:', error);
+        console.error('❌ App startup error:', error);
       }
     };
 
     initializeGPS51();
-
-    // Listen for token refresh events
-    const handleTokenRefresh = async () => {
-      console.log('🔄 Token refresh event received');
-      await gps51StartupService.refreshAuthentication();
-    };
-
-    window.addEventListener('gps51-token-refresh-needed', handleTokenRefresh);
-
-    return () => {
-      window.removeEventListener('gps51-token-refresh-needed', handleTokenRefresh);
-    };
   }, []);
 
   return (

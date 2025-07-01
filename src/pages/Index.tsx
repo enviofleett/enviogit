@@ -5,7 +5,7 @@ import GPS51AntiOverloadDashboard from '@/components/dashboard/GPS51AntiOverload
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Activity, Wifi, Users, MapPin, Shield } from 'lucide-react';
+import { Activity, Wifi, Users, MapPin, Shield, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 const Index = () => {
@@ -15,34 +15,55 @@ const Index = () => {
     recentPositions: 0,
     lastUpdate: null as Date | null
   });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchSystemStats = async () => {
       try {
+        setLoading(true);
+        setError(null);
+
         // Get total vehicles
-        const { count: vehicleCount } = await supabase
+        const { count: vehicleCount, error: vehicleError } = await supabase
           .from('vehicles')
           .select('*', { count: 'exact' });
 
+        if (vehicleError) {
+          console.warn('Error fetching vehicles:', vehicleError);
+        }
+
         // Get total positions
-        const { count: positionCount } = await supabase
+        const { count: positionCount, error: positionError } = await supabase
           .from('vehicle_positions')
           .select('*', { count: 'exact' });
 
+        if (positionError) {
+          console.warn('Error fetching positions:', positionError);
+        }
+
         // Get recent positions (last hour)
         const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-        const { count: recentCount } = await supabase
+        const { count: recentCount, error: recentError } = await supabase
           .from('vehicle_positions')
           .select('*', { count: 'exact' })
           .gte('timestamp', oneHourAgo);
 
+        if (recentError) {
+          console.warn('Error fetching recent positions:', recentError);
+        }
+
         // Get last update time
-        const { data: lastPosition } = await supabase
+        const { data: lastPosition, error: lastUpdateError } = await supabase
           .from('vehicle_positions')
           .select('timestamp')
           .order('timestamp', { ascending: false })
           .limit(1)
           .single();
+
+        if (lastUpdateError && lastUpdateError.code !== 'PGRST116') {
+          console.warn('Error fetching last update:', lastUpdateError);
+        }
 
         setSystemStats({
           totalVehicles: vehicleCount || 0,
@@ -52,6 +73,9 @@ const Index = () => {
         });
       } catch (error) {
         console.error('Error fetching system stats:', error);
+        setError('Failed to load system statistics');
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -73,6 +97,17 @@ const Index = () => {
     return date.toLocaleTimeString();
   };
 
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading GPS51 Fleet Management System...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
       {/* System Overview Header */}
@@ -87,6 +122,13 @@ const Index = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {error && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-yellow-600" />
+              <span className="text-yellow-800 text-sm">{error}</span>
+            </div>
+          )}
+          
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
               <Users className="h-8 w-8 text-blue-600" />
