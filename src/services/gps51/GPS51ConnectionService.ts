@@ -2,13 +2,10 @@
 import { gps51ConfigService } from '../gp51/GPS51ConfigService';
 import { GPS51AuthService } from '../gp51/GPS51AuthService';
 import { GPS51Credentials } from '../gp51/GPS51CredentialsManager';
+import { CredentialsValidator } from '@/components/settings/components/CredentialsValidator';
 
 export class GPS51ConnectionService {
   private authService = GPS51AuthService.getInstance();
-
-  isValidMD5(str: string): boolean {
-    return /^[a-f0-9]{32}$/.test(str);
-  }
 
   async connect(credentials: {
     username: string;
@@ -22,6 +19,18 @@ export class GPS51ConnectionService {
       console.log('=== GPS51 CONNECTION SERVICE CONNECT ===');
       console.log('1. Starting connection process...');
       
+      // Validate credentials first
+      const validation = CredentialsValidator.validateCredentials(credentials);
+      if (!validation.isValid) {
+        console.error('2. Credential validation failed:', validation.errors);
+        return { 
+          success: false, 
+          error: `Credential validation failed: ${validation.errors.join(', ')}` 
+        };
+      }
+
+      console.log('2. Credential validation passed');
+      
       // Auto-migrate webapi to openapi endpoint
       let apiUrl = credentials.apiUrl;
       if (apiUrl.includes('/webapi')) {
@@ -29,11 +38,15 @@ export class GPS51ConnectionService {
         apiUrl = apiUrl.replace('/webapi', '/openapi');
       }
       
-      console.log('2. Received credentials:', {
+      // Hash password if needed
+      const hashedPassword = CredentialsValidator.hashPassword(credentials.password);
+      
+      console.log('3. Processed credentials:', {
         username: credentials.username,
         hasPassword: !!credentials.password,
         passwordLength: credentials.password?.length || 0,
-        passwordIsAlreadyHashed: this.isValidMD5(credentials.password || ''),
+        passwordIsAlreadyHashed: CredentialsValidator.isValidMD5(credentials.password || ''),
+        finalPasswordIsHashed: CredentialsValidator.isValidMD5(hashedPassword),
         apiUrl: apiUrl,
         originalApiUrl: credentials.apiUrl,
         migrated: apiUrl !== credentials.apiUrl,
@@ -42,28 +55,19 @@ export class GPS51ConnectionService {
         type: credentials.type || 'USER'
       });
       
-      // Validate input credentials
-      if (!credentials.username || !credentials.password) {
-        throw new Error('Username and password are required');
-      }
-      
-      if (!apiUrl) {
-        throw new Error('API URL is required');
-      }
-      
-      // DON'T hash password here - it should already be hashed from the form
+      // Prepare auth credentials with hashed password
       const authCredentials: GPS51Credentials = {
         username: credentials.username,
-        password: credentials.password, // Use as-is, should already be MD5 hashed
+        password: hashedPassword, // Use hashed password
         apiKey: credentials.apiKey,
         apiUrl: apiUrl, // Use migrated URL
         from: (credentials.from as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN') || 'WEB',
         type: (credentials.type as 'USER' | 'DEVICE') || 'USER'
       };
       
-      console.log('3. Prepared auth credentials:', {
+      console.log('4. Prepared auth credentials:', {
         username: authCredentials.username,
-        passwordIsValidMD5: this.isValidMD5(authCredentials.password),
+        passwordIsValidMD5: CredentialsValidator.isValidMD5(authCredentials.password),
         passwordFirstChars: authCredentials.password.substring(0, 8) + '...',
         apiUrl: authCredentials.apiUrl,
         from: authCredentials.from,
@@ -73,18 +77,18 @@ export class GPS51ConnectionService {
       });
       
       // Save configuration first
-      console.log('4. Saving configuration...');
+      console.log('5. Saving configuration...');
       await gps51ConfigService.saveConfiguration(authCredentials);
       
       // Then authenticate
-      console.log('5. Attempting authentication...');
+      console.log('6. Attempting authentication...');
       const token = await this.authService.authenticate(authCredentials);
       
       if (!token || !token.access_token) {
         throw new Error('Authentication failed - no token received');
       }
       
-      console.log('6. Authentication successful:', {
+      console.log('7. Authentication successful:', {
         hasToken: !!token.access_token,
         tokenLength: token.access_token.length,
         tokenType: token.token_type,
@@ -99,7 +103,7 @@ export class GPS51ConnectionService {
         credentials: {
           username: credentials.username,
           hasPassword: !!credentials.password,
-          passwordIsHashed: this.isValidMD5(credentials.password || ''),
+          passwordIsHashed: CredentialsValidator.isValidMD5(credentials.password || ''),
           apiUrl: credentials.apiUrl,
           hasApiKey: !!credentials.apiKey
         }

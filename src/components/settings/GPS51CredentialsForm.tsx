@@ -1,16 +1,15 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { CheckCircle, AlertCircle, Bug } from 'lucide-react';
 import { useGPS51SessionBridge } from '@/hooks/useGPS51SessionBridge';
-import { md5 } from 'js-md5';
 import { CredentialsFormFields } from './components/CredentialsFormFields';
 import { CredentialsFormActions } from './components/CredentialsFormActions';
 import { CredentialsFormStatus } from './components/CredentialsFormStatus';
 import { CredentialsFormDebug } from './components/CredentialsFormDebug';
 import { CredentialsFormNotes } from './components/CredentialsFormNotes';
+import { CredentialsValidator } from './components/CredentialsValidator';
 
 export const GPS51CredentialsForm = () => {
   const [formData, setFormData] = useState({
@@ -27,6 +26,7 @@ export const GPS51CredentialsForm = () => {
   const [isTesting, setIsTesting] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [validationResult, setValidationResult] = useState<any>(null);
   
   const { toast } = useToast();
   const { status, connect, disconnect, refresh } = useGPS51SessionBridge();
@@ -46,6 +46,10 @@ export const GPS51CredentialsForm = () => {
         ...prev,
         ...savedConfig
       }));
+
+      // Validate stored credentials on load
+      const storedValidation = CredentialsValidator.validateStoredCredentials();
+      setValidationResult(storedValidation);
     };
 
     loadConfiguration();
@@ -56,61 +60,50 @@ export const GPS51CredentialsForm = () => {
       ...prev,
       [field]: value
     }));
-  };
 
-  const isValidMD5 = (str: string): boolean => {
-    return /^[a-f0-9]{32}$/.test(str);
+    // Real-time validation
+    const updatedFormData = { ...formData, [field]: value };
+    const validation = CredentialsValidator.validateCredentials(updatedFormData);
+    setValidationResult(validation);
   };
 
   const validateForm = () => {
-    if (!formData.apiUrl || !formData.username || !formData.password) {
+    const validation = CredentialsValidator.validateCredentials(formData);
+    setValidationResult(validation);
+
+    if (!validation.isValid) {
       toast({
-        title: "Missing Information",
-        description: "Please fill in API URL, username, and password.",
+        title: "Validation Failed",
+        description: validation.errors.join(', '),
         variant: "destructive",
       });
       return false;
     }
 
-    // Basic URL validation
-    try {
-      new URL(formData.apiUrl);
-    } catch {
+    if (validation.warnings.length > 0) {
       toast({
-        title: "Invalid API URL",
-        description: "Please enter a valid API URL.",
-        variant: "destructive",
+        title: "Validation Warnings",
+        description: validation.warnings.join(', '),
+        variant: "default",
       });
-      return false;
-    }
-
-    // Validate correct API URL - updated for openapi endpoint
-    if (!formData.apiUrl.includes('api.gps51.com')) {
-      toast({
-        title: "Incorrect API URL",
-        description: "GPS51 API URL should use 'api.gps51.com' subdomain, not 'www.gps51.com'",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    // Check for deprecated webapi endpoint
-    if (formData.apiUrl.includes('/webapi')) {
-      toast({
-        title: "Deprecated API Endpoint",
-        description: "Please update your API URL to use the new '/openapi' endpoint instead of '/webapi'",
-        variant: "destructive",
-      });
-      return false;
     }
 
     return true;
   };
 
   const prepareCredentials = (rawPassword: string) => {
-    // Only hash if not already hashed
-    const hashedPassword = isValidMD5(rawPassword) ? rawPassword : md5(rawPassword).toLowerCase();
+    console.log('=== PREPARING GPS51 CREDENTIALS ===');
     
+    // Hash password using validator
+    const hashedPassword = CredentialsValidator.hashPassword(rawPassword);
+    
+    console.log('Password processing:', {
+      originalLength: rawPassword.length,
+      isAlreadyHashed: CredentialsValidator.isValidMD5(rawPassword),
+      finalHashLength: hashedPassword.length,
+      finalHashIsValid: CredentialsValidator.isValidMD5(hashedPassword)
+    });
+
     const credentials = {
       apiUrl: formData.apiUrl,
       username: formData.username,
@@ -122,14 +115,15 @@ export const GPS51CredentialsForm = () => {
 
     // Store debug info
     setDebugInfo({
+      validation: validationResult,
       originalPassword: {
         length: rawPassword.length,
-        isAlreadyHashed: isValidMD5(rawPassword),
+        isAlreadyHashed: CredentialsValidator.isValidMD5(rawPassword),
         firstChars: rawPassword.substring(0, 4) + '...'
       },
       processedPassword: {
         length: hashedPassword.length,
-        isValidMD5: isValidMD5(hashedPassword),
+        isValidMD5: CredentialsValidator.isValidMD5(hashedPassword),
         firstChars: hashedPassword.substring(0, 8) + '...'
       },
       credentials: {
@@ -144,6 +138,14 @@ export const GPS51CredentialsForm = () => {
 
   const saveCredentialsToStorage = (credentials: any) => {
     try {
+      console.log('=== SAVING CREDENTIALS TO STORAGE ===');
+      
+      // Validate credentials before saving
+      const validation = CredentialsValidator.validateCredentials(credentials);
+      if (!validation.isValid) {
+        throw new Error(`Invalid credentials: ${validation.errors.join(', ')}`);
+      }
+
       // Save individual items for easy access
       localStorage.setItem('gps51_api_url', credentials.apiUrl);
       localStorage.setItem('gps51_username', credentials.username);
@@ -161,13 +163,17 @@ export const GPS51CredentialsForm = () => {
         apiUrl: credentials.apiUrl,
         from: credentials.from,
         type: credentials.type,
-        hasApiKey: !!credentials.apiKey
+        hasApiKey: !!credentials.apiKey,
+        hasPassword: !!credentials.password,
+        passwordIsHashed: CredentialsValidator.isValidMD5(credentials.password)
       };
       localStorage.setItem('gps51_credentials', JSON.stringify(safeCredentials));
       
-      console.log('GPS51 credentials saved to localStorage:', {
+      console.log('GPS51 credentials saved successfully:', {
         keys: Object.keys(localStorage).filter(k => k.startsWith('gps51_')),
-        credentialsKeys: Object.keys(safeCredentials)
+        credentialsKeys: Object.keys(safeCredentials),
+        hasPassword: safeCredentials.hasPassword,
+        passwordIsHashed: safeCredentials.passwordIsHashed
       });
     } catch (error) {
       console.error('Failed to save credentials to localStorage:', error);
@@ -180,18 +186,11 @@ export const GPS51CredentialsForm = () => {
 
     setIsLoading(true);
     try {
-      console.log('=== GPS51 SAVE CREDENTIALS DEBUG ===');
+      console.log('=== GPS51 SAVE CREDENTIALS FLOW ===');
       console.log('1. Form validation passed');
       
       const credentials = prepareCredentials(formData.password);
-      console.log('2. Credentials prepared:', {
-        username: credentials.username,
-        apiUrl: credentials.apiUrl,
-        passwordIsHashed: isValidMD5(credentials.password),
-        from: credentials.from,
-        type: credentials.type,
-        hasApiKey: !!credentials.apiKey
-      });
+      console.log('2. Credentials prepared with hashed password');
 
       // Save to localStorage first
       saveCredentialsToStorage(credentials);
@@ -244,13 +243,13 @@ export const GPS51CredentialsForm = () => {
 
     setIsTesting(true);
     try {
-      console.log('=== GPS51 TEST CONNECTION DEBUG ===');
+      console.log('=== GPS51 TEST CONNECTION FLOW ===');
       const credentials = prepareCredentials(formData.password);
       
       console.log('Testing connection with credentials:', {
         username: credentials.username,
         apiUrl: credentials.apiUrl,
-        passwordIsHashed: isValidMD5(credentials.password),
+        passwordIsHashed: CredentialsValidator.isValidMD5(credentials.password),
         from: credentials.from,
         type: credentials.type
       });
@@ -320,6 +319,7 @@ export const GPS51CredentialsForm = () => {
       type: 'USER'
     });
     setDebugInfo(null);
+    setValidationResult(null);
     
     toast({
       title: "Configuration Cleared",
@@ -368,6 +368,32 @@ export const GPS51CredentialsForm = () => {
           onInputChange={handleInputChange}
           onTogglePassword={() => setShowPassword(!showPassword)}
         />
+
+        {validationResult && (
+          <div className="space-y-2">
+            {validationResult.errors?.length > 0 && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+                <p className="text-sm font-medium text-red-800">Validation Errors:</p>
+                <ul className="text-sm text-red-700 list-disc list-inside">
+                  {validationResult.errors.map((error: string, index: number) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
+            {validationResult.warnings?.length > 0 && (
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                <p className="text-sm font-medium text-yellow-800">Warnings:</p>
+                <ul className="text-sm text-yellow-700 list-disc list-inside">
+                  {validationResult.warnings.map((warning: string, index: number) => (
+                    <li key={index}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
 
         <CredentialsFormDebug
           showDebug={showDebug}
