@@ -56,11 +56,11 @@ export class GPS51Service {
       this.loginType = localStorage.getItem('gps51_type') || 'USER';
     } else {
       // For server-side/edge functions, use environment variables
-      this.apiUrl = Deno?.env?.get('GPS51_API_URL') || 'https://api.gps51.com/openapi';
-      this.username = Deno?.env?.get('GPS51_USERNAME') || '';
-      this.password = Deno?.env?.get('GPS51_PASSWORD_HASH') || '';
-      this.loginFrom = Deno?.env?.get('GPS51_LOGIN_FROM') || 'WEB';
-      this.loginType = Deno?.env?.get('GPS51_LOGIN_TYPE') || 'USER';
+      this.apiUrl = process.env.GPS51_API_URL || 'https://api.gps51.com/openapi';
+      this.username = process.env.GPS51_USERNAME || '';
+      this.password = process.env.GPS51_PASSWORD_HASH || '';
+      this.loginFrom = process.env.GPS51_LOGIN_FROM || 'WEB';
+      this.loginType = process.env.GPS51_LOGIN_TYPE || 'USER';
     }
 
     console.log('GPS51 credentials loaded:', {
