@@ -7,9 +7,9 @@ const corsHeaders = {
 };
 
 interface GPS51SyncRequest {
-  apiUrl: string;
-  username: string;
-  password: string;
+  apiUrl?: string;
+  username?: string;
+  password?: string;
   priority?: number;
   batchMode?: boolean;
   cronTriggered?: boolean;
@@ -68,7 +68,7 @@ serve(async (req) => {
       });
     }
 
-    let requestBody: any;
+    let requestBody: any = {};
     try {
       const requestText = await req.text();
       console.log('Request received:', {
@@ -76,27 +76,12 @@ serve(async (req) => {
         hasContent: !!requestText.trim()
       });
       
-      if (!requestText || requestText.trim() === '') {
-        throw new Error('Empty request body received');
+      if (requestText && requestText.trim() !== '') {
+        requestBody = JSON.parse(requestText);
       }
-
-      requestBody = JSON.parse(requestText);
-      console.log("GPS51 Sync Request validation:", {
-        hasUsername: !!requestBody.username,
-        hasPassword: !!requestBody.password,
-        hasApiUrl: !!requestBody.apiUrl,
-        passwordLength: requestBody.password?.length || 0,
-        apiUrl: requestBody.apiUrl,
-        priority: requestBody.priority,
-        batchMode: requestBody.batchMode,
-        cronTriggered: requestBody.cronTriggered || false
-      });
     } catch (e) {
-      console.error("Request parsing error:", e);
-      return new Response(JSON.stringify({ error: 'Invalid or empty request body. Expected JSON.' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      });
+      console.log("Request parsing note:", e);
+      // Continue with empty requestBody for cron jobs
     }
 
     // Initialize Supabase client
@@ -104,7 +89,52 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { username, password, apiUrl, priority, batchMode, cronTriggered } = requestBody;
+    const { priority, batchMode, cronTriggered } = requestBody;
+
+    // Get credentials from Supabase secrets with proper fallback
+    console.log('Loading GPS51 credentials from Supabase secrets...');
+    
+    let finalApiUrl = requestBody.apiUrl || Deno.env.get('GPS51_API_URL') || 'https://api.gps51.com/openapi';
+    let finalUsername = requestBody.username || Deno.env.get('GPS51_USERNAME');
+    let finalPassword = requestBody.password || Deno.env.get('GPS51_PASSWORD_HASH');
+    
+    console.log('GPS51 credentials loaded:', {
+      apiUrl: finalApiUrl,
+      username: finalUsername ? finalUsername.substring(0, 3) + '***' : 'MISSING',
+      hasPassword: !!finalPassword,
+      passwordLength: finalPassword ? finalPassword.length : 0,
+      from: 'WEB',
+      type: 'USER'
+    });
+
+    if (!finalApiUrl || !finalUsername || !finalPassword) {
+      const missingFields = [];
+      if (!finalApiUrl) missingFields.push('apiUrl');
+      if (!finalUsername) missingFields.push('username');
+      if (!finalPassword) missingFields.push('password');
+      
+      console.error('GPS51 credentials validation failed:', {
+        missingFields,
+        hasApiUrl: !!finalApiUrl,
+        hasUsername: !!finalUsername,
+        hasPassword: !!finalPassword,
+        availableEnvVars: Object.keys(Deno.env.toObject()).filter(k => k.startsWith('GPS51_'))
+      });
+      
+      throw new Error(`GPS51 credentials not configured properly. Missing: ${missingFields.join(', ')}`);
+    }
+    
+    // Ensure we use the correct GPS51 API URL
+    let correctedApiUrl = finalApiUrl.replace(/\/$/, '');
+    if (correctedApiUrl.includes('www.gps51.com')) {
+      console.log('Correcting API URL from www.gps51.com to api.gps51.com');
+      correctedApiUrl = correctedApiUrl.replace('www.gps51.com', 'api.gps51.com');
+    }
+
+    console.log('Using API URL:', correctedApiUrl);
+    if (batchMode && priority) {
+      console.log(`BATCH MODE: Processing Priority ${priority} vehicles`);
+    }
 
     // Log job start if triggered by cron or in batch mode
     if (cronTriggered || (batchMode && priority)) {
@@ -123,58 +153,18 @@ serve(async (req) => {
       }
     }
 
-    // Get credentials from localStorage if not provided (for cron jobs)
-    let finalApiUrl = apiUrl;
-    let finalUsername = username;
-    let finalPassword = password;
-
-    if (!finalApiUrl || !finalUsername || !finalPassword) {
-      console.log('Getting credentials from system settings...');
-      // For cron jobs, we need to get credentials from a secure location
-      // This is a placeholder - in production, store these securely
-      finalApiUrl = Deno.env.get('GPS51_API_URL') || apiUrl;
-      finalUsername = Deno.env.get('GPS51_USERNAME') || username;
-      finalPassword = Deno.env.get('GPS51_PASSWORD_HASH') || password;
-    }
-
-    if (!finalApiUrl || !finalUsername || !finalPassword) {
-      throw new Error('GPS51 credentials not available for automated sync');
-    }
-    
-    // Ensure we use the correct GPS51 API URL
-    let correctedApiUrl = finalApiUrl.replace(/\/$/, '');
-    if (correctedApiUrl.includes('www.gps51.com')) {
-      console.log('Correcting API URL from www.gps51.com to api.gps51.com');
-      correctedApiUrl = correctedApiUrl.replace('www.gps51.com', 'api.gps51.com');
-    }
-
-    console.log('Using API URL:', correctedApiUrl);
-    if (batchMode && priority) {
-      console.log(`BATCH MODE: Processing Priority ${priority} vehicles`);
-    }
-
-    // Generate a proper random token for the login request
-    const generateToken = () => {
-      const array = new Uint8Array(16);
-      crypto.getRandomValues(array);
-      return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
-    };
-
-    // Step 1: Authenticate with GPS51 API
-    const loginToken = generateToken();
-    const loginUrl = new URL(correctedApiUrl);
-    loginUrl.searchParams.append('action', 'login');
-    loginUrl.searchParams.append('token', loginToken);
+    // Step 1: Authenticate with GPS51 API using POST with JSON body
+    console.log("=== GPS51 LOGIN ATTEMPT ===");
+    console.log("Login URL:", correctedApiUrl);
 
     const loginPayload = {
+      action: 'login',
       username: finalUsername,
-      password: finalPassword,
+      password: finalPassword, // Should already be MD5 hashed
       from: 'WEB',
       type: 'USER'
     };
 
-    console.log("=== GPS51 LOGIN ATTEMPT ===");
-    console.log("Login URL:", loginUrl.toString());
     console.log("Login payload validation:", {
       username: loginPayload.username,
       passwordLength: loginPayload.password.length,
@@ -183,7 +173,7 @@ serve(async (req) => {
       type: loginPayload.type
     });
 
-    const loginResponse = await fetch(loginUrl.toString(), {
+    const loginResponse = await fetch(correctedApiUrl, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
@@ -227,19 +217,22 @@ serve(async (req) => {
     const token = loginData.token;
     console.log('GPS51 login successful, token acquired');
 
-    // Step 2: Fetch device list
-    const deviceListUrl = new URL(correctedApiUrl);
-    deviceListUrl.searchParams.append('action', 'querymonitorlist');
-    deviceListUrl.searchParams.append('token', token);
-
+    // Step 2: Fetch device list using POST with JSON body
     console.log("=== FETCHING DEVICE LIST ===");
-    const deviceResponse = await fetch(deviceListUrl.toString(), {
+    
+    const deviceListPayload = {
+      action: 'querymonitorlist',
+      token: token,
+      username: finalUsername
+    };
+
+    const deviceResponse = await fetch(correctedApiUrl, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ username: finalUsername })
+      body: JSON.stringify(deviceListPayload)
     });
 
     const deviceResponseText = await deviceResponse.text();
@@ -349,14 +342,12 @@ serve(async (req) => {
       }
     }
 
-    // Step 3: Fetch positions for filtered devices
+    // Step 3: Fetch positions for filtered devices using POST with JSON body
     let positions: any[] = [];
     if (deviceIds.length > 0) {
-      const positionUrl = new URL(correctedApiUrl);
-      positionUrl.searchParams.append('action', 'lastposition');
-      positionUrl.searchParams.append('token', token);
-
       const positionPayload = {
+        action: 'lastposition',
+        token: token,
         deviceids: deviceIds,
         lastquerypositiontime: 0
       };
@@ -368,7 +359,7 @@ serve(async (req) => {
         lastQueryTime: positionPayload.lastquerypositiontime
       });
 
-      const positionResponse = await fetch(positionUrl.toString(), {
+      const positionResponse = await fetch(correctedApiUrl, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -643,6 +634,10 @@ serve(async (req) => {
     
     // Update job with error status
     if (jobId) {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      
       await supabase
         .from('gps51_sync_jobs')
         .update({
