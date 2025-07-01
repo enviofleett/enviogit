@@ -7,12 +7,8 @@ import { GPS51CronJobManager } from './GPS51CronJobManager';
 import { GPS51RealTimeActivationPanel } from './GPS51RealTimeActivationPanel';
 import { GPS51DebugPanel } from './GPS51DebugPanel';
 import { GPS51BatchSyncPanel } from './GPS51BatchSyncPanel';
-import { GPS51AuthStatus } from './components/GPS51AuthStatus';
-import { useGPS51SessionBridge } from '@/hooks/useGPS51SessionBridge';
 
 export const GPS51Settings = () => {
-  const { status } = useGPS51SessionBridge();
-
   return (
     <div className="space-y-6">
       <div>
@@ -22,25 +18,22 @@ export const GPS51Settings = () => {
         </p>
       </div>
 
-      {/* Add authentication status at the top */}
-      <GPS51AuthStatus status={status} />
-
-      <Tabs defaultValue="credentials" className="space-y-6">
+      <Tabs defaultValue="activation" className="space-y-6">
         <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="credentials">Credentials</TabsTrigger>
           <TabsTrigger value="activation">Real-Time</TabsTrigger>
+          <TabsTrigger value="credentials">Credentials</TabsTrigger>
           <TabsTrigger value="devices">Devices</TabsTrigger>
           <TabsTrigger value="sync">Sync</TabsTrigger>
           <TabsTrigger value="scheduler">Scheduler</TabsTrigger>
           <TabsTrigger value="debug">Debug</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="credentials">
-          <GPS51CredentialsForm />
-        </TabsContent>
-
         <TabsContent value="activation">
           <GPS51RealTimeActivationPanel />
+        </TabsContent>
+
+        <TabsContent value="credentials">
+          <GPS51CredentialsForm />
         </TabsContent>
 
         <TabsContent value="devices">

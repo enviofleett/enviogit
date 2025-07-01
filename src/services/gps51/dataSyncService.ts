@@ -22,9 +22,9 @@ export class GPS51DataSyncService {
       const devices = await gps51Client.getDeviceList();
       console.log(`GPS51DataSyncService: Found ${devices.length} devices from GPS51`);
 
-      // Fetch real-time positions - FIXED: destructure the response
+      // Fetch real-time positions
       const deviceIds = devices.map(d => d.deviceid);
-      const { positions } = await gps51Client.getRealtimePositions(deviceIds);
+      const positions = await gps51Client.getRealtimePositions(deviceIds);
       console.log(`GPS51DataSyncService: Found ${positions.length} positions from GPS51`);
 
       // Store vehicles in Supabase with GPS51 device IDs
