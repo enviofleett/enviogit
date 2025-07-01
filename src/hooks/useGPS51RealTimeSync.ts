@@ -79,7 +79,7 @@ export const useGPS51RealTimeSync = (enableSync: boolean = true) => {
 
       // Get real-time positions from GPS51
       const deviceIds = devices.map(d => d.deviceid);
-      const positions = await gps51Client.getRealtimePositions(deviceIds);
+      const { positions } = await gps51Client.getRealtimePositions(deviceIds);
       console.log(`📍 Received ${positions.length} live positions from GPS51`);
 
       // Transform GPS51 data to our format
