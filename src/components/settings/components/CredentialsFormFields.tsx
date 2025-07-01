@@ -2,21 +2,22 @@
 import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Eye, EyeOff } from 'lucide-react';
 
+interface FormData {
+  apiUrl: string;
+  username: string;
+  password: string;
+  from: string;
+  type: string;
+}
+
 interface CredentialsFormFieldsProps {
-  formData: {
-    apiUrl: string;
-    username: string;
-    password: string;
-    apiKey: string;
-    from: 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN';
-    type: 'USER' | 'DEVICE';
-  };
+  formData: FormData;
   showPassword: boolean;
-  onInputChange: (field: string, value: string) => void;
+  onInputChange: (field: keyof FormData, value: string) => void;
   onTogglePassword: () => void;
 }
 
@@ -29,69 +30,40 @@ export const CredentialsFormFields: React.FC<CredentialsFormFieldsProps> = ({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="apiUrl">API URL *</Label>
+        <Label htmlFor="apiUrl">GPS51 API URL</Label>
         <Input
           id="apiUrl"
           type="url"
-          placeholder="https://api.gps51.com/openapi"
           value={formData.apiUrl}
           onChange={(e) => onInputChange('apiUrl', e.target.value)}
+          placeholder="https://api.gps51.com/openapi"
         />
         <p className="text-xs text-gray-500">
-          ⚠️ Must use <strong>api.gps51.com/openapi</strong> endpoint (NEW endpoint - /webapi is deprecated)
+          The GPS51 API endpoint URL (use /openapi endpoint)
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="from">Platform *</Label>
-          <Select value={formData.from} onValueChange={(value: 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN') => onInputChange('from', value)}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select platform" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="WEB">WEB</SelectItem>
-              <SelectItem value="ANDROID">ANDROID</SelectItem>
-              <SelectItem value="IPHONE">IPHONE</SelectItem>
-              <SelectItem value="WEIXIN">WEIXIN</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="type">Login Type *</Label>
-          <Select value={formData.type} onValueChange={(value: 'USER' | 'DEVICE') => onInputChange('type', value)}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="USER">USER</SelectItem>
-              <SelectItem value="DEVICE">DEVICE</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
       <div className="space-y-2">
-        <Label htmlFor="username">Username *</Label>
+        <Label htmlFor="username">Username</Label>
         <Input
           id="username"
           type="text"
-          placeholder="Your GPS51 username"
           value={formData.username}
           onChange={(e) => onInputChange('username', e.target.value)}
+          placeholder="Your GPS51 username"
         />
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="password">Password *</Label>
+        <Label htmlFor="password">Password</Label>
         <div className="relative">
           <Input
             id="password"
             type={showPassword ? 'text' : 'password'}
-            placeholder="Your GPS51 password"
             value={formData.password}
             onChange={(e) => onInputChange('password', e.target.value)}
+            placeholder="Your GPS51 password"
+            className="pr-10"
           />
           <Button
             type="button"
@@ -108,19 +80,38 @@ export const CredentialsFormFields: React.FC<CredentialsFormFieldsProps> = ({
           </Button>
         </div>
         <p className="text-xs text-gray-500">
-          Will be automatically encrypted using MD5 if not already hashed
+          Password will be hashed with MD5 before storage
         </p>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="apiKey">API Key (Optional)</Label>
-        <Input
-          id="apiKey"
-          type="text"
-          placeholder="Your GPS51 API key (if required)"
-          value={formData.apiKey}
-          onChange={(e) => onInputChange('apiKey', e.target.value)}
-        />
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="from">Login From</Label>
+          <Select value={formData.from} onValueChange={(value) => onInputChange('from', value)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="WEB">WEB</SelectItem>
+              <SelectItem value="ANDROID">ANDROID</SelectItem>
+              <SelectItem value="IPHONE">IPHONE</SelectItem>
+              <SelectItem value="WEIXIN">WEIXIN</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="type">Login Type</Label>
+          <Select value={formData.type} onValueChange={(value) => onInputChange('type', value)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="USER">USER</SelectItem>
+              <SelectItem value="DEVICE">DEVICE</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
     </div>
   );

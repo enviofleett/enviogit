@@ -1,298 +1,345 @@
 
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { useGPS51SessionBridge } from '@/hooks/useGPS51SessionBridge';
+import { GPS51ConnectionService } from '@/services/gps51/GPS51ConnectionService';
 import { CredentialsValidator } from '../CredentialsValidator';
-import { gps51ConfigManager } from '@/services/gps51/GPS51ConfigurationManager';
+
+interface FormData {
+  apiUrl: string;
+  username: string;
+  password: string;
+  from: string;
+  type: string;
+}
+
+interface ConfigStatus {
+  isConfigured: boolean;
+  missingCredentials: string[];
+  apiUrl: string;
+  username: string;
+}
+
+interface SessionStatus {
+  error: string | null;
+  isAuthenticated: boolean;
+  connectionHealth: string;
+  syncStatus: string;
+  lastSync: Date | null;
+}
+
+interface DebugInfo {
+  timestamp: string;
+  formData: Partial<FormData>;
+  validation: any;
+  configStatus: ConfigStatus;
+}
 
 export const useGPS51CredentialsForm = () => {
-  const [formData, setFormData] = useState({
+  const { toast } = useToast();
+  const connectionService = new GPS51ConnectionService();
+
+  const [formData, setFormData] = useState<FormData>({
     apiUrl: 'https://api.gps51.com/openapi',
     username: '',
     password: '',
-    apiKey: '',
-    from: 'WEB' as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN',
-    type: 'USER' as 'USER' | 'DEVICE'
+    from: 'WEB',
+    type: 'USER'
   });
-  
+
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
   const [validationResult, setValidationResult] = useState<any>(null);
   
-  const { toast } = useToast();
-  const { status, connect, disconnect } = useGPS51SessionBridge();
+  const [configStatus, setConfigStatus] = useState<ConfigStatus>({
+    isConfigured: false,
+    missingCredentials: [],
+    apiUrl: '',
+    username: ''
+  });
 
-  // Load saved configuration on component mount
+  const [status, setStatus] = useState<SessionStatus>({
+    error: null,
+    isAuthenticated: false,
+    connectionHealth: 'lost',
+    syncStatus: 'idle',
+    lastSync: null
+  });
+
+  const [debugInfo, setDebugInfo] = useState<DebugInfo>({
+    timestamp: new Date().toISOString(),
+    formData: {},
+    validation: null,
+    configStatus: configStatus
+  });
+
+  // Load saved credentials on mount
   useEffect(() => {
-    const loadConfiguration = () => {
-      console.log('Loading GPS51 configuration...');
-      
-      const configStatus = gps51ConfigManager.getConfigurationStatus();
-      
-      const savedConfig = {
-        apiUrl: localStorage.getItem('gps51_api_url') || 'https://api.gps51.com/openapi',
-        username: localStorage.getItem('gps51_username') || '',
-        from: (localStorage.getItem('gps51_from') as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN') || 'WEB',
-        type: (localStorage.getItem('gps51_type') as 'USER' | 'DEVICE') || 'USER',
-        apiKey: localStorage.getItem('gps51_api_key') || ''
-      };
-      
-      setFormData(prev => ({
-        ...prev,
-        ...savedConfig
-      }));
+    const loadSavedCredentials = () => {
+      try {
+        const savedApiUrl = localStorage.getItem('gps51_api_url');
+        const savedUsername = localStorage.getItem('gps51_username');
+        const savedFrom = localStorage.getItem('gps51_from');
+        const savedType = localStorage.getItem('gps51_type');
 
-      // Validate stored credentials on load
-      const storedValidation = CredentialsValidator.validateStoredCredentials();
-      setValidationResult(storedValidation);
-      
-      console.log('Configuration loaded:', {
-        isConfigured: configStatus.isConfigured,
-        hasCredentials: Object.keys(savedConfig).filter(k => savedConfig[k as keyof typeof savedConfig]).length
-      });
+        if (savedApiUrl || savedUsername) {
+          setFormData({
+            apiUrl: savedApiUrl || 'https://api.gps51.com/openapi',
+            username: savedUsername || '',
+            password: '', // Never pre-fill password for security
+            from: savedFrom || 'WEB',
+            type: savedType || 'USER'
+          });
+        }
+
+        // Update config status
+        const configStatus = connectionService.getConfigurationStatus();
+        setConfigStatus(configStatus);
+
+        // Update status if already configured
+        if (configStatus.isConfigured) {
+          setStatus(prev => ({
+            ...prev,
+            isAuthenticated: true,
+            connectionHealth: 'good',
+            syncStatus: 'success'
+          }));
+        }
+      } catch (error) {
+        console.error('Error loading saved credentials:', error);
+      }
     };
 
-    loadConfiguration();
+    loadSavedCredentials();
   }, []);
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-
-    // Real-time validation
-    const updatedFormData = { ...formData, [field]: value };
-    const validation = CredentialsValidator.validateCredentials(updatedFormData);
-    setValidationResult(validation);
-  };
-
-  const validateForm = () => {
-    const validation = CredentialsValidator.validateCredentials(formData);
-    setValidationResult(validation);
-
-    if (!validation.isValid) {
-      toast({
-        title: "Validation Failed",
-        description: validation.errors.join(', '),
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    if (validation.warnings.length > 0) {
-      toast({
-        title: "Validation Warnings",
-        description: validation.warnings.join(', '),
-        variant: "default",
-      });
-    }
-
-    return true;
-  };
-
-  const prepareCredentials = (rawPassword: string) => {
-    console.log('=== PREPARING GPS51 CREDENTIALS ===');
-    
-    // Hash password using validator
-    const hashedPassword = CredentialsValidator.hashPassword(rawPassword);
-    
-    console.log('Password processing:', {
-      originalLength: rawPassword.length,
-      isAlreadyHashed: CredentialsValidator.isValidMD5(rawPassword),
-      finalHashLength: hashedPassword.length,
-      finalHashIsValid: CredentialsValidator.isValidMD5(hashedPassword)
-    });
-
-    const credentials = {
-      apiUrl: formData.apiUrl,
-      username: formData.username,
-      password: hashedPassword,
-      from: formData.from,
-      type: formData.type
-    };
-
-    // Store debug info
+  // Update debug info when relevant state changes
+  useEffect(() => {
     setDebugInfo({
+      timestamp: new Date().toISOString(),
+      formData: { ...formData, password: formData.password ? '***hidden***' : '' },
       validation: validationResult,
-      originalPassword: {
-        length: rawPassword.length,
-        isAlreadyHashed: CredentialsValidator.isValidMD5(rawPassword),
-        firstChars: rawPassword.substring(0, 4) + '...'
-      },
-      processedPassword: {
-        length: hashedPassword.length,
-        isValidMD5: CredentialsValidator.isValidMD5(hashedPassword),
-        firstChars: hashedPassword.substring(0, 8) + '...'
-      },
-      credentials: {
-        ...credentials,
-        password: hashedPassword.substring(0, 8) + '...' // Truncated for security
-      },
-      timestamp: new Date().toISOString()
+      configStatus
     });
+  }, [formData, validationResult, configStatus]);
 
-    return credentials;
+  const handleInputChange = (field: keyof FormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    
+    // Validate on change
+    const validation = CredentialsValidator.validateCredentials({
+      ...formData,
+      [field]: value
+    });
+    setValidationResult(validation);
   };
 
   const handleSave = async () => {
-    if (!validateForm()) return;
-
-    setIsLoading(true);
     try {
-      console.log('=== GPS51 SAVE CREDENTIALS FLOW ===');
-      console.log('1. Form validation passed');
-      
-      const credentials = prepareCredentials(formData.password);
-      console.log('2. Credentials prepared with hashed password');
+      setIsLoading(true);
+      setStatus(prev => ({ ...prev, error: null, syncStatus: 'syncing' }));
 
-      // Use the configuration manager to save and test
-      await gps51ConfigManager.configure({
-        apiUrl: credentials.apiUrl,
-        username: credentials.username,
-        password: credentials.password,
-        loginFrom: credentials.from,
-        loginType: credentials.type
+      // Validate first
+      const validation = CredentialsValidator.validateCredentials(formData);
+      setValidationResult(validation);
+
+      if (!validation.isValid) {
+        toast({
+          title: 'Validation Failed',
+          description: validation.errors.join(', '),
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Save credentials
+      const result = await connectionService.connect({
+        apiUrl: formData.apiUrl,
+        username: formData.username,
+        password: formData.password,
+        from: formData.from,
+        type: formData.type
       });
-      
-      console.log('3. Configuration manager setup successful');
 
-      // Test the connection
-      const testResult = await gps51ConfigManager.testConnection();
-      
-      if (testResult.success) {
-        console.log('4. Connection test successful');
+      if (result.success) {
         toast({
-          title: "Settings Saved",
-          description: `GPS51 credentials saved and verified. Found ${testResult.deviceCount || 0} devices.`,
+          title: 'GPS51 Configured Successfully',
+          description: `Connected with ${result.vehiclesSynced || 0} vehicles found`
         });
-        
-        // Clear password field for security
-        setFormData(prev => ({ ...prev, password: '' }));
-        
-        // Update session bridge status
-        await connect(credentials);
+
+        setStatus({
+          error: null,
+          isAuthenticated: true,
+          connectionHealth: 'good',
+          syncStatus: 'success',
+          lastSync: new Date()
+        });
+
+        setConfigStatus({
+          isConfigured: true,
+          missingCredentials: [],
+          apiUrl: formData.apiUrl,
+          username: formData.username
+        });
       } else {
-        console.error('4. Connection test failed:', testResult.error);
-        toast({
-          title: "Configuration Saved But Connection Failed",
-          description: testResult.error || "Credentials saved but unable to connect to GPS51.",
-          variant: "destructive",
-        });
+        throw new Error(result.error || 'Configuration failed');
       }
     } catch (error) {
-      console.error('Save credentials error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Configuration failed';
+      
       toast({
-        title: "Save Failed",
-        description: `Failed to save credentials: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        variant: "destructive",
+        title: 'Configuration Failed',
+        description: errorMessage,
+        variant: 'destructive'
       });
+
+      setStatus(prev => ({
+        ...prev,
+        error: errorMessage,
+        isAuthenticated: false,
+        connectionHealth: 'lost',
+        syncStatus: 'error'
+      }));
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleTestConnection = async () => {
-    if (!validateForm()) return;
-
-    setIsTesting(true);
     try {
-      console.log('=== GPS51 TEST CONNECTION FLOW ===');
-      const credentials = prepareCredentials(formData.password);
-      
-      console.log('Testing connection with credentials...');
-      
-      // Test connection using configuration manager
-      await gps51ConfigManager.configure({
-        apiUrl: credentials.apiUrl,
-        username: credentials.username,
-        password: credentials.password,
-        loginFrom: credentials.from,
-        loginType: credentials.type
+      setIsTesting(true);
+      setStatus(prev => ({ ...prev, error: null, syncStatus: 'syncing' }));
+
+      const validation = CredentialsValidator.validateCredentials(formData);
+      if (!validation.isValid) {
+        throw new Error(validation.errors.join(', '));
+      }
+
+      const result = await connectionService.connect({
+        apiUrl: formData.apiUrl,
+        username: formData.username,
+        password: formData.password,
+        from: formData.from,
+        type: formData.type
       });
-      
-      const testResult = await gps51ConfigManager.testConnection();
-      
-      if (testResult.success) {
+
+      if (result.success) {
         toast({
-          title: "Connection Successful",
-          description: `Successfully connected to GPS51 API. Found ${testResult.deviceCount || 0} devices.`,
+          title: 'Connection Test Successful',
+          description: `Found ${result.vehiclesSynced || 0} vehicles`
         });
+
+        setStatus(prev => ({
+          ...prev,
+          error: null,
+          connectionHealth: 'good',
+          syncStatus: 'success',
+          lastSync: new Date()
+        }));
       } else {
-        toast({
-          title: "Connection Failed",
-          description: testResult.error || "Failed to connect to GPS51 API.",
-          variant: "destructive",
-        });
+        throw new Error(result.error || 'Connection test failed');
       }
     } catch (error) {
-      console.error('Test connection error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Connection test failed';
+      
       toast({
-        title: "Connection Failed",
-        description: error instanceof Error ? error.message : 'Connection failed',
-        variant: "destructive",
+        title: 'Connection Test Failed',
+        description: errorMessage,
+        variant: 'destructive'
       });
+
+      setStatus(prev => ({
+        ...prev,
+        error: errorMessage,
+        connectionHealth: 'poor',
+        syncStatus: 'error'
+      }));
     } finally {
       setIsTesting(false);
     }
   };
 
   const handleSyncData = async () => {
-    if (!gps51ConfigManager.isConfigured()) {
+    if (!configStatus.isConfigured) {
       toast({
-        title: "Not Configured",
-        description: "Please save and test connection first before syncing data.",
-        variant: "destructive",
+        title: 'Configuration Required',
+        description: 'Please save your GPS51 credentials before syncing data',
+        variant: 'destructive'
       });
       return;
     }
 
     try {
-      console.log('Manual sync requested...');
-      const result = await gps51ConfigManager.testConnection();
+      setStatus(prev => ({ ...prev, syncStatus: 'syncing' }));
+      
+      const result = await connectionService.refresh();
       
       if (result.success) {
         toast({
-          title: "Sync Successful",
-          description: `Found ${result.deviceCount || 0} devices from GPS51.`,
+          title: 'Data Sync Completed',
+          description: `Synced ${result.vehiclesSynced || 0} vehicles and ${result.positionsStored || 0} positions`
         });
+
+        setStatus(prev => ({
+          ...prev,
+          syncStatus: 'success',
+          lastSync: new Date(),
+          error: null
+        }));
       } else {
-        throw new Error(result.error || 'Sync failed');
+        throw new Error(result.error || 'Data sync failed');
       }
     } catch (error) {
-      console.error('Sync data error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Data sync failed';
+      
       toast({
-        title: "Sync Failed",
-        description: error instanceof Error ? error.message : 'Data sync failed',
-        variant: "destructive",
+        title: 'Data Sync Failed',
+        description: errorMessage,
+        variant: 'destructive'
       });
+
+      setStatus(prev => ({
+        ...prev,
+        error: errorMessage,
+        syncStatus: 'error'
+      }));
     }
   };
 
   const handleClearConfiguration = () => {
-    gps51ConfigManager.clearConfiguration();
-    disconnect();
+    connectionService.disconnect();
+    
     setFormData({
       apiUrl: 'https://api.gps51.com/openapi',
       username: '',
       password: '',
-      apiKey: '',
       from: 'WEB',
       type: 'USER'
     });
-    setDebugInfo(null);
+
+    setConfigStatus({
+      isConfigured: false,
+      missingCredentials: ['apiUrl', 'username', 'password'],
+      apiUrl: '',
+      username: ''
+    });
+
+    setStatus({
+      error: null,
+      isAuthenticated: false,
+      connectionHealth: 'lost',
+      syncStatus: 'idle',
+      lastSync: null
+    });
+
     setValidationResult(null);
-    
+
     toast({
-      title: "Configuration Cleared",
-      description: "GPS51 configuration has been removed.",
+      title: 'Configuration Cleared',
+      description: 'GPS51 credentials have been removed'
     });
   };
-
-  const configStatus = gps51ConfigManager.getConfigurationStatus();
 
   return {
     formData,

@@ -1,11 +1,11 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Activity, Wifi, Users, MapPin, RefreshCw, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Activity, Wifi, Users, MapPin, RefreshCw, AlertTriangle, CheckCircle, Settings } from 'lucide-react';
 import { useGPS51LiveSync } from '@/hooks/useGPS51LiveSync';
 import { supabase } from '@/integrations/supabase/client';
+import { Link } from 'react-router-dom';
 
 interface VehiclePosition {
   id: string;
@@ -27,13 +27,76 @@ interface VehiclePosition {
 }
 
 const GPS51LiveDashboard: React.FC = () => {
-  const { status, forceSync, isRunning } = useGPS51LiveSync(true, 30000); // Sync every 30 seconds
+  const [isConfigured, setIsConfigured] = useState(false);
+  const [configurationError, setConfigurationError] = useState<string | null>(null);
+  const [checkingConfig, setCheckingConfig] = useState(true);
+  
+  // Only initialize sync if GPS51 is configured
+  const { status, forceSync, isRunning } = useGPS51LiveSync(isConfigured, 30000);
   const [livePositions, setLivePositions] = useState<VehiclePosition[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  // Fetch latest vehicle positions
+  // Check GPS51 configuration status
+  useEffect(() => {
+    const checkGPS51Configuration = async () => {
+      try {
+        setCheckingConfig(true);
+        
+        // Check if GPS51 credentials are stored locally
+        const apiUrl = localStorage.getItem('gps51_api_url');
+        const username = localStorage.getItem('gps51_username');
+        const passwordHash = localStorage.getItem('gps51_password_hash');
+        
+        if (!apiUrl || !username || !passwordHash) {
+          setIsConfigured(false);
+          setConfigurationError('GPS51 credentials not configured');
+          return;
+        }
+
+        // Try to test the connection
+        try {
+          const { data, error } = await supabase.functions.invoke('gps51-auth', {
+            body: { 
+              action: 'test',
+              apiUrl,
+              username,
+              password: passwordHash
+            }
+          });
+
+          if (error) {
+            setIsConfigured(false);
+            setConfigurationError(`Connection test failed: ${error.message}`);
+          } else if (data?.success) {
+            setIsConfigured(true);
+            setConfigurationError(null);
+          } else {
+            setIsConfigured(false);
+            setConfigurationError(data?.error || 'Authentication failed');
+          }
+        } catch (testError) {
+          console.warn('GPS51 connection test failed:', testError);
+          setIsConfigured(false);
+          setConfigurationError('Unable to test GPS51 connection');
+        }
+      } catch (error) {
+        console.error('Error checking GPS51 configuration:', error);
+        setIsConfigured(false);
+        setConfigurationError('Configuration check failed');
+      } finally {
+        setCheckingConfig(false);
+      }
+    };
+
+    checkGPS51Configuration();
+  }, []);
+
+  // Fetch latest vehicle positions only if configured
   const fetchLivePositions = async () => {
+    if (!isConfigured) return;
+    
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from('vehicle_positions')
         .select(`
@@ -62,10 +125,9 @@ const GPS51LiveDashboard: React.FC = () => {
         return;
       }
 
-      // Transform the data to match our interface
       const transformedData = data?.map(item => ({
         ...item,
-        vehicle: item.vehicles as any // Cast to match our interface
+        vehicle: item.vehicles as any
       })) || [];
 
       setLivePositions(transformedData);
@@ -77,12 +139,83 @@ const GPS51LiveDashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchLivePositions();
-    
-    // Refresh positions when sync completes
-    const interval = setInterval(fetchLivePositions, 30000);
-    return () => clearInterval(interval);
-  }, [status.lastSync]);
+    if (isConfigured) {
+      fetchLivePositions();
+      const interval = setInterval(fetchLivePositions, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isConfigured, status.lastSync]);
+
+  // Show configuration check loading
+  if (checkingConfig) {
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <span className="ml-2">Checking GPS51 configuration...</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show configuration required state
+  if (!isConfigured) {
+    return (
+      <div className="space-y-4">
+        <Card className="border-yellow-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-yellow-700">
+              <Settings className="h-5 w-5" />
+              GPS51 Configuration Required
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                <div>
+                  <h3 className="font-medium text-yellow-800">GPS51 Not Configured</h3>
+                  <p className="text-sm text-yellow-700 mt-1">
+                    {configurationError || 'GPS51 API credentials are required to display live vehicle data.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-3">
+              <p className="text-gray-600">To get started with GPS51 live tracking:</p>
+              <ol className="list-decimal list-inside space-y-2 text-sm text-gray-600 ml-4">
+                <li>Go to Settings and configure your GPS51 API credentials</li>
+                <li>Enter your GPS51 API URL, username, and password</li>
+                <li>Test the connection to ensure it's working</li>
+                <li>Return here to view live vehicle data</li>
+              </ol>
+            </div>
+
+            <div className="flex gap-3">
+              <Button asChild>
+                <Link to="/settings">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Configure GPS51
+                </Link>
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => window.location.reload()}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Retry Check
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const getStatusBadge = () => {
     if (status.isConnected && status.isActive) {

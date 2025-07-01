@@ -12,17 +12,7 @@ export interface GPS51LiveSyncStatus {
   executionTime: number;
 }
 
-export interface GPS51LiveSyncResult {
-  success: boolean;
-  devicesFound: number;
-  activeDevices: number;
-  positionsRetrieved: number;
-  positionsStored: number;
-  errors: string[];
-  executionTimeMs: number;
-}
-
-export const useGPS51LiveSync = (enableSync: boolean = true, intervalMs: number = 30000) => {
+export const useGPS51LiveSync = (enabled: boolean = true, intervalMs: number = 30000) => {
   const [status, setStatus] = useState<GPS51LiveSyncStatus>({
     isActive: false,
     isConnected: false,
@@ -33,62 +23,92 @@ export const useGPS51LiveSync = (enableSync: boolean = true, intervalMs: number 
     executionTime: 0
   });
 
+  const [isRunning, setIsRunning] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const isRunningRef = useRef(false);
 
   const performSync = useCallback(async () => {
-    if (isRunningRef.current) {
-      console.log('GPS51 sync already running, skipping...');
+    if (isRunning || !enabled) {
       return;
     }
 
-    isRunningRef.current = true;
+    setIsRunning(true);
+    const startTime = Date.now();
     
     try {
       console.log('🔄 Starting GPS51 live sync...');
       
-      const { data, error } = await supabase.functions.invoke('gps51-live-sync');
-      
+      const { data, error } = await supabase.functions.invoke('gps51-live-sync', {
+        body: { 
+          priority: 1,
+          batchMode: false,
+          cronTriggered: false
+        }
+      });
+
+      const executionTime = Date.now() - startTime;
+
       if (error) {
-        throw new Error(`Edge function error: ${error.message}`);
+        console.error('GPS51 live sync error:', error);
+        setStatus(prev => ({
+          ...prev,
+          isActive: false,
+          isConnected: false,
+          errors: [error.message || 'Sync failed'],
+          executionTime,
+          lastSync: new Date()
+        }));
+        return;
       }
 
-      const result = data as GPS51LiveSyncResult;
-      console.log('GPS51 sync result:', result);
-
-      setStatus(prev => ({
-        ...prev,
-        isActive: true,
-        isConnected: result.success,
-        lastSync: new Date(),
-        devicesFound: result.devicesFound,
-        positionsStored: result.positionsStored,
-        errors: result.errors || [],
-        executionTime: result.executionTimeMs
-      }));
-
-      if (!result.success) {
-        console.error('GPS51 sync failed:', result.errors);
+      if (data?.success) {
+        console.log('✅ GPS51 live sync completed:', data);
+        setStatus({
+          isActive: true,
+          isConnected: true,
+          lastSync: new Date(),
+          devicesFound: data.statistics?.devicesFound || 0,
+          positionsStored: data.statistics?.positionsStored || 0,
+          errors: [],
+          executionTime
+        });
       } else {
-        console.log(`✅ GPS51 sync completed: ${result.positionsStored} positions stored from ${result.devicesFound} devices`);
+        console.warn('GPS51 live sync completed with issues:', data);
+        setStatus(prev => ({
+          ...prev,
+          isActive: false,
+          isConnected: false,
+          errors: data?.errors || ['Sync completed with unknown status'],
+          executionTime,
+          lastSync: new Date()
+        }));
       }
 
     } catch (error) {
-      console.error('❌ GPS51 sync error:', error);
+      console.error('❌ GPS51 live sync exception:', error);
+      const executionTime = Date.now() - startTime;
+      
       setStatus(prev => ({
         ...prev,
         isActive: false,
         isConnected: false,
-        errors: [error instanceof Error ? error.message : 'Unknown sync error']
+        errors: [error instanceof Error ? error.message : 'Unknown sync error'],
+        executionTime,
+        lastSync: new Date()
       }));
     } finally {
-      isRunningRef.current = false;
+      setIsRunning(false);
     }
-  }, []);
+  }, [enabled, isRunning]);
 
-  // Start/stop sync based on enableSync flag
+  const forceSync = useCallback(() => {
+    if (!isRunning) {
+      performSync();
+    }
+  }, [performSync, isRunning]);
+
+  // Set up automatic syncing
   useEffect(() => {
-    if (!enableSync) {
+    if (!enabled) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -100,7 +120,7 @@ export const useGPS51LiveSync = (enableSync: boolean = true, intervalMs: number 
     // Initial sync
     performSync();
 
-    // Set up polling interval
+    // Set up interval
     intervalRef.current = setInterval(performSync, intervalMs);
 
     return () => {
@@ -109,15 +129,11 @@ export const useGPS51LiveSync = (enableSync: boolean = true, intervalMs: number 
         intervalRef.current = null;
       }
     };
-  }, [enableSync, intervalMs, performSync]);
-
-  const forceSync = useCallback(() => {
-    performSync();
-  }, [performSync]);
+  }, [enabled, intervalMs, performSync]);
 
   return {
     status,
     forceSync,
-    isRunning: isRunningRef.current
+    isRunning
   };
 };

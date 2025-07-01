@@ -1,7 +1,15 @@
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Save, TestTube, Trash2 } from 'lucide-react';
+import { Save, TestTube, RefreshCw, Trash2, Loader2 } from 'lucide-react';
+
+interface FormData {
+  apiUrl: string;
+  username: string;
+  password: string;
+  from: string;
+  type: string;
+}
 
 interface CredentialsFormActionsProps {
   onSave: () => void;
@@ -13,11 +21,7 @@ interface CredentialsFormActionsProps {
   isAuthenticated: boolean;
   isConfigured: boolean;
   syncStatus: string;
-  formData: {
-    apiUrl: string;
-    username: string;
-    password: string;
-  };
+  formData: FormData;
 }
 
 export const CredentialsFormActions: React.FC<CredentialsFormActionsProps> = ({
@@ -32,48 +36,64 @@ export const CredentialsFormActions: React.FC<CredentialsFormActionsProps> = ({
   syncStatus,
   formData
 }) => {
+  const canSave = formData.apiUrl && formData.username && formData.password;
+  const canTest = canSave && !isLoading;
+  const canSync = isConfigured && !isLoading && syncStatus !== 'syncing';
+
   return (
-    <div className="flex gap-2 pt-4">
-      <Button 
+    <div className="flex flex-wrap gap-3">
+      <Button
         onClick={onSave}
-        disabled={isLoading || isTesting}
+        disabled={!canSave || isLoading}
         className="flex items-center gap-2"
       >
-        <Save className="h-4 w-4" />
-        {isLoading ? 'Saving...' : 'Save & Connect'}
+        {isLoading ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Save className="h-4 w-4" />
+        )}
+        {isLoading ? 'Saving...' : 'Save Configuration'}
       </Button>
-      
-      <Button 
+
+      <Button
         onClick={onTestConnection}
-        disabled={isTesting || isLoading || !formData.apiUrl || !formData.username || !formData.password}
+        disabled={!canTest || isTesting}
         variant="outline"
         className="flex items-center gap-2"
       >
-        <TestTube className="h-4 w-4" />
+        {isTesting ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <TestTube className="h-4 w-4" />
+        )}
         {isTesting ? 'Testing...' : 'Test Connection'}
       </Button>
 
-      {isAuthenticated && (
-        <Button 
-          onClick={onSyncData}
-          disabled={syncStatus === 'syncing'}
-          variant="secondary"
-          className="flex items-center gap-2"
-        >
-          <Save className="h-4 w-4" />
-          {syncStatus === 'syncing' ? 'Syncing...' : 'Sync Data'}
-        </Button>
-      )}
-
       {isConfigured && (
-        <Button 
-          onClick={onClearConfiguration}
-          variant="destructive"
-          className="flex items-center gap-2"
-        >
-          <Trash2 className="h-4 w-4" />
-          Clear
-        </Button>
+        <>
+          <Button
+            onClick={onSyncData}
+            disabled={!canSync}
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            {syncStatus === 'syncing' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            {syncStatus === 'syncing' ? 'Syncing...' : 'Sync Data'}
+          </Button>
+
+          <Button
+            onClick={onClearConfiguration}
+            variant="destructive"
+            className="flex items-center gap-2"
+          >
+            <Trash2 className="h-4 w-4" />
+            Clear Configuration
+          </Button>
+        </>
       )}
     </div>
   );
