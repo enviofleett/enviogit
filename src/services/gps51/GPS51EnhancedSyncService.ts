@@ -3,6 +3,7 @@ import { GPS51Device, GPS51Position } from './types';
 import { GPS51DataFetcher } from './GPS51DataFetcher';
 import { GPS51EnhancedStateManager, EnhancedLiveDataState } from './GPS51EnhancedStateManager';
 import { GPS51AdaptivePollingService, AdaptivePollingOptions } from './GPS51AdaptivePollingService';
+import { gps51DeviceManager } from './GPS51DeviceManager';
 
 export interface EnhancedSyncOptions extends AdaptivePollingOptions {
   enableDeviceListRefresh?: boolean;
@@ -290,6 +291,7 @@ export class GPS51EnhancedSyncService {
     // Start device list refresh if enabled
     if (this.options.enableDeviceListRefresh) {
       this.startDeviceListRefresh();
+      gps51DeviceManager.startDeviceListMonitoring(this.options.deviceListRefreshInterval);
     }
 
     // Start adaptive polling
@@ -342,6 +344,7 @@ export class GPS51EnhancedSyncService {
    */
   stopEnhancedPolling(): void {
     this.pollingService.stopPolling();
+    gps51DeviceManager.stopDeviceListMonitoring();
     
     if (this.deviceListRefreshTimer) {
       clearInterval(this.deviceListRefreshTimer);
