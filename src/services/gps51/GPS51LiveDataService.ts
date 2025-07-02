@@ -146,5 +146,9 @@ export class GPS51LiveDataService {
 // Export singleton instance
 export const gps51LiveDataService = GPS51LiveDataService.getInstance();
 
+// Re-export enhanced service as primary export
+export { gps51EnhancedSyncService as gps51PrimaryService } from './GPS51EnhancedSyncService';
+
 // Re-export types for convenience
 export type { LiveDataState } from './GPS51StateManager';
+export type { EnhancedLiveDataState } from './GPS51EnhancedStateManager';
