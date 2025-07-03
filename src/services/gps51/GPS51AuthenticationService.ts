@@ -116,36 +116,31 @@ export class GPS51AuthenticationService {
   private getEndpointVariations(apiUrl: string): EndpointVariation[] {
     const variations: EndpointVariation[] = [];
     
-    // Test original URL
-    variations.push({ type: 'original', url: apiUrl });
-    
-    // Test /openapi endpoint
-    if (apiUrl.includes('/webapi')) {
+    // Primary: Use OpenAPI endpoint as primary source of truth
+    if (!apiUrl.includes('/openapi')) {
       variations.push({ 
-        type: 'openapi', 
-        url: apiUrl.replace('/webapi', '/openapi') 
+        type: 'openapi_primary', 
+        url: 'https://api.gps51.com/openapi' 
       });
-    } else if (!apiUrl.includes('/openapi')) {
-      variations.push({ 
-        type: 'openapi', 
-        url: apiUrl.replace(/\/$/, '') + '/openapi' 
-      });
+    } else {
+      variations.push({ type: 'openapi_original', url: apiUrl });
     }
     
-    // Test /webapi endpoint (fallback)
-    if (!apiUrl.includes('/webapi')) {
+    // Secondary: Test original URL if different from primary
+    if (apiUrl !== 'https://api.gps51.com/openapi') {
+      variations.push({ type: 'original', url: apiUrl });
+    }
+    
+    // Fallback: Test /webapi endpoint as legacy fallback
+    if (apiUrl.includes('/openapi')) {
       variations.push({ 
-        type: 'webapi', 
+        type: 'webapi_fallback', 
+        url: apiUrl.replace('/openapi', '/webapi') 
+      });
+    } else if (!apiUrl.includes('/webapi')) {
+      variations.push({ 
+        type: 'webapi_fallback', 
         url: apiUrl.replace(/\/$/, '') + '/webapi' 
-      });
-    }
-    
-    // Test root endpoint without path
-    const baseUrl = new URL(apiUrl);
-    if (baseUrl.pathname !== '/') {
-      variations.push({ 
-        type: 'root', 
-        url: `${baseUrl.protocol}//${baseUrl.host}` 
       });
     }
     

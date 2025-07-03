@@ -25,7 +25,11 @@ export class GPS51ApiClient {
     // Build URL with action and token as query parameters
     const url = new URL(this.baseURL);
     url.searchParams.append('action', action);
-    url.searchParams.append('token', token);
+    
+    // Only add token for non-login actions
+    if (action !== 'login') {
+      url.searchParams.append('token', token);
+    }
     
     // Add undocumented parameters for lastposition action
     if (action === 'lastposition') {
@@ -48,31 +52,47 @@ export class GPS51ApiClient {
         }
       };
 
-      // For POST requests, send parameters as form-encoded data
+      // For POST requests, use JSON for login, form-encoded for others
       if (method === 'POST' && Object.keys(params).length > 0) {
-        requestOptions.headers = {
-          ...requestOptions.headers,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        };
-        
-        // Convert params to URLSearchParams for form encoding
-        const formParams = new URLSearchParams();
-        Object.entries(params).forEach(([key, value]) => {
-          if (Array.isArray(value)) {
-            formParams.append(key, value.join(','));
-          } else {
-            formParams.append(key, String(value));
-          }
-        });
-        requestOptions.body = formParams.toString();
-        
-        console.log('GPS51 POST Request Details:', {
-          url: url.toString(),
-          method: 'POST',
-          headers: requestOptions.headers,
-          body: requestOptions.body,
-          bodyObject: params
-        });
+        if (action === 'login') {
+          // Use JSON for login requests to OpenAPI endpoint
+          requestOptions.headers = {
+            ...requestOptions.headers,
+            'Content-Type': 'application/json',
+          };
+          requestOptions.body = JSON.stringify(params);
+          
+          console.log('GPS51 JSON Login Request Details:', {
+            url: url.toString(),
+            method: 'POST',
+            headers: requestOptions.headers,
+            bodyObject: params
+          });
+        } else {
+          // Use form-encoded for other requests
+          requestOptions.headers = {
+            ...requestOptions.headers,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          };
+          
+          const formParams = new URLSearchParams();
+          Object.entries(params).forEach(([key, value]) => {
+            if (Array.isArray(value)) {
+              formParams.append(key, value.join(','));
+            } else {
+              formParams.append(key, String(value));
+            }
+          });
+          requestOptions.body = formParams.toString();
+          
+          console.log('GPS51 Form POST Request Details:', {
+            url: url.toString(),
+            method: 'POST',
+            headers: requestOptions.headers,
+            body: requestOptions.body,
+            bodyObject: params
+          });
+        }
       }
       
       const response = await fetch(url.toString(), requestOptions);

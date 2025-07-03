@@ -63,7 +63,8 @@ serve(async (req) => {
     const targetUrl = new URL(apiUrl);
     targetUrl.searchParams.append('action', requestData.action);
     
-    if (requestData.token) {
+    // Only add token for non-login actions
+    if (requestData.token && requestData.action !== 'login') {
       targetUrl.searchParams.append('token', requestData.token);
     }
 
@@ -84,28 +85,42 @@ serve(async (req) => {
       }
     };
 
-    // Add body for POST requests - GPS51 API expects form-encoded data
+    // Add body for POST requests - Use JSON for login, form-encoded for others
     if ((requestData.method || 'POST') === 'POST' && requestData.params) {
-      requestOptions.headers = {
-        ...requestOptions.headers,
-        'Content-Type': 'application/x-www-form-urlencoded'
-      };
-      
-      // Convert params to form-encoded format
-      const formParams = new URLSearchParams();
-      Object.entries(requestData.params).forEach(([key, value]) => {
-        if (Array.isArray(value)) {
-          formParams.append(key, value.join(','));
-        } else {
-          formParams.append(key, String(value));
-        }
-      });
-      requestOptions.body = formParams.toString();
+      if (requestData.action === 'login') {
+        // Use JSON for login requests to OpenAPI endpoint
+        requestOptions.headers = {
+          ...requestOptions.headers,
+          'Content-Type': 'application/json'
+        };
+        requestOptions.body = JSON.stringify(requestData.params);
+        
+        console.log('GPS51 Proxy: Sending JSON login request:', {
+          bodyParams: requestData.params,
+          jsonBody: requestOptions.body
+        });
+      } else {
+        // Use form-encoded for other requests
+        requestOptions.headers = {
+          ...requestOptions.headers,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        };
+        
+        const formParams = new URLSearchParams();
+        Object.entries(requestData.params).forEach(([key, value]) => {
+          if (Array.isArray(value)) {
+            formParams.append(key, value.join(','));
+          } else {
+            formParams.append(key, String(value));
+          }
+        });
+        requestOptions.body = formParams.toString();
 
-      console.log('GPS51 Proxy: Sending POST request with body:', {
-        bodyParams: requestData.params,
-        formBody: requestOptions.body
-      });
+        console.log('GPS51 Proxy: Sending form-encoded request:', {
+          bodyParams: requestData.params,
+          formBody: requestOptions.body
+        });
+      }
     }
 
     console.log('GPS51 Proxy: Making request to GPS51 API:', {

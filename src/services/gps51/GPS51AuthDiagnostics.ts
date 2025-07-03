@@ -187,41 +187,25 @@ export class GPS51AuthDiagnostics {
   private getEndpointVariations(apiUrl: string): Array<{ type: string; url: string }> {
     const variations: Array<{ type: string; url: string }> = [];
     
-    // Original URL
-    variations.push({ type: 'original', url: apiUrl });
+    // Primary: OpenAPI endpoint as source of truth
+    variations.push({ type: 'openapi_primary', url: 'https://api.gps51.com/openapi' });
     
-    // OpenAPI endpoint
-    if (apiUrl.includes('/webapi')) {
-      variations.push({ 
-        type: 'openapi_migration', 
-        url: apiUrl.replace('/webapi', '/openapi') 
-      });
-    } else if (!apiUrl.includes('/openapi')) {
-      variations.push({ 
-        type: 'openapi_addition', 
-        url: apiUrl.replace(/\/$/, '') + '/openapi' 
-      });
+    // Secondary: Original URL if different from primary
+    if (apiUrl !== 'https://api.gps51.com/openapi') {
+      variations.push({ type: 'original_url', url: apiUrl });
     }
     
-    // WebAPI endpoint (legacy)
-    if (!apiUrl.includes('/webapi')) {
+    // Fallback: WebAPI endpoint (legacy compatibility)
+    if (apiUrl.includes('/openapi')) {
       variations.push({ 
-        type: 'webapi_legacy', 
+        type: 'webapi_fallback', 
+        url: apiUrl.replace('/openapi', '/webapi') 
+      });
+    } else if (!apiUrl.includes('/webapi')) {
+      variations.push({ 
+        type: 'webapi_fallback', 
         url: apiUrl.replace(/\/$/, '') + '/webapi' 
       });
-    }
-    
-    // Root endpoint
-    try {
-      const baseUrl = new URL(apiUrl);
-      if (baseUrl.pathname !== '/') {
-        variations.push({ 
-          type: 'root_endpoint', 
-          url: `${baseUrl.protocol}//${baseUrl.host}` 
-        });
-      }
-    } catch {
-      // Invalid URL, skip root endpoint test
     }
     
     return variations;
@@ -230,7 +214,23 @@ export class GPS51AuthDiagnostics {
   private getParameterFormats(credentials: GPS51Credentials): Array<{ name: string; params: any }> {
     return [
       {
-        name: 'standard',
+        name: 'openapi_json',
+        params: {
+          username: credentials.username,
+          password: credentials.password,
+          from: credentials.from || 'WEB',
+          type: credentials.type || 'USER'
+        }
+      },
+      {
+        name: 'openapi_minimal',
+        params: {
+          username: credentials.username,
+          password: credentials.password
+        }
+      },
+      {
+        name: 'legacy_standard',
         params: {
           username: credentials.username,
           password: credentials.password,
@@ -245,24 +245,6 @@ export class GPS51AuthDiagnostics {
           password: credentials.password,
           from: 'ANDROID',
           type: 'USER'
-        }
-      },
-      {
-        name: 'minimal',
-        params: {
-          username: credentials.username,
-          password: credentials.password
-        }
-      },
-      {
-        name: 'extended',
-        params: {
-          username: credentials.username,
-          password: credentials.password,
-          from: credentials.from || 'WEB',
-          type: credentials.type || 'USER',
-          platform: 'web',
-          version: '1.0'
         }
       }
     ];
