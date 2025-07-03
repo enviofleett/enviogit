@@ -38,6 +38,16 @@ export class GPS51LiveDataEnhancer {
       const thirtyMinutesAgo = now - (30 * 60 * 1000); // 30 minutes in milliseconds
       const fiveMinutesAgo = now - (5 * 60 * 1000); // 5 minutes in milliseconds
 
+      // DIAGNOSTIC: Log time comparison values for debugging
+      console.log('🕐 GPS51LiveDataEnhancer: Time comparison debug:', {
+        currentTimestamp: now,
+        currentDate: new Date(now).toISOString(),
+        thirtyMinutesAgo,
+        thirtyMinutesAgoDate: new Date(thirtyMinutesAgo).toISOString(),
+        fiveMinutesAgo,
+        fiveMinutesAgoDate: new Date(fiveMinutesAgo).toISOString()
+      });
+
       const onlineDevices: GPS51Device[] = [];
       const offlineDevices: GPS51Device[] = [];
       let recentlyActiveCount = 0;
@@ -46,6 +56,20 @@ export class GPS51LiveDataEnhancer {
         const lastActiveTime = device.lastactivetime || 0;
         const isOnline = lastActiveTime > thirtyMinutesAgo;
         const isRecentlyActive = lastActiveTime > fiveMinutesAgo;
+
+        // DIAGNOSTIC: Enhanced logging for each device to debug inverted behavior
+        const minutesSinceActive = lastActiveTime ? Math.floor((now - lastActiveTime) / (60 * 1000)) : 'N/A';
+        console.log(`🚗 Device Analysis: ${device.devicename} (${device.deviceid}):`, {
+          lastActiveTime,
+          lastActiveTimeFormatted: lastActiveTime ? new Date(lastActiveTime).toISOString() : 'Never',
+          thirtyMinutesAgo,
+          thirtyMinutesAgoFormatted: new Date(thirtyMinutesAgo).toISOString(),
+          timeDifferenceMinutes: minutesSinceActive,
+          isOnlineCalculation: `${lastActiveTime} > ${thirtyMinutesAgo} = ${isOnline}`,
+          isOnline,
+          isRecentlyActive,
+          willBeIncludedInLiveQuery: isOnline
+        });
 
         // Update activity cache
         this.deviceActivityCache.set(device.deviceid, {
@@ -117,12 +141,16 @@ export class GPS51LiveDataEnhancer {
         return activity?.isOnline === true;
       });
 
-      console.log('GPS51LiveDataEnhancer: Live position query:', {
+      // DIAGNOSTIC: Enhanced logging with device ID details
+      const skippedDevices = deviceIds.filter(id => !onlineDeviceIds.includes(id));
+      console.log('🔍 GPS51LiveDataEnhancer: Live position query analysis:', {
         totalDevicesRequested: deviceIds.length,
         onlineDevicesFiltered: onlineDeviceIds.length,
         offlineDevicesSkipped: deviceIds.length - onlineDeviceIds.length,
+        onlineDeviceIds: onlineDeviceIds,
+        skippedOfflineDeviceIds: skippedDevices,
         lastQueryPositionTime: this.lastQueryPositionTime,
-        lastQueryDate: this.lastQueryPositionTime ? GPS51TimeManager.utcTimestampToWat(this.lastQueryPositionTime).toISOString() : 'Initial query'
+        lastQueryDate: this.lastQueryPositionTime ? new Date(this.lastQueryPositionTime).toISOString() : 'Initial query'
       });
 
       if (onlineDeviceIds.length === 0) {
