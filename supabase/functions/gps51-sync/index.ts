@@ -81,6 +81,11 @@ serve(async (req) => {
       }
 
       requestBody = JSON.parse(requestText);
+      
+      // Validate required structure
+      if (typeof requestBody !== 'object' || requestBody === null) {
+        throw new Error('Request body must be a valid JSON object');
+      }
       console.log("GPS51 Sync Request validation:", {
         hasUsername: !!requestBody.username,
         hasPassword: !!requestBody.password,
@@ -108,18 +113,24 @@ serve(async (req) => {
 
     // Log job start if triggered by cron or in batch mode
     if (cronTriggered || (batchMode && priority)) {
-      const { data: jobData, error: jobError } = await supabase
-        .from('gps51_sync_jobs')
-        .insert({
-          priority: priority || 0,
-          started_at: new Date().toISOString()
-        })
-        .select('id')
-        .single();
+      try {
+        const { data: jobData, error: jobError } = await supabase
+          .from('gps51_sync_jobs')
+          .insert({
+            priority: priority || 0,
+            started_at: new Date().toISOString()
+          })
+          .select('id')
+          .single();
 
-      if (!jobError && jobData) {
-        jobId = jobData.id;
-        console.log(`Job logged with ID: ${jobId}`);
+        if (!jobError && jobData) {
+          jobId = jobData.id;
+          console.log(`Job logged with ID: ${jobId}`);
+        } else {
+          console.error('Failed to log job start:', jobError);
+        }
+      } catch (dbError) {
+        console.error('Exception logging job start:', dbError);
       }
     }
 
@@ -161,14 +172,18 @@ serve(async (req) => {
       
       // Update job status if this was a scheduled job
       if (jobId) {
-        await supabase
-          .from('gps51_sync_jobs')
-          .update({
-            completed_at: new Date().toISOString(),
-            status: 'error',
-            error_message: errorMsg
-          })
-          .eq('id', jobId);
+        try {
+          await supabase
+            .from('gps51_sync_jobs')
+            .update({
+              completed_at: new Date().toISOString(),
+              success: false,
+              error_message: errorMsg
+            })
+            .eq('id', jobId);
+        } catch (dbError) {
+          console.error('Failed to update job status:', dbError);
+        }
       }
       
       throw new Error(errorMsg);
@@ -607,19 +622,23 @@ serve(async (req) => {
       const success = vehicleSyncErrors.length === 0 && positionStorageErrors.length === 0;
       const errorMessage = [...vehicleSyncErrors, ...positionStorageErrors].slice(0, 3).join('; ');
       
-      await supabase
-        .from('gps51_sync_jobs')
-        .update({
-          completed_at: new Date().toISOString(),
-          success,
-          vehicles_processed: vehiclesSynced,
-          positions_stored: positionsStored,
-          error_message: errorMessage || null,
-          execution_time_seconds: executionTimeSeconds
-        })
-        .eq('id', jobId);
+      try {
+        await supabase
+          .from('gps51_sync_jobs')
+          .update({
+            completed_at: new Date().toISOString(),
+            success,
+            vehicles_processed: vehiclesSynced,
+            positions_stored: positionsStored,
+            error_message: errorMessage || null,
+            execution_time_seconds: executionTimeSeconds
+          })
+          .eq('id', jobId);
 
-      console.log(`Job ${jobId} completed: success=${success}, vehicles=${vehiclesSynced}, positions=${positionsStored}`);
+        console.log(`Job ${jobId} completed: success=${success}, vehicles=${vehiclesSynced}, positions=${positionsStored}`);
+      } catch (dbError) {
+        console.error('Failed to update job completion status:', dbError);
+      }
     }
 
     // Final summary with detailed statistics
@@ -676,15 +695,19 @@ serve(async (req) => {
     
     // Update job with error status
     if (jobId) {
-      await supabase
-        .from('gps51_sync_jobs')
-        .update({
-          completed_at: new Date().toISOString(),
-          success: false,
-          error_message: error.message,
-          execution_time_seconds: executionTimeSeconds
-        })
-        .eq('id', jobId);
+      try {
+        await supabase
+          .from('gps51_sync_jobs')
+          .update({
+            completed_at: new Date().toISOString(),
+            success: false,
+            error_message: error.message,
+            execution_time_seconds: executionTimeSeconds
+          })
+          .eq('id', jobId);
+      } catch (dbError) {
+        console.error('Failed to update job error status:', dbError);
+      }
     }
     
     return new Response(
