@@ -52,26 +52,50 @@ export class GPS51LiveDataEnhancer {
       const offlineDevices: GPS51Device[] = [];
       let recentlyActiveCount = 0;
 
+      // CRITICAL DIAGNOSTIC: Let's examine the first 5 devices in detail to understand the time issue
+      const sampleDevices = devices.slice(0, 5);
+      console.log('🔍 CRITICAL TIME DIAGNOSTIC - Analyzing first 5 devices:', {
+        currentTimestamp: now,
+        currentDate: new Date(now).toISOString(),
+        thirtyMinutesAgo,
+        thirtyMinutesAgoDate: new Date(thirtyMinutesAgo).toISOString(),
+        totalDevices: devices.length
+      });
+
+      for (const device of sampleDevices) {
+        const lastActiveTime = device.lastactivetime || 0;
+        console.log(`🔍 SAMPLE Device: ${device.devicename}`, {
+          deviceid: device.deviceid,
+          lastactivetime: lastActiveTime,
+          lastActiveAsDate: lastActiveTime ? new Date(lastActiveTime).toISOString() : 'Never',
+          lastActiveAsDateSeconds: lastActiveTime ? new Date(lastActiveTime * 1000).toISOString() : 'Never (as seconds)',
+          timeDifferenceMs: now - lastActiveTime,
+          timeDifferenceMinutes: lastActiveTime ? Math.floor((now - lastActiveTime) / (60 * 1000)) : 'N/A',
+          isValidFutureDate: lastActiveTime > now,
+          comparisonResult: `${lastActiveTime} > ${thirtyMinutesAgo} = ${lastActiveTime > thirtyMinutesAgo}`
+        });
+      }
+
       for (const device of devices) {
         const lastActiveTime = device.lastactivetime || 0;
-        const isOnline = lastActiveTime > thirtyMinutesAgo;
+        
+        // TEST BOTH INTERPRETATIONS: milliseconds vs seconds
+        const isOnlineMs = lastActiveTime > thirtyMinutesAgo;
+        const isOnlineSeconds = (lastActiveTime * 1000) > thirtyMinutesAgo;
         const isRecentlyActive = lastActiveTime > fiveMinutesAgo;
 
-        // DIAGNOSTIC: Enhanced logging for each device to debug inverted behavior
-        const minutesSinceActive = lastActiveTime ? Math.floor((now - lastActiveTime) / (60 * 1000)) : 'N/A';
-        console.log(`🚗 Device Analysis: ${device.devicename} (${device.deviceid}):`, {
-          lastActiveTime,
-          lastActiveTimeFormatted: lastActiveTime ? new Date(lastActiveTime).toISOString() : 'Never',
-          thirtyMinutesAgo,
-          thirtyMinutesAgoFormatted: new Date(thirtyMinutesAgo).toISOString(),
-          timeDifferenceMinutes: minutesSinceActive,
-          isOnlineCalculation: `${lastActiveTime} > ${thirtyMinutesAgo} = ${isOnline}`,
-          isOnline,
-          isRecentlyActive,
-          willBeIncludedInLiveQuery: isOnline
-        });
+        // Log every 500th device to avoid console spam
+        if (devices.indexOf(device) % 500 === 0 || devices.indexOf(device) < 5) {
+          console.log(`🚗 Device ${devices.indexOf(device)}: ${device.devicename}`, {
+            lastActiveTime,
+            isOnlineMs,
+            isOnlineSeconds,
+            willUseMilliseconds: isOnlineMs
+          });
+        }
 
-        // Update activity cache
+        // Update activity cache - using milliseconds interpretation for now
+        const isOnline = isOnlineMs;
         this.deviceActivityCache.set(device.deviceid, {
           lastActive: lastActiveTime,
           isOnline
@@ -87,13 +111,20 @@ export class GPS51LiveDataEnhancer {
           recentlyActiveCount++;
         }
 
-        console.log(`Device ${device.devicename} (${device.deviceid}):`, {
-          lastActiveTime,
-          lastActiveDate: lastActiveTime ? GPS51TimeManager.utcTimestampToWat(lastActiveTime).toISOString() : 'Never',
-          isOnline,
-          isRecentlyActive,
-          minutesSinceLastActive: lastActiveTime ? Math.floor((now - lastActiveTime) / (60 * 1000)) : 'N/A'
-        });
+        // Only log first 5 devices to avoid spam
+        if (devices.indexOf(device) < 5) {
+          console.log(`🚗 DETAILED Device ${devices.indexOf(device)}: ${device.devicename} (${device.deviceid}):`, {
+            lastActiveTime,
+            lastActiveDate: lastActiveTime ? GPS51TimeManager.utcTimestampToWat(lastActiveTime).toISOString() : 'Never',
+            isOnlineMs,
+            isOnlineSeconds,
+            finalIsOnline: isOnline,
+            isRecentlyActive,
+            minutesSinceLastActive: lastActiveTime ? Math.floor((now - lastActiveTime) / (60 * 1000)) : 'N/A',
+            thirtyMinutesAgo,
+            comparisonDebug: `${lastActiveTime} > ${thirtyMinutesAgo} = ${isOnline}`
+          });
+        }
       }
 
       const activitySummary = {

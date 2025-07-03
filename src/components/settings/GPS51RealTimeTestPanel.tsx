@@ -18,9 +18,24 @@ interface RealTimeStats {
   isConnected: boolean;
 }
 
+interface TimeAnalysis {
+  currentTimestamp: number;
+  thirtyMinutesAgo: number;
+  sampleDeviceTimestamps: Array<{
+    deviceName: string;
+    deviceId: string;
+    lastActiveTime: number;
+    asMilliseconds: string;
+    asSeconds: string;
+    isOnlineMs: boolean;
+    isOnlineSeconds: boolean;
+  }>;
+}
+
 export const GPS51RealTimeTestPanel = () => {
   const [testing, setTesting] = useState(false);
   const [stats, setStats] = useState<RealTimeStats | null>(null);
+  const [timeAnalysis, setTimeAnalysis] = useState<TimeAnalysis | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
@@ -28,6 +43,42 @@ export const GPS51RealTimeTestPanel = () => {
   const addLog = (message: string) => {
     const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
     setLogs(prev => [...prev.slice(-9), `[${timestamp}] ${message}`]);
+  };
+
+  const runTimeAnalysis = async () => {
+    try {
+      addLog('🔍 Running detailed time analysis...');
+      
+      const dataFetcher = new GPS51DataFetcher(gps51Client);
+      const devices = await dataFetcher.fetchUserDevices();
+      
+      const now = GPS51TimeManager.getCurrentUtcTimestamp();
+      const thirtyMinutesAgo = now - (30 * 60 * 1000);
+      
+      const sampleDeviceTimestamps = devices.slice(0, 10).map(device => {
+        const lastActiveTime = device.lastactivetime || 0;
+        return {
+          deviceName: device.devicename,
+          deviceId: device.deviceid,
+          lastActiveTime,
+          asMilliseconds: lastActiveTime ? new Date(lastActiveTime).toISOString() : 'Never',
+          asSeconds: lastActiveTime ? new Date(lastActiveTime * 1000).toISOString() : 'Never',
+          isOnlineMs: lastActiveTime > thirtyMinutesAgo,
+          isOnlineSeconds: (lastActiveTime * 1000) > thirtyMinutesAgo
+        };
+      });
+
+      setTimeAnalysis({
+        currentTimestamp: now,
+        thirtyMinutesAgo,
+        sampleDeviceTimestamps
+      });
+
+      addLog(`📊 Time analysis complete. Found ${sampleDeviceTimestamps.filter(d => d.isOnlineMs).length} online (ms) vs ${sampleDeviceTimestamps.filter(d => d.isOnlineSeconds).length} online (seconds)`);
+
+    } catch (error) {
+      addLog(`❌ Time analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const runRealTimeTest = async () => {
@@ -44,6 +95,9 @@ export const GPS51RealTimeTestPanel = () => {
       }
       addLog('✅ Authentication verified');
 
+      // Run time analysis first
+      await runTimeAnalysis();
+
       // Create data fetcher
       const dataFetcher = new GPS51DataFetcher(gps51Client);
       addLog('📡 Initializing data fetcher...');
@@ -57,24 +111,9 @@ export const GPS51RealTimeTestPanel = () => {
         throw new Error('No devices found for user');
       }
 
-      // Test live positions with proper timestamp handling
-      addLog('🕐 Testing live position fetch...');
-      
-      // First call - no lastQueryTime
-      const deviceIds = devices.map(d => d.deviceid);
-      const result1 = await dataFetcher.fetchLivePositions(deviceIds);
-      
-      addLog(`📍 First call: ${result1.positions.length} positions, lastQueryTime: ${result1.lastQueryTime}`);
-      
-      // Second call - use server's lastQueryTime
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-      const result2 = await dataFetcher.fetchLivePositions(deviceIds, result1.lastQueryTime);
-      
-      addLog(`📍 Second call: ${result2.positions.length} positions, lastQueryTime: ${result2.lastQueryTime}`);
-
-      // Test enhanced live data
+      // Test enhanced live data with detailed analysis
       addLog('🚀 Testing enhanced live data fetch...');
-      const enhancedResult = await dataFetcher.fetchCompleteLiveData(result2.lastQueryTime);
+      const enhancedResult = await dataFetcher.fetchCompleteLiveData();
       
       addLog(`🎯 Enhanced result: ${enhancedResult.devices.length} devices, ${enhancedResult.positions.length} positions`);
 
@@ -119,6 +158,7 @@ export const GPS51RealTimeTestPanel = () => {
     setLogs([]);
     setStats(null);
     setError(null);
+    setTimeAnalysis(null);
   };
 
   return (
@@ -126,7 +166,7 @@ export const GPS51RealTimeTestPanel = () => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <MapPin className="h-5 w-5" />
-          GPS51 Real-Time Data Test
+          GPS51 Real-Time Data Test (Enhanced)
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -138,6 +178,16 @@ export const GPS51RealTimeTestPanel = () => {
           >
             <RefreshCw className={`h-4 w-4 ${testing ? 'animate-spin' : ''}`} />
             {testing ? 'Testing...' : 'Run Real-Time Test'}
+          </Button>
+          
+          <Button 
+            onClick={runTimeAnalysis}
+            disabled={testing}
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            <Clock className="h-4 w-4" />
+            Time Analysis Only
           </Button>
           
           <Button 
@@ -190,6 +240,28 @@ export const GPS51RealTimeTestPanel = () => {
               <Badge variant={stats.isConnected ? 'default' : 'destructive'}>
                 {stats.isConnected ? 'Active' : 'Failed'}
               </Badge>
+            </div>
+          </div>
+        )}
+
+        {timeAnalysis && (
+          <div className="space-y-3">
+            <h4 className="font-medium text-sm">Time Analysis Results</h4>
+            <div className="p-3 bg-muted rounded-lg text-xs space-y-2">
+              <div>Current: {new Date(timeAnalysis.currentTimestamp).toISOString()}</div>
+              <div>30min ago: {new Date(timeAnalysis.thirtyMinutesAgo).toISOString()}</div>
+              
+              <div className="space-y-1">
+                <div className="font-medium">Sample Devices (first 10):</div>
+                {timeAnalysis.sampleDeviceTimestamps.map((device, index) => (
+                  <div key={index} className="pl-2 border-l border-border">
+                    <div className="font-mono">{device.deviceName} ({device.deviceId})</div>
+                    <div>Raw: {device.lastActiveTime}</div>
+                    <div>As MS: {device.asMilliseconds} → {device.isOnlineMs ? '✅' : '❌'}</div>
+                    <div>As S: {device.asSeconds} → {device.isOnlineSeconds ? '✅' : '❌'}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
