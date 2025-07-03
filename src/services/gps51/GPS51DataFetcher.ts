@@ -90,7 +90,7 @@ export class GPS51DataFetcher {
       console.log('GPS51DataFetcher: Live positions result (ENHANCED):', {
         positionsRetrieved: result.positions.length,
         serverLastQueryTime: result.lastQueryTime,
-        serverTimestamp: new Date(result.lastQueryTime).toISOString(),
+        serverTimestamp: result.lastQueryTime ? new Date(result.lastQueryTime).toISOString() : 'N/A',
         hasPositionData: result.positions.length > 0
       });
       

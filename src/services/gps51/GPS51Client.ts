@@ -277,7 +277,7 @@ export class GPS51Client {
         hasRecords: !!response.records,
         recordsLength: Array.isArray(response.records) ? response.records.length : 0,
         serverLastQueryTime: response.lastquerypositiontime,
-        serverTimestamp: new Date(response.lastquerypositiontime).toISOString(),
+        serverTimestamp: response.lastquerypositiontime ? new Date(response.lastquerypositiontime).toISOString() : 'N/A',
         responseKeys: Object.keys(response)
       });
 
@@ -308,7 +308,7 @@ export class GPS51Client {
         console.log('GPS51 Position Final Result:', {
           positionsRetrieved: positions.length,
           serverLastQueryTime,
-          nextCallTimestamp: new Date(serverLastQueryTime).toISOString()
+          nextCallTimestamp: serverLastQueryTime ? new Date(serverLastQueryTime).toISOString() : 'N/A'
         });
         
         return {
