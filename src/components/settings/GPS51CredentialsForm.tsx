@@ -112,14 +112,20 @@ export const GPS51CredentialsForm = () => {
       throw new Error('Password is required');
     }
 
-    // Only hash if not already hashed - use async MD5 function
+    // Use GPS51Utils for consistent async MD5 hashing
+    const { GPS51Utils } = await import('@/services/gps51/GPS51Utils');
+    
     let hashedPassword: string;
-    if (isValidMD5(rawPassword)) {
-      hashedPassword = rawPassword;
-      console.log('GPS51CredentialsForm: Password already hashed');
-    } else {
-      hashedPassword = md5(rawPassword).toLowerCase();
-      console.log('GPS51CredentialsForm: Password hashed to MD5');
+    try {
+      hashedPassword = await GPS51Utils.ensureMD5Hash(rawPassword);
+      console.log('GPS51CredentialsForm: Password processed through GPS51Utils:', {
+        originalLength: rawPassword.length,
+        hashedLength: hashedPassword.length,
+        isValidMD5: GPS51Utils.validateMD5Hash(hashedPassword)
+      });
+    } catch (error) {
+      console.error('GPS51CredentialsForm: Password hashing failed:', error);
+      throw new Error(`Password processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
     
     const credentials = {

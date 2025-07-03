@@ -23,7 +23,7 @@ export class GPS51StartupService {
       console.log('GPS51StartupService: Initializing authentication...');
       
       const credentialsManager = new GPS51CredentialsManager();
-      const savedCredentials = credentialsManager.getCredentials();
+      const savedCredentials = await credentialsManager.getCredentials();
       
       if (!savedCredentials) {
         console.log('GPS51StartupService: No saved credentials found');

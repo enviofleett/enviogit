@@ -88,7 +88,7 @@ export class GPS51AuthManager {
 
       // If refresh failed, try full re-authentication with stored credentials
       console.log('GPS51AuthManager: Token refresh failed, attempting re-authentication...');
-      const credentials = this.credentialsManager.getCredentials();
+      const credentials = await this.credentialsManager.getCredentials();
       
       if (credentials && credentials.password) {
         console.log('GPS51AuthManager: Re-authenticating with stored credentials');
@@ -114,7 +114,7 @@ export class GPS51AuthManager {
       }
 
       // Try to restore with stored credentials
-      const credentials = this.credentialsManager.getCredentials();
+      const credentials = await this.credentialsManager.getCredentials();
       if (credentials && credentials.password) {
         console.log('GPS51AuthManager: Restoring authentication with stored credentials');
         const token = await this.authenticate(credentials);

@@ -28,7 +28,7 @@ export const GPS51ProductionReadinessPanel = () => {
       // 1. Credentials Check
       console.log('Production Check: Verifying GPS51 credentials...');
       const credentialsManager = new GPS51CredentialsManager();
-      const credentials = credentialsManager.getCredentials();
+      const credentials = await credentialsManager.getCredentials();
       
       if (!credentials) {
         checks.push({
@@ -38,14 +38,23 @@ export const GPS51ProductionReadinessPanel = () => {
           details: { hasCredentials: false }
         });
       } else {
+        // Enhanced credential validation
+        const { GPS51Utils } = await import('@/services/gps51/GPS51Utils');
+        const passwordInfo = GPS51Utils.getPasswordValidationInfo(credentials.password);
+        
         checks.push({
           name: 'GPS51 Credentials',
-          status: 'pass',
-          message: 'GPS51 credentials are configured',
+          status: passwordInfo.isValidMD5 ? 'pass' : 'warning',
+          message: passwordInfo.isValidMD5 
+            ? 'GPS51 credentials are properly configured' 
+            : 'Credentials configured but password may need re-hashing',
           details: { 
             username: credentials.username,
-            hasPassword: !!credentials.password,
-            apiUrl: credentials.apiUrl 
+            hasPassword: passwordInfo.isAvailable,
+            passwordIsValidMD5: passwordInfo.isValidMD5,
+            apiUrl: credentials.apiUrl,
+            from: credentials.from,
+            type: credentials.type
           }
         });
       }
@@ -87,32 +96,39 @@ export const GPS51ProductionReadinessPanel = () => {
         });
       }
 
-      // 3. Proxy Function Test
-      console.log('Production Check: Testing Supabase Edge Function...');
+      // 3. Intelligent Connection Test
+      console.log('Production Check: Testing intelligent connection strategies...');
       try {
-        const proxyClient = GPS51ProxyClient.getInstance();
-        const connectionTest = await proxyClient.testConnection('https://api.gps51.com/openapi');
+        const { gps51IntelligentConnectionManager } = await import('@/services/gps51/GPS51IntelligentConnectionManager');
+        const connectionTest = await gps51IntelligentConnectionManager.testAllConnections('https://api.gps51.com/openapi');
+        const healthStatus = gps51IntelligentConnectionManager.getConnectionHealth();
         
-        if (connectionTest.success) {
+        const proxyResult = connectionTest.get('proxy');
+        
+        if (proxyResult?.success) {
           checks.push({
-            name: 'Supabase Edge Function',
+            name: 'Connection Strategy Test',
             status: 'pass',
-            message: `Edge function working (${connectionTest.responseTime}ms)`,
-            details: connectionTest
+            message: `Proxy connection working (${proxyResult.responseTime}ms)`,
+            details: { 
+              proxyResult,
+              healthStatus,
+              recommendedStrategy: healthStatus.recommendedStrategy 
+            }
           });
         } else {
           checks.push({
-            name: 'Supabase Edge Function',
+            name: 'Connection Strategy Test',
             status: 'fail',
-            message: `Edge function failed: ${connectionTest.error}`,
-            details: connectionTest
+            message: `Connection strategies failed: ${proxyResult?.error || 'Unknown error'}`,
+            details: { proxyResult, healthStatus }
           });
         }
       } catch (error) {
         checks.push({
-          name: 'Supabase Edge Function',
+          name: 'Connection Strategy Test',
           status: 'fail',
-          message: `Edge function error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          message: `Connection test error: ${error instanceof Error ? error.message : 'Unknown error'}`,
           details: { error: error instanceof Error ? error.message : 'Unknown error' }
         });
       }
@@ -308,7 +324,14 @@ export const GPS51ProductionReadinessPanel = () => {
             <XCircle className="h-4 w-4" />
             <AlertDescription>
               Critical issues detected. GPS51 integration is not ready for production.
-              Please resolve the failed checks before deploying.
+              <br />
+              <strong>Recommendations:</strong>
+              <br />
+              ⚠️ Fix credential configuration and authentication issues
+              <br />
+              ⚠️ Ensure Supabase Edge Functions are properly deployed
+              <br />
+              ⚠️ Verify GPS51 API connectivity
             </AlertDescription>
           </Alert>
         )}
@@ -317,8 +340,13 @@ export const GPS51ProductionReadinessPanel = () => {
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              GPS51 integration is functional but has warnings. 
-              Consider addressing these issues for optimal production performance.
+              GPS51 integration is functional but has warnings.
+              <br />
+              <strong>Recommendations:</strong>
+              <br />
+              ⚠️ Consider using proxy connection for better reliability
+              <br />
+              ⚠️ Monitor connection performance and implement fallbacks
             </AlertDescription>
           </Alert>
         )}
@@ -327,8 +355,13 @@ export const GPS51ProductionReadinessPanel = () => {
           <Alert>
             <CheckCircle2 className="h-4 w-4" />
             <AlertDescription>
-              GPS51 integration is ready for production deployment!
-              All critical systems are functioning correctly.
+              🎉 GPS51 integration is ready for production deployment!
+              <br />
+              ✅ All critical systems are functioning correctly
+              <br />
+              ✅ Intelligent connection management is active
+              <br />
+              ✅ Ready to fetch live vehicle and user data
             </AlertDescription>
           </Alert>
         )}

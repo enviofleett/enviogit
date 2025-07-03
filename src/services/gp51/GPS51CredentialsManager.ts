@@ -16,9 +16,9 @@ export class GPS51CredentialsManager {
     this.saveCredentialsToStorage(credentials);
   }
 
-  getCredentials(): GPS51Credentials | null {
+  async getCredentials(): Promise<GPS51Credentials | null> {
     if (!this.credentials) {
-      this.loadCredentialsFromStorage();
+      await this.loadCredentialsFromStorage();
     }
     
     // Validate that we have a complete credentials object
@@ -73,36 +73,31 @@ export class GPS51CredentialsManager {
     }
   }
 
-  private loadCredentialsFromStorage(): void {
+  private async loadCredentialsFromStorage(): Promise<void> {
     try {
-      const storedCreds = localStorage.getItem('gps51_credentials');
+      // Always prioritize individual items for more reliable access
+      const username = localStorage.getItem('gps51_username');
+      const passwordHash = localStorage.getItem('gps51_password_hash');
+      const apiUrl = localStorage.getItem('gps51_api_url');
       
-      if (storedCreds) {
-        const creds = JSON.parse(storedCreds);
+      if (username && passwordHash && apiUrl) {
+        // Validate password is properly hashed
+        const { GPS51Utils } = await import('../gps51/GPS51Utils');
         
-        // Validate required fields before creating credentials object
-        if (!creds.username || !creds.password || !creds.apiUrl) {
-          console.warn('GPS51CredentialsManager: Stored credentials missing required fields');
-          return;
-        }
-        
-        this.credentials = {
-          username: creds.username,
-          password: creds.password, // This should be the hashed password
-          apiUrl: creds.apiUrl,
-          from: creds.from || 'WEB',
-          type: creds.type || 'USER',
-          apiKey: creds.apiKey
-        };
-        
-        console.log('GPS51CredentialsManager: Credentials restored from localStorage');
-      } else {
-        // Fallback: try to load from individual items
-        const username = localStorage.getItem('gps51_username');
-        const passwordHash = localStorage.getItem('gps51_password_hash');
-        const apiUrl = localStorage.getItem('gps51_api_url');
-        
-        if (username && passwordHash && apiUrl) {
+        if (!GPS51Utils.validateMD5Hash(passwordHash)) {
+          console.warn('GPS51CredentialsManager: Stored password is not a valid MD5 hash, re-hashing...');
+          const hashedPassword = await GPS51Utils.ensureMD5Hash(passwordHash);
+          localStorage.setItem('gps51_password_hash', hashedPassword);
+          
+          this.credentials = {
+            username,
+            password: hashedPassword,
+            apiUrl,
+            from: (localStorage.getItem('gps51_from') as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN') || 'WEB',
+            type: (localStorage.getItem('gps51_type') as 'USER' | 'DEVICE') || 'USER',
+            apiKey: localStorage.getItem('gps51_api_key') || undefined
+          };
+        } else {
           this.credentials = {
             username,
             password: passwordHash,
@@ -111,12 +106,36 @@ export class GPS51CredentialsManager {
             type: (localStorage.getItem('gps51_type') as 'USER' | 'DEVICE') || 'USER',
             apiKey: localStorage.getItem('gps51_api_key') || undefined
           };
-          
-          console.log('GPS51CredentialsManager: Credentials restored from individual items');
-        } else {
-          console.log('GPS51CredentialsManager: No valid credentials found in storage');
         }
+        
+        console.log('GPS51CredentialsManager: Credentials restored from individual items with validation');
+        return;
       }
+      
+      // Fallback: try JSON credentials but validate thoroughly
+      const storedCreds = localStorage.getItem('gps51_credentials');
+      if (storedCreds) {
+        const creds = JSON.parse(storedCreds);
+        
+        // Check if this is just metadata (safe credentials without password)
+        if (!creds.password && creds.username && username && passwordHash) {
+          // Use individual items for actual credentials
+          this.credentials = {
+            username,
+            password: passwordHash,
+            apiUrl: apiUrl || creds.apiUrl,
+            from: (localStorage.getItem('gps51_from') as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN') || 'WEB',
+            type: (localStorage.getItem('gps51_type') as 'USER' | 'DEVICE') || 'USER',
+            apiKey: localStorage.getItem('gps51_api_key') || undefined
+          };
+          console.log('GPS51CredentialsManager: Credentials restored from mixed sources');
+          return;
+        }
+        
+        console.log('GPS51CredentialsManager: No valid credentials found in storage');
+      }
+      
+      console.log('GPS51CredentialsManager: No credentials found, user needs to configure');
     } catch (error) {
       console.warn('GPS51CredentialsManager: Failed to load credentials from localStorage:', error);
       this.credentials = null;
