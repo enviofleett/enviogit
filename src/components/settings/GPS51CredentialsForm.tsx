@@ -107,9 +107,20 @@ export const GPS51CredentialsForm = () => {
     return true;
   };
 
-  const prepareCredentials = (rawPassword: string) => {
-    // Only hash if not already hashed
-    const hashedPassword = isValidMD5(rawPassword) ? rawPassword : md5(rawPassword).toLowerCase();
+  const prepareCredentials = async (rawPassword: string) => {
+    if (!rawPassword) {
+      throw new Error('Password is required');
+    }
+
+    // Only hash if not already hashed - use async MD5 function
+    let hashedPassword: string;
+    if (isValidMD5(rawPassword)) {
+      hashedPassword = rawPassword;
+      console.log('GPS51CredentialsForm: Password already hashed');
+    } else {
+      hashedPassword = md5(rawPassword).toLowerCase();
+      console.log('GPS51CredentialsForm: Password hashed to MD5');
+    }
     
     const credentials = {
       apiUrl: formData.apiUrl,
@@ -183,7 +194,7 @@ export const GPS51CredentialsForm = () => {
       console.log('=== GPS51 SAVE CREDENTIALS DEBUG ===');
       console.log('1. Form validation passed');
       
-      const credentials = prepareCredentials(formData.password);
+      const credentials = await prepareCredentials(formData.password);
       console.log('2. Credentials prepared:', {
         username: credentials.username,
         apiUrl: credentials.apiUrl,
@@ -245,7 +256,7 @@ export const GPS51CredentialsForm = () => {
     setIsTesting(true);
     try {
       console.log('=== GPS51 TEST CONNECTION DEBUG ===');
-      const credentials = prepareCredentials(formData.password);
+      const credentials = await prepareCredentials(formData.password);
       
       console.log('Testing connection with credentials:', {
         username: credentials.username,

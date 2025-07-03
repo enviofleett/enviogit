@@ -20,6 +20,14 @@ export class GPS51CredentialsManager {
     if (!this.credentials) {
       this.loadCredentialsFromStorage();
     }
+    
+    // Validate that we have a complete credentials object
+    if (this.credentials && (!this.credentials.username || !this.credentials.password || !this.credentials.apiUrl)) {
+      console.warn('GPS51CredentialsManager: Incomplete credentials found, clearing...');
+      this.clearCredentials();
+      return null;
+    }
+    
     return this.credentials;
   }
 
@@ -71,6 +79,13 @@ export class GPS51CredentialsManager {
       
       if (storedCreds) {
         const creds = JSON.parse(storedCreds);
+        
+        // Validate required fields before creating credentials object
+        if (!creds.username || !creds.password || !creds.apiUrl) {
+          console.warn('GPS51CredentialsManager: Stored credentials missing required fields');
+          return;
+        }
+        
         this.credentials = {
           username: creds.username,
           password: creds.password, // This should be the hashed password
@@ -98,6 +113,8 @@ export class GPS51CredentialsManager {
           };
           
           console.log('GPS51CredentialsManager: Credentials restored from individual items');
+        } else {
+          console.log('GPS51CredentialsManager: No valid credentials found in storage');
         }
       }
     } catch (error) {

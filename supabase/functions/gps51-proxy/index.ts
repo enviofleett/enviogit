@@ -209,15 +209,30 @@ serve(async (req) => {
       // Standard JSON response handling
       try {
         responseData = JSON.parse(responseText);
-      } catch {
+        
+        // Ensure status is properly typed for GPS51 responses
+        if (responseData.status !== undefined) {
+          responseData.status = parseInt(responseData.status) || 0;
+        }
+        
+        console.log('GPS51 Proxy: Successfully parsed JSON response:', {
+          status: responseData.status,
+          hasToken: !!responseData.token,
+          hasUser: !!responseData.user,
+          message: responseData.message
+        });
+        
+      } catch (parseError) {
+        console.error('GPS51 Proxy: JSON parsing failed:', parseError);
         responseData = {
-          status: 0,
-          message: responseText || 'Empty response',
+          status: 1,
+          message: responseText || 'Invalid JSON response from GPS51 API',
           data: responseText,
           proxy_info: {
             contentType,
             bodyLength: responseText.length,
-            action: requestData.action
+            action: requestData.action,
+            parseError: parseError.message
           }
         };
       }

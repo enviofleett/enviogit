@@ -14,27 +14,39 @@ export class GPS51Utils {
     return md5Regex.test(password);
   }
 
-  static ensureMD5Hash(password: string): string {
+  static async ensureMD5Hash(password: string): Promise<string> {
+    // Handle null/undefined passwords
+    if (!password) {
+      throw new Error('Password is required for MD5 hashing');
+    }
+
     // If password is already a valid MD5 hash, return as-is
     if (this.validateMD5Hash(password)) {
       return password;
     }
     
-    // Import MD5 function and hash the password
+    // Use dynamic import for MD5 function in ES module environment
     try {
-      const { md5 } = require('js-md5');
-      return md5(password).toLowerCase();
+      const { md5 } = await import('js-md5');
+      const hashedPassword = md5(password).toLowerCase();
+      console.log('GPS51Utils: Password successfully hashed to MD5');
+      return hashedPassword;
     } catch (error) {
-      // Fallback if module import fails
-      console.warn('MD5 module import failed, password may not be hashed properly');
-      return password;
+      console.error('GPS51Utils: MD5 module import failed:', error);
+      throw new Error('Failed to hash password - MD5 module not available');
     }
   }
 
-  static createGPS51LoginParams(credentials: any): any {
+  static async createGPS51LoginParams(credentials: any): Promise<any> {
+    if (!credentials.username || !credentials.password) {
+      throw new Error('Username and password are required');
+    }
+
+    const hashedPassword = await this.ensureMD5Hash(credentials.password);
+    
     return {
       username: credentials.username,
-      password: this.ensureMD5Hash(credentials.password),
+      password: hashedPassword,
       from: credentials.from || 'WEB',
       type: credentials.type || 'USER'
     };
@@ -51,14 +63,27 @@ export class GPS51Utils {
     return apiUrl;
   }
 
-  static getPasswordValidationInfo(password: string) {
+  static getPasswordValidationInfo(password: string | null | undefined) {
+    if (!password) {
+      return {
+        isValidMD5: false,
+        passwordLength: 0,
+        hasUppercase: false,
+        hasLowercase: false,
+        hasNumbers: false,
+        hasSpecialChars: false,
+        isAvailable: false
+      };
+    }
+
     return {
       isValidMD5: this.validateMD5Hash(password),
       passwordLength: password.length,
       hasUppercase: /[A-Z]/.test(password),
       hasLowercase: /[a-z]/.test(password),
       hasNumbers: /[0-9]/.test(password),
-      hasSpecialChars: /[^a-zA-Z0-9]/.test(password)
+      hasSpecialChars: /[^a-zA-Z0-9]/.test(password),
+      isAvailable: true
     };
   }
 

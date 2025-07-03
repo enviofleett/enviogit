@@ -41,8 +41,8 @@ export class GPS51AuthenticationService {
     try {
       console.log('GPS51AuthenticationService: Starting enhanced authentication...');
       
-      // Validate and prepare credentials
-      const loginParams = this.prepareLoginParams(credentials);
+      // Validate and prepare credentials with async MD5 hashing
+      const loginParams = await this.prepareLoginParams(credentials);
       
       console.log('GPS51AuthenticationService: Login parameters prepared:', {
         username: loginParams.username,
@@ -119,9 +119,24 @@ export class GPS51AuthenticationService {
     }
   }
 
-  private prepareLoginParams(credentials: any): any {
-    // Ensure password is MD5 hashed
-    const hashedPassword = GPS51Utils.ensureMD5Hash(credentials.password);
+  private async prepareLoginParams(credentials: any): Promise<any> {
+    console.log('GPS51AuthenticationService: Preparing login parameters...');
+    
+    // Validate input credentials
+    if (!credentials) {
+      throw new Error('Credentials object is required');
+    }
+    
+    if (!credentials.username) {
+      throw new Error('Username is required for authentication');
+    }
+    
+    if (!credentials.password) {
+      throw new Error('Password is required for authentication');
+    }
+
+    // Ensure password is MD5 hashed using async method
+    const hashedPassword = await GPS51Utils.ensureMD5Hash(credentials.password);
     
     const params = {
       username: credentials.username,
@@ -130,10 +145,13 @@ export class GPS51AuthenticationService {
       type: credentials.type || 'USER'
     };
 
-    // Validate all required parameters are present
-    if (!params.username || !params.password || !params.from || !params.type) {
-      throw new Error('Missing required authentication parameters');
-    }
+    console.log('GPS51AuthenticationService: Login parameters prepared:', {
+      username: params.username,
+      passwordLength: params.password.length,
+      isValidMD5: GPS51Utils.validateMD5Hash(params.password),
+      from: params.from,
+      type: params.type
+    });
 
     return params;
   }
