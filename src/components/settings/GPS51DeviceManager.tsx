@@ -3,14 +3,19 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Monitor } from 'lucide-react';
 import { gps51Client, GPS51Device } from '@/services/gps51/GPS51Client';
+import { GPS51Position } from '@/services/gps51/types';
 import { useToast } from '@/hooks/use-toast';
 import { DeviceSearchControls } from './components/DeviceSearchControls';
 import { DeviceTable } from './components/DeviceTable';
 import { DeviceStats } from './components/DeviceStats';
 import { DeviceErrorDisplay } from './components/DeviceErrorDisplay';
 
+interface EnhancedDeviceData extends GPS51Device {
+  lastPosition?: GPS51Position;
+}
+
 interface DeviceManagerState {
-  devices: GPS51Device[];
+  devices: EnhancedDeviceData[];
   loading: boolean;
   error: string | null;
   lastSync: Date | null;
@@ -39,12 +44,46 @@ const GPS51DeviceManager: React.FC = () => {
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      console.log('Fetching GPS51 device list...');
+      console.log('Fetching GPS51 device list and recent positions...');
       const devices = await gps51Client.getDeviceList();
+      
+      // Fetch recent positions for devices that have location data
+      const deviceIds = devices.filter(d => d.callat && d.callon).map(d => d.deviceid);
+      let enhancedDevices: EnhancedDeviceData[] = devices;
+      
+      if (deviceIds.length > 0) {
+        try {
+          // Fetch recent positions (last 24 hours) for devices with location data
+          const oneHourAgo = Math.floor((Date.now() - (60 * 60 * 1000)) / 1000);
+          const recentPositions = await gps51Client.getRealtimePositions(deviceIds, oneHourAgo);
+          
+          // Create a map of device ID to most recent position
+          const positionMap = new Map<string, GPS51Position>();
+          recentPositions.positions.forEach(pos => {
+            const existing = positionMap.get(pos.deviceid);
+            if (!existing || pos.updatetime > existing.updatetime) {
+              positionMap.set(pos.deviceid, pos);
+            }
+          });
+          
+          // Enhance devices with position data
+          enhancedDevices = devices.map(device => ({
+            ...device,
+            lastPosition: positionMap.get(device.deviceid)
+          }));
+          
+          console.log('Enhanced devices with position data:', {
+            devicesWithPositions: positionMap.size,
+            totalDevices: devices.length
+          });
+        } catch (positionError) {
+          console.warn('Failed to fetch recent positions, continuing with device data only:', positionError);
+        }
+      }
       
       setState(prev => ({
         ...prev,
-        devices,
+        devices: enhancedDevices,
         loading: false,
         lastSync: new Date(),
         error: null
