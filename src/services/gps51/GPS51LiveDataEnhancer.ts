@@ -35,6 +35,7 @@ export class GPS51LiveDataEnhancer {
       
       const devices = await this.client.getDeviceList();
       const now = GPS51TimeManager.getCurrentUtcTimestamp();
+      const fourHoursAgo = now - (4 * 60 * 60 * 1000); // 4 hours in milliseconds
       const thirtyMinutesAgo = now - (30 * 60 * 1000); // 30 minutes in milliseconds
       const fiveMinutesAgo = now - (5 * 60 * 1000); // 5 minutes in milliseconds
 
@@ -42,6 +43,8 @@ export class GPS51LiveDataEnhancer {
       console.log('🕐 GPS51LiveDataEnhancer: Time comparison debug:', {
         currentTimestamp: now,
         currentDate: new Date(now).toISOString(),
+        fourHoursAgo,
+        fourHoursAgoDate: new Date(fourHoursAgo).toISOString(),
         thirtyMinutesAgo,
         thirtyMinutesAgoDate: new Date(thirtyMinutesAgo).toISOString(),
         fiveMinutesAgo,
@@ -78,11 +81,11 @@ export class GPS51LiveDataEnhancer {
 
       for (const device of devices) {
         const lastActiveTimeRaw = device.lastactivetime || 0;
-        // GPS51 API returns timestamps in seconds, convert to milliseconds for JavaScript Date operations
-        const lastActiveTime = lastActiveTimeRaw * 1000;
+        // CRITICAL FIX: GPS51 API already returns timestamps in milliseconds, no conversion needed
+        const lastActiveTime = this.validateAndNormalizeTimestamp(lastActiveTimeRaw);
         
-        const isOnline = lastActiveTime > thirtyMinutesAgo;
-        const isRecentlyActive = lastActiveTime > fiveMinutesAgo;
+        const isOnline = lastActiveTime > fourHoursAgo; // Expanded from 30 minutes to 4 hours
+        const isRecentlyActive = lastActiveTime > thirtyMinutesAgo;
         this.deviceActivityCache.set(device.deviceid, {
           lastActive: lastActiveTime,
           isOnline
@@ -108,7 +111,7 @@ export class GPS51LiveDataEnhancer {
             isRecentlyActive,
             minutesSinceLastActive: lastActiveTime ? Math.floor((now - lastActiveTime) / (60 * 1000)) : 'N/A',
             thirtyMinutesAgo,
-            comparisonDebug: `${lastActiveTime} > ${thirtyMinutesAgo} = ${isOnline}`
+            comparisonDebug: `${lastActiveTime} > ${fourHoursAgo} = ${isOnline}`
           });
         }
       }
@@ -314,6 +317,22 @@ export class GPS51LiveDataEnhancer {
     this.consecutiveEmptyResponses = 0;
     this.deviceActivityCache.clear();
     console.log('GPS51LiveDataEnhancer: Query state reset');
+  }
+
+  /**
+   * Validate and normalize timestamp to ensure it's in milliseconds
+   */
+  private validateAndNormalizeTimestamp(timestamp: number): number {
+    if (timestamp === 0) return 0;
+    
+    // If timestamp is in seconds (roughly before year 2100), convert to milliseconds
+    if (timestamp < 4000000000) {
+      console.warn(`Converting timestamp from seconds to milliseconds: ${timestamp}`);
+      return timestamp * 1000;
+    }
+    
+    // Already in milliseconds
+    return timestamp;
   }
 
   /**
