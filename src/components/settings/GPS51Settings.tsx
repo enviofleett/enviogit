@@ -7,6 +7,8 @@ import { GPS51CronJobManager } from './GPS51CronJobManager';
 import { GPS51RealTimeActivationPanel } from './GPS51RealTimeActivationPanel';
 import { GPS51DebugPanel } from './GPS51DebugPanel';
 import { GPS51RealTimeTestPanel } from './GPS51RealTimeTestPanel';
+import { GPS51OfflineDeviceDiagnostics } from './GPS51OfflineDeviceDiagnostics';
+import { GPS51DeviceRecoveryTool } from './GPS51DeviceRecoveryTool';
 import { GPS51SupabaseSecretsTest } from './GPS51SupabaseSecretsTest';
 import { GPS51BatchSyncPanel } from './GPS51BatchSyncPanel';
 
@@ -53,7 +55,11 @@ export const GPS51Settings = () => {
         <TabsContent value="debug">
           <div className="space-y-6">
             <GPS51SupabaseSecretsTest />
-            <GPS51RealTimeTestPanel />
+          <GPS51RealTimeTestPanel />
+          
+          <GPS51OfflineDeviceDiagnostics />
+          
+          <GPS51DeviceRecoveryTool />
             <GPS51DebugPanel />
           </div>
         </TabsContent>
