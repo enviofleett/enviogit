@@ -188,13 +188,23 @@ export class GPS51EnhancedApiClient {
       }
     };
 
-    // Add body for POST requests
+    // Add body for POST requests - GPS51 API expects form-encoded data
     if (method === 'POST' && Object.keys(params).length > 0) {
       requestOptions.headers = {
         ...requestOptions.headers,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/x-www-form-urlencoded'
       };
-      requestOptions.body = JSON.stringify(params);
+      
+      // Convert params to form-encoded format
+      const formParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (Array.isArray(value)) {
+          formParams.append(key, value.join(','));
+        } else {
+          formParams.append(key, String(value));
+        }
+      });
+      requestOptions.body = formParams.toString();
     }
 
     console.log('GPS51EnhancedApiClient: Executing request:', {

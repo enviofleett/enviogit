@@ -48,13 +48,23 @@ export class GPS51ApiClient {
         }
       };
 
-      // For POST requests, send parameters in JSON body
+      // For POST requests, send parameters as form-encoded data
       if (method === 'POST' && Object.keys(params).length > 0) {
         requestOptions.headers = {
           ...requestOptions.headers,
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
         };
-        requestOptions.body = JSON.stringify(params);
+        
+        // Convert params to URLSearchParams for form encoding
+        const formParams = new URLSearchParams();
+        Object.entries(params).forEach(([key, value]) => {
+          if (Array.isArray(value)) {
+            formParams.append(key, value.join(','));
+          } else {
+            formParams.append(key, String(value));
+          }
+        });
+        requestOptions.body = formParams.toString();
         
         console.log('GPS51 POST Request Details:', {
           url: url.toString(),
