@@ -11,6 +11,16 @@ export interface AuthenticationResult {
   method: 'proxy' | 'direct';
 }
 
+export interface EndpointVariation {
+  type: string;
+  url: string;
+}
+
+export interface ParameterFormat {
+  name: string;
+  params: Record<string, any>;
+}
+
 export class GPS51AuthenticationService {
   private static instance: GPS51AuthenticationService;
   private proxyClient: GPS51ProxyClient;
@@ -29,7 +39,7 @@ export class GPS51AuthenticationService {
   }
 
   async authenticate(credentials: GPS51Credentials): Promise<AuthenticationResult> {
-    console.log('GPS51AuthenticationService: Starting authentication process');
+    console.log('GPS51AuthenticationService: Starting enhanced authentication process');
 
     // Ensure password is MD5 hashed
     const hashedPassword = this.ensurePasswordHashed(credentials.password);
@@ -39,95 +49,267 @@ export class GPS51AuthenticationService {
       password: hashedPassword
     };
 
-    // Try proxy authentication first (most reliable)
-    try {
-      const proxyResult = await this.authenticateViaProxy(authCredentials);
-      if (proxyResult.success) {
-        return proxyResult;
+    // Test multiple endpoints and parameter formats
+    const endpointVariations = this.getEndpointVariations(credentials.apiUrl);
+    const parameterFormats = this.getParameterFormats(authCredentials);
+
+    console.log('GPS51AuthenticationService: Testing multiple configurations:', {
+      endpointCount: endpointVariations.length,
+      parameterFormatCount: parameterFormats.length
+    });
+
+    let lastError: string = '';
+    let attempts = 0;
+
+    // Try each endpoint with each parameter format
+    for (const endpoint of endpointVariations) {
+      for (const paramFormat of parameterFormats) {
+        attempts++;
+        console.log(`GPS51AuthenticationService: Attempt ${attempts} - Endpoint: ${endpoint.type}, Params: ${paramFormat.name}`);
+        
+        try {
+          // Update credentials with current endpoint
+          const testCredentials = { ...authCredentials, apiUrl: endpoint.url };
+          
+          // Try proxy authentication first (most reliable)
+          try {
+            const proxyResult = await this.authenticateViaProxy(testCredentials, paramFormat);
+            if (proxyResult.success && proxyResult.token) {
+              console.log(`GPS51AuthenticationService: SUCCESS via proxy - Endpoint: ${endpoint.type}, Params: ${paramFormat.name}`);
+              return proxyResult;
+            }
+          } catch (error) {
+            console.warn(`GPS51AuthenticationService: Proxy failed for ${endpoint.type} with ${paramFormat.name}:`, error);
+          }
+
+          // Fallback to direct authentication
+          try {
+            const directResult = await this.authenticateDirectly(testCredentials, paramFormat);
+            if (directResult.success && directResult.token) {
+              console.log(`GPS51AuthenticationService: SUCCESS via direct - Endpoint: ${endpoint.type}, Params: ${paramFormat.name}`);
+              return directResult;
+            }
+          } catch (error) {
+            console.warn(`GPS51AuthenticationService: Direct failed for ${endpoint.type} with ${paramFormat.name}:`, error);
+          }
+          
+        } catch (error) {
+          lastError = error instanceof Error ? error.message : 'Unknown error';
+          console.warn(`GPS51AuthenticationService: Configuration failed:`, {
+            endpoint: endpoint.type,
+            parameterFormat: paramFormat.name,
+            error: lastError
+          });
+        }
       }
-    } catch (error) {
-      console.warn('GPS51AuthenticationService: Proxy authentication failed:', error);
     }
 
-    // Fallback to direct authentication
-    try {
-      const directResult = await this.authenticateDirectly(authCredentials);
-      return directResult;
-    } catch (error) {
-      console.error('GPS51AuthenticationService: Direct authentication failed:', error);
-      
-      return {
-        success: false,
-        error: `Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        method: 'direct'
-      };
-    }
+    console.error('GPS51AuthenticationService: All authentication methods failed after', attempts, 'attempts');
+    
+    return {
+      success: false,
+      error: `Authentication failed after ${attempts} attempts. Last error: ${lastError}. Please verify your credentials and API URL.`,
+      method: 'direct'
+    };
   }
 
-  private async authenticateViaProxy(credentials: GPS51Credentials): Promise<AuthenticationResult> {
+  private getEndpointVariations(apiUrl: string): EndpointVariation[] {
+    const variations: EndpointVariation[] = [];
+    
+    // Test original URL
+    variations.push({ type: 'original', url: apiUrl });
+    
+    // Test /openapi endpoint
+    if (apiUrl.includes('/webapi')) {
+      variations.push({ 
+        type: 'openapi', 
+        url: apiUrl.replace('/webapi', '/openapi') 
+      });
+    } else if (!apiUrl.includes('/openapi')) {
+      variations.push({ 
+        type: 'openapi', 
+        url: apiUrl.replace(/\/$/, '') + '/openapi' 
+      });
+    }
+    
+    // Test /webapi endpoint (fallback)
+    if (!apiUrl.includes('/webapi')) {
+      variations.push({ 
+        type: 'webapi', 
+        url: apiUrl.replace(/\/$/, '') + '/webapi' 
+      });
+    }
+    
+    // Test root endpoint without path
+    const baseUrl = new URL(apiUrl);
+    if (baseUrl.pathname !== '/') {
+      variations.push({ 
+        type: 'root', 
+        url: `${baseUrl.protocol}//${baseUrl.host}` 
+      });
+    }
+    
+    return variations;
+  }
+
+  private getParameterFormats(credentials: GPS51Credentials): ParameterFormat[] {
+    return [
+      {
+        name: 'standard',
+        params: {
+          username: credentials.username,
+          password: credentials.password,
+          from: credentials.from || 'WEB',
+          type: credentials.type || 'USER'
+        }
+      },
+      {
+        name: 'extended',
+        params: {
+          username: credentials.username,
+          password: credentials.password,
+          from: credentials.from || 'WEB',
+          type: credentials.type || 'USER',
+          platform: 'web',
+          version: '1.0'
+        }
+      },
+      {
+        name: 'minimal',
+        params: {
+          username: credentials.username,
+          password: credentials.password
+        }
+      },
+      {
+        name: 'android_format',
+        params: {
+          username: credentials.username,
+          password: credentials.password,
+          from: 'ANDROID',
+          type: 'USER'
+        }
+      }
+    ];
+  }
+
+  private async authenticateViaProxy(credentials: GPS51Credentials, paramFormat?: ParameterFormat): Promise<AuthenticationResult> {
     console.log('GPS51AuthenticationService: Attempting proxy authentication');
 
     const authToken = this.generateAuthToken(credentials.username, credentials.password);
     
+    // Use custom parameter format if provided, otherwise use default
+    const params = paramFormat ? paramFormat.params : {
+      username: credentials.username,
+      password: credentials.password,
+      from: credentials.from || 'WEB',
+      type: credentials.type || 'USER'
+    };
+    
+    console.log('GPS51AuthenticationService: Proxy request params:', {
+      parameterFormat: paramFormat?.name || 'default',
+      params: { ...params, password: '[HIDDEN]' }
+    });
+    
     const response = await this.proxyClient.makeRequest(
       'login',
       authToken,
-      {
-        username: credentials.username,
-        password: credentials.password,
-        from: credentials.from || 'WEB',
-        type: credentials.type || 'USER'
-      },
+      params,
       'POST',
       credentials.apiUrl
     );
 
-    if (response.status === 0 && response.token) {
-      return {
-        success: true,
-        token: response.token,
-        user: response.user,
-        method: 'proxy'
-      };
+    console.log('GPS51AuthenticationService: Proxy response:', {
+      status: response.status,
+      hasToken: !!response.token,
+      hasUser: !!response.user,
+      message: response.message,
+      isEmpty: !response.token && !response.user && !response.data
+    });
+
+    if (response.status === 0) {
+      if (response.token) {
+        return {
+          success: true,
+          token: response.token,
+          user: response.user,
+          method: 'proxy'
+        };
+      } else {
+        // Success status but no token - this is the main issue we're seeing
+        console.warn('GPS51AuthenticationService: Success status but empty response - GPS51 API may have authentication issues');
+        return {
+          success: false,
+          error: 'Authentication succeeded but no token received. This may indicate GPS51 API issues or incorrect parameters.',
+          method: 'proxy'
+        };
+      }
     } else {
       return {
         success: false,
-        error: response.message || 'Proxy authentication failed',
+        error: response.message || `Authentication failed with status ${response.status}`,
         method: 'proxy'
       };
     }
   }
 
-  private async authenticateDirectly(credentials: GPS51Credentials): Promise<AuthenticationResult> {
+  private async authenticateDirectly(credentials: GPS51Credentials, paramFormat?: ParameterFormat): Promise<AuthenticationResult> {
     console.log('GPS51AuthenticationService: Attempting direct authentication');
 
     this.apiClient.setBaseURL(credentials.apiUrl);
     
     const authToken = this.generateAuthToken(credentials.username, credentials.password);
     
+    // Use custom parameter format if provided, otherwise use default
+    const params = paramFormat ? paramFormat.params : {
+      username: credentials.username,
+      password: credentials.password,
+      from: credentials.from || 'WEB',
+      type: credentials.type || 'USER'
+    };
+    
+    console.log('GPS51AuthenticationService: Direct request params:', {
+      parameterFormat: paramFormat?.name || 'default',
+      params: { ...params, password: '[HIDDEN]' },
+      apiUrl: credentials.apiUrl
+    });
+    
     const response = await this.apiClient.makeRequest(
       'login',
       authToken,
-      {
-        username: credentials.username,
-        password: credentials.password,
-        from: credentials.from || 'WEB',
-        type: credentials.type || 'USER'
-      },
+      params,
       'POST'
     );
 
-    if (response.status === 0 && response.token) {
-      return {
-        success: true,
-        token: response.token,
-        user: response.user,
-        method: 'direct'
-      };
+    console.log('GPS51AuthenticationService: Direct response:', {
+      status: response.status,
+      hasToken: !!response.token,
+      hasUser: !!response.user,
+      message: response.message,
+      isEmpty: !response.token && !response.user && !response.data
+    });
+
+    if (response.status === 0) {
+      if (response.token) {
+        return {
+          success: true,
+          token: response.token,
+          user: response.user,
+          method: 'direct'
+        };
+      } else {
+        // Success status but no token - this is the main issue we're seeing
+        console.warn('GPS51AuthenticationService: Success status but empty response - GPS51 API may have authentication issues');
+        return {
+          success: false,
+          error: 'Authentication succeeded but no token received. This may indicate GPS51 API issues or incorrect parameters.',
+          method: 'direct'
+        };
+      }
     } else {
       return {
         success: false,
-        error: response.message || 'Direct authentication failed',
+        error: response.message || `Authentication failed with status ${response.status}`,
         method: 'direct'
       };
     }

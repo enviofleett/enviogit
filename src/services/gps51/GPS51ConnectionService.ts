@@ -30,17 +30,22 @@ export class GPS51ConnectionService {
   }): Promise<{ success: boolean; error?: string }> {
     try {
       console.log('=== GPS51 CONNECTION SERVICE ENHANCED CONNECT ===');
-      console.log('1. Starting connection process...');
+      console.log('1. Starting connection process with comprehensive endpoint and parameter testing...');
       
-      // Auto-migrate webapi to openapi endpoint
+      // Validate input credentials
+      if (!credentials.username || !credentials.password || !credentials.apiUrl) {
+        throw new Error('Username, password, and API URL are required');
+      }
+      
+      // Auto-migrate webapi to openapi endpoint (but test both)
       let apiUrl = credentials.apiUrl;
       if (apiUrl.includes('/webapi')) {
         console.warn('GPS51ConnectionService: Auto-migrating API URL from /webapi to /openapi');
         apiUrl = apiUrl.replace('/webapi', '/openapi');
       }
       
-      // Use enhanced authentication service
-      console.log('2. Using enhanced authentication service...');
+      // Use enhanced authentication service with comprehensive testing
+      console.log('2. Using enhanced authentication service with multiple endpoint/parameter testing...');
       
       const authCredentials: GPS51Credentials = {
         username: credentials.username,
@@ -51,22 +56,40 @@ export class GPS51ConnectionService {
         type: (credentials.type as 'USER' | 'DEVICE') || 'USER'
       };
       
+      console.log('GPS51ConnectionService: Starting authentication with credentials:', {
+        username: credentials.username,
+        hasPassword: !!credentials.password,
+        apiUrl: apiUrl,
+        from: authCredentials.from,
+        type: authCredentials.type
+      });
+      
       const authResult = await gps51AuthService.authenticate(authCredentials);
       
-      if (authResult.success) {
+      console.log('GPS51ConnectionService: Authentication result:', {
+        success: authResult.success,
+        method: authResult.method,
+        hasToken: !!authResult.token,
+        error: authResult.error
+      });
+      
+      if (authResult.success && authResult.token) {
         // Save configuration
         await gps51ConfigService.saveConfiguration(authCredentials);
         
         // Store authentication results
-        if (authResult.token) {
-          localStorage.setItem('gps51_auth_token', authResult.token);
-        }
+        localStorage.setItem('gps51_auth_token', authResult.token);
         localStorage.setItem('gps51_use_proxy', authResult.method === 'proxy' ? 'true' : 'false');
+        
+        // Trigger authentication success events
+        window.dispatchEvent(new CustomEvent('gps51-authentication-changed', { 
+          detail: { authenticated: true, method: authResult.method } 
+        }));
         
         console.log(`GPS51ConnectionService: Authentication successful via ${authResult.method}`);
         return { success: true };
       } else {
-        throw new Error(authResult.error || 'Authentication failed');
+        throw new Error(authResult.error || 'Authentication failed - no token received');
       }
       
     } catch (error) {
@@ -74,16 +97,25 @@ export class GPS51ConnectionService {
       
       let errorMessage = error instanceof Error ? error.message : 'Connection failed';
       
-      // Enhanced error guidance
+      // Enhanced error guidance based on error analysis
       if (errorMessage.includes('Failed to fetch')) {
-        errorMessage = 'Network connection failed. This indicates:\n• CORS restrictions preventing direct browser access\n• Network firewall blocking requests\n• GPS51 API server issues\n\nThe system tried both proxy and direct connections but both failed. Please check your network connectivity.';
+        errorMessage = 'Network connection failed. This indicates:\n• CORS restrictions preventing direct browser access\n• Network firewall blocking requests\n• GPS51 API server issues\n\nThe system tested multiple endpoints and parameter formats but all failed. Please check your network connectivity and GPS51 server status.';
       } else if (errorMessage.includes('8901')) {
         errorMessage += '\n\nTroubleshooting tips:\n• Verify your username and password are correct\n• Ensure you are using the correct API URL\n• Check that your account has proper permissions\n• Contact GPS51 support if credentials are definitely correct';
+      } else if (errorMessage.includes('Authentication succeeded but no token received')) {
+        errorMessage = 'GPS51 API responded successfully but returned an empty response. This typically indicates:\n• Incorrect API endpoint (try different endpoint variations)\n• Invalid parameter format for your GPS51 server version\n• GPS51 server configuration issues\n• Account permissions or server-side authentication problems\n\nThe system tested multiple configurations but none returned valid authentication tokens.';
+      } else if (errorMessage.includes('Authentication failed after') && errorMessage.includes('attempts')) {
+        errorMessage += '\n\nComprehensive testing completed:\n• Multiple API endpoints tested (/webapi, /openapi, root)\n• Various parameter formats attempted\n• Both proxy and direct methods tried\n\nRecommendations:\n• Double-check your GPS51 credentials\n• Verify the API URL is correct and accessible\n• Contact GPS51 support for server-specific parameter requirements\n• Try accessing the GPS51 web interface to confirm account status';
       } else if (errorMessage.includes('Login failed') || errorMessage.includes('Authentication failed')) {
         errorMessage += '\n\nPossible causes:\n• Incorrect username/password\n• Account locked or suspended\n• API endpoint not reachable\n• Invalid from/type parameters\n• Password needs to be MD5 hashed';
       } else if (errorMessage.includes('Proxy')) {
         errorMessage += '\n\nProxy connection issues:\n• Supabase Edge Function may be down\n• GPS51 API may be blocking our proxy server\n• Network connectivity issues';
       }
+      
+      // Trigger authentication failure event
+      window.dispatchEvent(new CustomEvent('gps51-authentication-changed', { 
+        detail: { authenticated: false, error: errorMessage } 
+      }));
       
       return { success: false, error: errorMessage };
     }

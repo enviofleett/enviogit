@@ -73,6 +73,17 @@ export class GPS51ProxyClient {
           throw new Error(`Proxy error: ${data.error || 'Unknown proxy error'}`);
         }
 
+        // Enhanced response validation for GPS51
+        if (action === 'login') {
+          if (data.status === 0) {
+            // Success status but check for actual content
+            if (!data.token && !data.user && !data.data) {
+              console.warn('GPS51ProxyClient: Success status but empty response detected');
+              data.message = data.message || 'Authentication succeeded but received empty response. This may indicate GPS51 API parameter issues.';
+            }
+          }
+        }
+
         return data;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('Unknown error');
@@ -97,19 +108,53 @@ export class GPS51ProxyClient {
     const startTime = Date.now();
     
     try {
-      const result = await this.makeRequest(
-        'login',
-        'test-token',
-        { username: 'test', password: 'test' },
-        'POST',
-        apiUrl
-      );
+      // Use a lightweight test that doesn't require valid credentials
+      const testEndpoints = [
+        apiUrl,
+        apiUrl?.replace('/webapi', '/openapi'),
+        apiUrl?.replace('/openapi', '/webapi')
+      ].filter(Boolean);
+
+      let lastError: Error | null = null;
+      
+      for (const endpoint of testEndpoints) {
+        try {
+          console.log(`GPS51ProxyClient: Testing connection to ${endpoint}`);
+          
+          const result = await this.makeRequest(
+            'login',
+            'test-token',
+            { username: 'test', password: 'test' },
+            'POST',
+            endpoint
+          );
+          
+          const responseTime = Date.now() - startTime;
+          
+          // Consider it successful if we get any response, even an error
+          if (result) {
+            console.log(`GPS51ProxyClient: Connection test successful for ${endpoint}`, {
+              status: result.status,
+              hasResponse: true
+            });
+            
+            return {
+              success: true,
+              responseTime
+            };
+          }
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          console.warn(`GPS51ProxyClient: Connection test failed for ${endpoint}:`, lastError.message);
+        }
+      }
       
       const responseTime = Date.now() - startTime;
       
       return {
-        success: true,
-        responseTime
+        success: false,
+        responseTime,
+        error: lastError?.message || 'All connection tests failed'
       };
     } catch (error) {
       const responseTime = Date.now() - startTime;

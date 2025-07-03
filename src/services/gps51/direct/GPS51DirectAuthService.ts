@@ -85,7 +85,15 @@ export class GPS51DirectAuthService {
         type: credentials.type || 'USER'
       };
 
-      // Attempt authentication with retry logic
+      // Attempt authentication with retry logic and enhanced parameters
+      console.log('GPS51DirectAuthService: Making authentication request with params:', {
+        username: authParams.username,
+        hasPassword: !!authParams.password,
+        from: authParams.from,
+        type: authParams.type,
+        apiUrl: credentials.apiUrl
+      });
+      
       const response = await this.apiClient.makeAuthenticatedRequest(
         'login',
         authParams,
