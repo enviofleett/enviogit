@@ -77,25 +77,12 @@ export class GPS51LiveDataEnhancer {
       }
 
       for (const device of devices) {
-        const lastActiveTime = device.lastactivetime || 0;
+        const lastActiveTimeRaw = device.lastactivetime || 0;
+        // GPS51 API returns timestamps in seconds, convert to milliseconds for JavaScript Date operations
+        const lastActiveTime = lastActiveTimeRaw * 1000;
         
-        // TEST BOTH INTERPRETATIONS: milliseconds vs seconds
-        const isOnlineMs = lastActiveTime > thirtyMinutesAgo;
-        const isOnlineSeconds = (lastActiveTime * 1000) > thirtyMinutesAgo;
+        const isOnline = lastActiveTime > thirtyMinutesAgo;
         const isRecentlyActive = lastActiveTime > fiveMinutesAgo;
-
-        // Log every 500th device to avoid console spam
-        if (devices.indexOf(device) % 500 === 0 || devices.indexOf(device) < 5) {
-          console.log(`🚗 Device ${devices.indexOf(device)}: ${device.devicename}`, {
-            lastActiveTime,
-            isOnlineMs,
-            isOnlineSeconds,
-            willUseMilliseconds: isOnlineMs
-          });
-        }
-
-        // Update activity cache - using milliseconds interpretation for now
-        const isOnline = isOnlineMs;
         this.deviceActivityCache.set(device.deviceid, {
           lastActive: lastActiveTime,
           isOnline
@@ -114,11 +101,10 @@ export class GPS51LiveDataEnhancer {
         // Only log first 5 devices to avoid spam
         if (devices.indexOf(device) < 5) {
           console.log(`🚗 DETAILED Device ${devices.indexOf(device)}: ${device.devicename} (${device.deviceid}):`, {
+            lastActiveTimeRaw: lastActiveTimeRaw,
             lastActiveTime,
             lastActiveDate: lastActiveTime ? GPS51TimeManager.utcTimestampToWat(lastActiveTime).toISOString() : 'Never',
-            isOnlineMs,
-            isOnlineSeconds,
-            finalIsOnline: isOnline,
+            isOnline,
             isRecentlyActive,
             minutesSinceLastActive: lastActiveTime ? Math.floor((now - lastActiveTime) / (60 * 1000)) : 'N/A',
             thirtyMinutesAgo,
