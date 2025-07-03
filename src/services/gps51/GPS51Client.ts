@@ -250,7 +250,7 @@ export class GPS51Client {
       // For first call: use 0 or omit to get all available positions
       // For subsequent calls: use the server's lastquerypositiontime from previous response
       const params: any = {
-        deviceids: deviceids.length > 0 ? deviceids : []
+        deviceids: deviceids.length > 0 ? deviceids.join(',') : ''
       };
 
       // Only add lastquerypositiontime if we have a valid value from previous server response

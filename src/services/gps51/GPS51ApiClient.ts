@@ -26,6 +26,12 @@ export class GPS51ApiClient {
     const url = new URL(this.baseURL);
     url.searchParams.append('action', action);
     url.searchParams.append('token', token);
+    
+    // Add undocumented parameters for lastposition action
+    if (action === 'lastposition') {
+      url.searchParams.append('streamtype', 'proto');
+      url.searchParams.append('send', '2');
+    }
 
     try {
       console.log(`GPS51 API Request: ${action}`, { 

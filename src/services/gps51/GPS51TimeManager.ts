@@ -13,31 +13,30 @@ export class GPS51TimeManager {
     const date = watDate || new Date();
     // Convert WAT to UTC by subtracting 1 hour
     const utcTime = date.getTime() - (this.WAT_OFFSET_HOURS * 60 * 60 * 1000);
-    return Math.floor(utcTime / 1000); // Return as Unix timestamp (seconds)
+    return utcTime; // Return as milliseconds timestamp
   }
 
   /**
    * Convert UTC timestamp from server to WAT for display
    */
   static utcTimestampToWat(utcTimestamp: number): Date {
-    // Convert from seconds to milliseconds and add WAT offset
-    const utcMs = utcTimestamp * 1000;
-    const watMs = utcMs + (this.WAT_OFFSET_HOURS * 60 * 60 * 1000);
+    // Assume timestamp is in milliseconds and add WAT offset
+    const watMs = utcTimestamp + (this.WAT_OFFSET_HOURS * 60 * 60 * 1000);
     return new Date(watMs);
   }
 
   /**
-   * Get current UTC timestamp for lastquerypositiontime parameter
+   * Get current UTC timestamp for lastquerypositiontime parameter (in milliseconds)
    */
   static getCurrentUtcTimestamp(): number {
-    return Math.floor(Date.now() / 1000);
+    return Date.now(); // Return milliseconds, not seconds
   }
 
   /**
    * Format UTC timestamp for GPS51 API parameters
    */
   static formatForApi(timestamp: number): string {
-    return timestamp.toString();
+    return Math.floor(timestamp).toString(); // Ensure integer for API
   }
 
   /**
