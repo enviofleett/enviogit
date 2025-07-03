@@ -35,8 +35,8 @@ export class GPS51LiveDataEnhancer {
       
       const devices = await this.client.getDeviceList();
       const now = GPS51TimeManager.getCurrentUtcTimestamp();
-      const thirtyMinutesAgo = now - (30 * 60); // 30 minutes in seconds
-      const fiveMinutesAgo = now - (5 * 60); // 5 minutes for "recently active"
+      const thirtyMinutesAgo = now - (30 * 60 * 1000); // 30 minutes in milliseconds
+      const fiveMinutesAgo = now - (5 * 60 * 1000); // 5 minutes in milliseconds
 
       const onlineDevices: GPS51Device[] = [];
       const offlineDevices: GPS51Device[] = [];
@@ -68,7 +68,7 @@ export class GPS51LiveDataEnhancer {
           lastActiveDate: lastActiveTime ? GPS51TimeManager.utcTimestampToWat(lastActiveTime).toISOString() : 'Never',
           isOnline,
           isRecentlyActive,
-          minutesSinceLastActive: lastActiveTime ? Math.floor((now - lastActiveTime) / 60) : 'N/A'
+          minutesSinceLastActive: lastActiveTime ? Math.floor((now - lastActiveTime) / (60 * 1000)) : 'N/A'
         });
       }
 

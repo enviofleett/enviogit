@@ -6,6 +6,7 @@ import GPS51DeviceManager from './GPS51DeviceManager';
 import { GPS51CronJobManager } from './GPS51CronJobManager';
 import { GPS51RealTimeActivationPanel } from './GPS51RealTimeActivationPanel';
 import { GPS51DebugPanel } from './GPS51DebugPanel';
+import { GPS51RealTimeTestPanel } from './GPS51RealTimeTestPanel';
 import { GPS51BatchSyncPanel } from './GPS51BatchSyncPanel';
 
 export const GPS51Settings = () => {
@@ -49,6 +50,7 @@ export const GPS51Settings = () => {
         </TabsContent>
 
         <TabsContent value="debug">
+          <GPS51RealTimeTestPanel />
           <GPS51DebugPanel />
         </TabsContent>
       </Tabs>
