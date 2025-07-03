@@ -150,6 +150,7 @@ export class GPS51LiveDataEnhancer {
       onlineDevicesQueried: number;
       positionsReceived: number;
       emptyResponseCount: number;
+      fallbackStrategy?: string;
     };
   }> {
     try {
@@ -173,46 +174,81 @@ export class GPS51LiveDataEnhancer {
         lastQueryDate: this.lastQueryPositionTime ? new Date(this.lastQueryPositionTime).toISOString() : 'Initial query'
       });
 
-      // CRITICAL FIX: If no "online" devices, try querying a sample of all devices
+      // CRITICAL FIX: If no "online" devices, try progressive fallback strategy
       if (onlineDeviceIds.length === 0) {
-        console.warn('GPS51LiveDataEnhancer: No online devices found, trying sample of all devices as fallback...');
+        console.warn('GPS51LiveDataEnhancer: No online devices found, trying progressive fallback strategy...');
         
-        // Fallback: Query up to 50 most recently active devices
-        const sortedDevices = deviceIds
-          .map(id => ({ id, activity: this.deviceActivityCache.get(id) }))
-          .filter(d => d.activity?.lastActive && d.activity.lastActive > 0)
-          .sort((a, b) => (b.activity?.lastActive || 0) - (a.activity?.lastActive || 0))
-          .slice(0, 50)
-          .map(d => d.id);
+        // Progressive fallback: Try different strategies
+        const fallbackStrategies = [
+          // Strategy 1: Query 10 most recently active devices
+          {
+            name: 'Recent10',
+            devices: deviceIds
+              .map(id => ({ id, activity: this.deviceActivityCache.get(id) }))
+              .filter(d => d.activity?.lastActive && d.activity.lastActive > 0)
+              .sort((a, b) => (b.activity?.lastActive || 0) - (a.activity?.lastActive || 0))
+              .slice(0, 10)
+              .map(d => d.id)
+          },
+          // Strategy 2: Query first 20 devices (simple sampling)
+          {
+            name: 'First20',
+            devices: deviceIds.slice(0, 20)
+          },
+          // Strategy 3: Query 50 devices with some activity
+          {
+            name: 'Active50',
+            devices: deviceIds
+              .map(id => ({ id, activity: this.deviceActivityCache.get(id) }))
+              .filter(d => d.activity?.lastActive && d.activity.lastActive > 0)
+              .sort((a, b) => (b.activity?.lastActive || 0) - (a.activity?.lastActive || 0))
+              .slice(0, 50)
+              .map(d => d.id)
+          }
+        ];
         
-        if (sortedDevices.length > 0) {
-          console.log(`GPS51LiveDataEnhancer: Fallback querying ${sortedDevices.length} most recently active devices`);
+        for (const strategy of fallbackStrategies) {
+          if (strategy.devices.length === 0) continue;
+          
+          console.log(`GPS51LiveDataEnhancer: Trying fallback strategy "${strategy.name}" with ${strategy.devices.length} devices`);
           
           try {
             const fallbackResult = await this.client.getRealtimePositions(
-              sortedDevices,
+              strategy.devices,
               this.lastQueryPositionTime
             );
             
-            this.lastQueryPositionTime = fallbackResult.lastQueryTime;
-            
-            return {
-              positions: this.validatePositions(fallbackResult.positions),
+            console.log(`GPS51LiveDataEnhancer: Strategy "${strategy.name}" result:`, {
+              positionsReceived: fallbackResult.positions.length,
               lastQueryTime: fallbackResult.lastQueryTime,
-              hasNewData: fallbackResult.positions.length > 0,
-              serverTimeDrift: GPS51TimeManager.calculateServerTimeDrift(fallbackResult.lastQueryTime),
-              responseMetadata: {
-                totalDevicesQueried: deviceIds.length,
-                onlineDevicesQueried: sortedDevices.length,
-                positionsReceived: fallbackResult.positions.length,
-                emptyResponseCount: this.consecutiveEmptyResponses
-              }
-            };
+              success: fallbackResult.positions.length > 0
+            });
+            
+            if (fallbackResult.positions.length > 0 || strategy.name === 'Active50') {
+              // Success or last strategy - use this result
+              this.lastQueryPositionTime = fallbackResult.lastQueryTime;
+              
+              return {
+                positions: this.validatePositions(fallbackResult.positions),
+                lastQueryTime: fallbackResult.lastQueryTime,
+                hasNewData: fallbackResult.positions.length > 0,
+                serverTimeDrift: GPS51TimeManager.calculateServerTimeDrift(fallbackResult.lastQueryTime),
+                responseMetadata: {
+                  totalDevicesQueried: deviceIds.length,
+                  onlineDevicesQueried: strategy.devices.length,
+                  positionsReceived: fallbackResult.positions.length,
+                  emptyResponseCount: this.consecutiveEmptyResponses,
+                  fallbackStrategy: strategy.name
+                }
+              };
+            }
           } catch (error) {
-            console.error('GPS51LiveDataEnhancer: Fallback query also failed:', error);
+            console.error(`GPS51LiveDataEnhancer: Fallback strategy "${strategy.name}" failed:`, error);
+            continue; // Try next strategy
           }
         }
         
+        // All strategies failed
         return {
           positions: [],
           lastQueryTime: this.lastQueryPositionTime || GPS51TimeManager.getCurrentUtcTimestamp(),
@@ -222,7 +258,8 @@ export class GPS51LiveDataEnhancer {
             totalDevicesQueried: deviceIds.length,
             onlineDevicesQueried: 0,
             positionsReceived: 0,
-            emptyResponseCount: this.consecutiveEmptyResponses
+            emptyResponseCount: this.consecutiveEmptyResponses,
+            fallbackStrategy: 'AllFailed'
           }
         };
       }

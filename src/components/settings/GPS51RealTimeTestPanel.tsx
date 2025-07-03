@@ -118,6 +118,25 @@ export const GPS51RealTimeTestPanel = () => {
       const enhancedResult = await dataFetcher.fetchCompleteLiveData();
       
       addLog(`🎯 Enhanced result: ${enhancedResult.devices.length} devices, ${enhancedResult.positions.length} positions`);
+      
+      // Test direct API call for debugging
+      if (enhancedResult.positions.length === 0) {
+        addLog('🔍 Testing direct API calls for debugging...');
+        
+        // Test with first 5 devices directly
+        const testDevices = devices.slice(0, 5);
+        addLog(`🧪 Testing with first 5 devices: ${testDevices.map(d => d.devicename).join(', ')}`);
+        
+        try {
+          const directResult = await gps51Client.getRealtimePositions(
+            testDevices.map(d => d.deviceid),
+            0 // Start from beginning
+          );
+          addLog(`🔬 Direct API result: ${directResult.positions.length} positions, timestamp: ${directResult.lastQueryTime}`);
+        } catch (directError) {
+          addLog(`❌ Direct API test failed: ${directError instanceof Error ? directError.message : 'Unknown error'}`);
+        }
+      }
 
       // Calculate stats
       const now = GPS51TimeManager.getCurrentUtcTimestamp();

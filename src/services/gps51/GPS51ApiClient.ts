@@ -67,45 +67,93 @@ export class GPS51ApiClient {
       
       const response = await fetch(url.toString(), requestOptions);
       
-      const responseText = await response.text();
+      const contentType = response.headers.get('Content-Type') || '';
+      const contentLength = response.headers.get('Content-Length') || '0';
+      
       console.log(`GPS51 API Raw Response (${action}):`, {
         status: response.status,
         statusText: response.statusText,
-        contentType: response.headers.get('Content-Type'),
-        contentLength: response.headers.get('Content-Length'),
-        rawBody: responseText,
-        bodyLength: responseText.length,
-        isJSON: responseText.trim().startsWith('{') || responseText.trim().startsWith('[')
+        contentType,
+        contentLength,
+        url: url.toString()
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${responseText}`);
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
       }
 
+      // Handle different content types
       let data: GPS51ApiResponse;
-      try {
-        data = JSON.parse(responseText);
-        console.log(`GPS51 API Parsed Response (${action}):`, {
-          status: data.status,
-          message: data.message,
-          cause: data.cause,
-          hasToken: !!data.token,
-          hasUser: !!data.user,
-          hasData: !!data.data,
-          hasGroups: !!data.groups,
-          hasRecords: !!data.records,
-          dataType: Array.isArray(data.data) ? 'array' : typeof data.data,
-          dataLength: Array.isArray(data.data) ? data.data.length : undefined,
-          groupsLength: Array.isArray(data.groups) ? data.groups.length : undefined,
-          recordsLength: Array.isArray(data.records) ? data.records.length : undefined
+      
+      if (contentType.includes('application/octet-stream') || contentType.includes('binary')) {
+        console.warn(`GPS51 API: Received binary/octet-stream response for ${action}. This may indicate API parameter issues.`);
+        
+        // Try to read as text first
+        const responseText = await response.text();
+        console.log(`GPS51 API Binary Response Details:`, {
+          action,
+          contentLength,
+          bodyLength: responseText.length,
+          isEmpty: responseText.length === 0,
+          firstChars: responseText.substring(0, 100)
         });
-      } catch (parseError) {
-        console.warn('Non-JSON response received:', responseText);
-        data = {
-          status: 0,
-          message: responseText,
-          data: responseText
-        };
+        
+        if (responseText.length === 0) {
+          // Empty response - return empty data structure
+          data = {
+            status: 1,
+            message: 'Empty response received',
+            data: [],
+            records: []
+          };
+        } else {
+          // Try to parse as JSON despite content-type
+          try {
+            data = JSON.parse(responseText);
+          } catch (parseError) {
+            console.warn('GPS51 API: Binary response is not valid JSON');
+            data = {
+              status: 0,
+              message: 'Binary response received, cannot parse as JSON',
+              data: responseText
+            };
+          }
+        }
+      } else {
+        // Standard JSON response handling
+        const responseText = await response.text();
+        console.log(`GPS51 API Response Body (${action}):`, {
+          bodyLength: responseText.length,
+          isJSON: responseText.trim().startsWith('{') || responseText.trim().startsWith('['),
+          isEmpty: responseText.length === 0,
+          preview: responseText.substring(0, 200)
+        });
+        
+        try {
+          data = JSON.parse(responseText);
+          console.log(`GPS51 API Parsed Response (${action}):`, {
+            status: data.status,
+            message: data.message,
+            cause: data.cause,
+            hasToken: !!data.token,
+            hasUser: !!data.user,
+            hasData: !!data.data,
+            hasGroups: !!data.groups,
+            hasRecords: !!data.records,
+            dataType: Array.isArray(data.data) ? 'array' : typeof data.data,
+            dataLength: Array.isArray(data.data) ? data.data.length : undefined,
+            groupsLength: Array.isArray(data.groups) ? data.groups.length : undefined,
+            recordsLength: Array.isArray(data.records) ? data.records.length : undefined
+          });
+        } catch (parseError) {
+          console.warn('GPS51 API: Non-JSON response received:', responseText);
+          data = {
+            status: 0,
+            message: responseText || 'Empty response',
+            data: responseText
+          };
+        }
       }
 
       this.retryCount = 0;
