@@ -129,18 +129,17 @@ export class GPS51AlertManager {
       const { error } = await supabase
         .from('alert_configs')
         .insert({
-          id: alertConfig.id,
           name: alertConfig.name,
           description: alertConfig.description,
           type: alertConfig.type,
           severity: alertConfig.severity,
           is_active: alertConfig.isActive,
-          conditions: alertConfig.conditions,
-          actions: alertConfig.actions,
-          schedule: alertConfig.schedule,
+          conditions: alertConfig.conditions as any,
+          actions: alertConfig.actions as any,
+          schedule: alertConfig.schedule as any,
           cooldown_seconds: alertConfig.cooldownSeconds,
           auto_resolve: alertConfig.autoResolve,
-          escalation_rules: alertConfig.escalationRules,
+          escalation_rules: alertConfig.escalationRules as any,
           created_at: alertConfig.created.toISOString(),
           updated_at: alertConfig.updatedAt.toISOString()
         });
@@ -181,12 +180,12 @@ export class GPS51AlertManager {
           type: updatedConfig.type,
           severity: updatedConfig.severity,
           is_active: updatedConfig.isActive,
-          conditions: updatedConfig.conditions,
-          actions: updatedConfig.actions,
-          schedule: updatedConfig.schedule,
+          conditions: updatedConfig.conditions as any,
+          actions: updatedConfig.actions as any,
+          schedule: updatedConfig.schedule as any,
           cooldown_seconds: updatedConfig.cooldownSeconds,
           auto_resolve: updatedConfig.autoResolve,
-          escalation_rules: updatedConfig.escalationRules,
+          escalation_rules: updatedConfig.escalationRules as any,
           updated_at: updatedConfig.updatedAt.toISOString()
         })
         .eq('id', id);
@@ -769,15 +768,15 @@ export class GPS51AlertManager {
           id: config.id,
           name: config.name,
           description: config.description,
-          type: config.type,
-          severity: config.severity,
+          type: config.type as any,
+          severity: config.severity as any,
           isActive: config.is_active,
-          conditions: config.conditions,
-          actions: config.actions,
-          schedule: config.schedule,
+          conditions: (config.conditions as unknown) as AlertCondition[],
+          actions: (config.actions as unknown) as AlertAction[],
+          schedule: (config.schedule as unknown) as AlertSchedule,
           cooldownSeconds: config.cooldown_seconds,
           autoResolve: config.auto_resolve,
-          escalationRules: config.escalation_rules,
+          escalationRules: (config.escalation_rules as unknown) as EscalationRule[],
           created: new Date(config.created_at),
           updatedAt: new Date(config.updated_at)
         };

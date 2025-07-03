@@ -102,7 +102,6 @@ export class GeofencingService {
       const { error } = await supabase
         .from('geofences')
         .insert({
-          id: geofence.id,
           name: geofence.name,
           description: geofence.description,
           type: geofence.type,
@@ -113,10 +112,10 @@ export class GeofencingService {
           center_lat: geofence.centerLat,
           center_lng: geofence.centerLng,
           radius: geofence.radius,
-          coordinates: geofence.coordinates,
+          coordinates: geofence.coordinates as any,
           created_by: geofence.createdBy,
           tags: geofence.tags,
-          schedules: geofence.schedules
+          schedules: geofence.schedules as any
         });
 
       if (error) throw error;
@@ -170,9 +169,9 @@ export class GeofencingService {
           center_lat: updatedGeofence.centerLat,
           center_lng: updatedGeofence.centerLng,
           radius: updatedGeofence.radius,
-          coordinates: updatedGeofence.coordinates,
+          coordinates: updatedGeofence.coordinates as any,
           tags: updatedGeofence.tags,
-          schedules: updatedGeofence.schedules,
+          schedules: updatedGeofence.schedules as any,
           updated_at: updatedGeofence.updatedAt.toISOString()
         })
         .eq('id', id);
@@ -250,12 +249,12 @@ export class GeofencingService {
           centerLat: gf.center_lat,
           centerLng: gf.center_lng,
           radius: gf.radius,
-          coordinates: gf.coordinates,
+          coordinates: gf.coordinates as Array<{ lat: number; lng: number }>,
           createdAt: new Date(gf.created_at),
           updatedAt: new Date(gf.updated_at),
           createdBy: gf.created_by,
           tags: gf.tags,
-          schedules: gf.schedules
+          schedules: (gf.schedules as unknown) as GeofenceSchedule[]
         };
 
         this.geofences.set(geofence.id, geofence);

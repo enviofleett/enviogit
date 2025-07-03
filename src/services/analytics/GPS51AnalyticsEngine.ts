@@ -490,7 +490,7 @@ export class GPS51AnalyticsEngine {
       const { data: vehicles, error } = await supabase
         .from('vehicles')
         .select('*')
-        .eq('status', 'active');
+        .eq('status', 'available');
 
       if (error) throw error;
       return vehicles || [];

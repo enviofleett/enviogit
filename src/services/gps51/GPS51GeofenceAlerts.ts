@@ -75,13 +75,12 @@ export class GPS51GeofenceAlerts {
       const { error } = await supabase
         .from('geofence_alert_rules')
         .insert({
-          id: alertRule.id,
           name: alertRule.name,
           geofence_id: alertRule.geofenceId,
           vehicle_id: alertRule.vehicleId,
           event_types: alertRule.eventTypes,
-          conditions: alertRule.conditions,
-          actions: alertRule.actions,
+          conditions: alertRule.conditions as any,
+          actions: alertRule.actions as any,
           is_active: alertRule.isActive,
           priority: alertRule.priority,
           cooldown_minutes: alertRule.cooldownMinutes,
@@ -119,8 +118,8 @@ export class GPS51GeofenceAlerts {
           geofence_id: updatedRule.geofenceId,
           vehicle_id: updatedRule.vehicleId,
           event_types: updatedRule.eventTypes,
-          conditions: updatedRule.conditions,
-          actions: updatedRule.actions,
+          conditions: updatedRule.conditions as any,
+          actions: updatedRule.actions as any,
           is_active: updatedRule.isActive,
           priority: updatedRule.priority,
           cooldown_minutes: updatedRule.cooldownMinutes
@@ -285,14 +284,13 @@ export class GPS51GeofenceAlerts {
       await supabase
         .from('processed_geofence_alerts')
         .insert({
-          id: alert.id,
           rule_id: alert.ruleId,
           rule_name: alert.ruleName,
-          geofence_event: alert.geofenceEvent,
+          geofence_event: alert.geofenceEvent as any,
           triggered_at: alert.triggeredAt.toISOString(),
           priority: alert.priority,
           message: alert.message,
-          actions: alert.actions,
+          actions: alert.actions as any,
           acknowledged: alert.acknowledged
         });
     } catch (error) {
@@ -434,11 +432,11 @@ export class GPS51GeofenceAlerts {
           name: rule.name,
           geofenceId: rule.geofence_id,
           vehicleId: rule.vehicle_id,
-          eventTypes: rule.event_types,
-          conditions: rule.conditions,
-          actions: rule.actions,
+          eventTypes: rule.event_types as ('entry' | 'exit' | 'violation')[],
+          conditions: (rule.conditions as unknown) as AlertCondition[],
+          actions: (rule.actions as unknown) as AlertAction[],
           isActive: rule.is_active,
-          priority: rule.priority,
+          priority: rule.priority as 'low' | 'medium' | 'high' | 'critical',
           cooldownMinutes: rule.cooldown_minutes,
           created: new Date(rule.created_at),
           lastTriggered: rule.last_triggered ? new Date(rule.last_triggered) : undefined

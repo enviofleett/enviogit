@@ -9,6 +9,131 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      alert_configs: {
+        Row: {
+          actions: Json
+          auto_resolve: boolean
+          conditions: Json
+          cooldown_seconds: number
+          created_at: string
+          description: string | null
+          escalation_rules: Json | null
+          id: string
+          is_active: boolean
+          name: string
+          schedule: Json | null
+          severity: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          actions?: Json
+          auto_resolve?: boolean
+          conditions?: Json
+          cooldown_seconds?: number
+          created_at?: string
+          description?: string | null
+          escalation_rules?: Json | null
+          id?: string
+          is_active?: boolean
+          name: string
+          schedule?: Json | null
+          severity: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          actions?: Json
+          auto_resolve?: boolean
+          conditions?: Json
+          cooldown_seconds?: number
+          created_at?: string
+          description?: string | null
+          escalation_rules?: Json | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          schedule?: Json | null
+          severity?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      alerts: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          config_id: string
+          config_name: string
+          created_at: string
+          data: Json
+          device_id: string | null
+          escalation_level: number
+          id: string
+          last_escalated_at: string | null
+          location: Json | null
+          message: string
+          resolved_at: string | null
+          resolved_by: string | null
+          severity: string
+          status: string
+          title: string
+          type: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          config_id: string
+          config_name: string
+          created_at?: string
+          data?: Json
+          device_id?: string | null
+          escalation_level?: number
+          id?: string
+          last_escalated_at?: string | null
+          location?: Json | null
+          message: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity: string
+          status?: string
+          title: string
+          type: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          config_id?: string
+          config_name?: string
+          created_at?: string
+          data?: Json
+          device_id?: string | null
+          escalation_level?: number
+          id?: string
+          last_escalated_at?: string | null
+          location?: Json | null
+          message?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+          status?: string
+          title?: string
+          type?: string
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alerts_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "alert_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -596,6 +721,59 @@ export type Database = {
             columns: ["assigned_user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      geofence_alert_rules: {
+        Row: {
+          actions: Json
+          conditions: Json
+          cooldown_minutes: number
+          created_at: string
+          event_types: string[]
+          geofence_id: string | null
+          id: string
+          is_active: boolean
+          last_triggered: string | null
+          name: string
+          priority: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          actions?: Json
+          conditions?: Json
+          cooldown_minutes?: number
+          created_at?: string
+          event_types: string[]
+          geofence_id?: string | null
+          id?: string
+          is_active?: boolean
+          last_triggered?: string | null
+          name: string
+          priority: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          actions?: Json
+          conditions?: Json
+          cooldown_minutes?: number
+          created_at?: string
+          event_types?: string[]
+          geofence_id?: string | null
+          id?: string
+          is_active?: boolean
+          last_triggered?: string | null
+          name?: string
+          priority?: string
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "geofence_alert_rules_geofence_id_fkey"
+            columns: ["geofence_id"]
+            isOneToOne: false
+            referencedRelation: "geofences"
             referencedColumns: ["id"]
           },
         ]
@@ -1383,6 +1561,56 @@ export type Database = {
             columns: ["subscriber_id"]
             isOneToOne: true
             referencedRelation: "subscribers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      processed_geofence_alerts: {
+        Row: {
+          acknowledged: boolean
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          actions: Json
+          geofence_event: Json
+          id: string
+          message: string
+          priority: string
+          rule_id: string
+          rule_name: string
+          triggered_at: string
+        }
+        Insert: {
+          acknowledged?: boolean
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          actions?: Json
+          geofence_event: Json
+          id?: string
+          message: string
+          priority: string
+          rule_id: string
+          rule_name: string
+          triggered_at?: string
+        }
+        Update: {
+          acknowledged?: boolean
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          actions?: Json
+          geofence_event?: Json
+          id?: string
+          message?: string
+          priority?: string
+          rule_id?: string
+          rule_name?: string
+          triggered_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processed_geofence_alerts_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "geofence_alert_rules"
             referencedColumns: ["id"]
           },
         ]
