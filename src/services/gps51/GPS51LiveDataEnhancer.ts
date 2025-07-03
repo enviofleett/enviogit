@@ -173,11 +173,49 @@ export class GPS51LiveDataEnhancer {
         lastQueryDate: this.lastQueryPositionTime ? new Date(this.lastQueryPositionTime).toISOString() : 'Initial query'
       });
 
+      // CRITICAL FIX: If no "online" devices, try querying a sample of all devices
       if (onlineDeviceIds.length === 0) {
-        console.warn('GPS51LiveDataEnhancer: No online devices to query for live positions');
+        console.warn('GPS51LiveDataEnhancer: No online devices found, trying sample of all devices as fallback...');
+        
+        // Fallback: Query up to 50 most recently active devices
+        const sortedDevices = deviceIds
+          .map(id => ({ id, activity: this.deviceActivityCache.get(id) }))
+          .filter(d => d.activity?.lastActive && d.activity.lastActive > 0)
+          .sort((a, b) => (b.activity?.lastActive || 0) - (a.activity?.lastActive || 0))
+          .slice(0, 50)
+          .map(d => d.id);
+        
+        if (sortedDevices.length > 0) {
+          console.log(`GPS51LiveDataEnhancer: Fallback querying ${sortedDevices.length} most recently active devices`);
+          
+          try {
+            const fallbackResult = await this.client.getRealtimePositions(
+              sortedDevices,
+              this.lastQueryPositionTime
+            );
+            
+            this.lastQueryPositionTime = fallbackResult.lastQueryTime;
+            
+            return {
+              positions: this.validatePositions(fallbackResult.positions),
+              lastQueryTime: fallbackResult.lastQueryTime,
+              hasNewData: fallbackResult.positions.length > 0,
+              serverTimeDrift: GPS51TimeManager.calculateServerTimeDrift(fallbackResult.lastQueryTime),
+              responseMetadata: {
+                totalDevicesQueried: deviceIds.length,
+                onlineDevicesQueried: sortedDevices.length,
+                positionsReceived: fallbackResult.positions.length,
+                emptyResponseCount: this.consecutiveEmptyResponses
+              }
+            };
+          } catch (error) {
+            console.error('GPS51LiveDataEnhancer: Fallback query also failed:', error);
+          }
+        }
+        
         return {
           positions: [],
-          lastQueryTime: this.lastQueryPositionTime,
+          lastQueryTime: this.lastQueryPositionTime || GPS51TimeManager.getCurrentUtcTimestamp(),
           hasNewData: false,
           serverTimeDrift: 0,
           responseMetadata: {
@@ -264,11 +302,11 @@ export class GPS51LiveDataEnhancer {
         return false;
       }
 
-      // Timestamp validation (not too old, not in the future)
+      // Timestamp validation (not too old, not in the future) - all in milliseconds
       const positionTime = position.updatetime;
       const now = GPS51TimeManager.getCurrentUtcTimestamp();
-      const oneHourAgo = now - (60 * 60);
-      const oneMinuteInFuture = now + 60;
+      const oneHourAgo = now - (60 * 60 * 1000); // 1 hour in milliseconds
+      const oneMinuteInFuture = now + (60 * 1000); // 1 minute in milliseconds
 
       if (positionTime < oneHourAgo || positionTime > oneMinuteInFuture) {
         console.warn('GPS51LiveDataEnhancer: Position timestamp out of acceptable range:', {
@@ -320,18 +358,21 @@ export class GPS51LiveDataEnhancer {
   }
 
   /**
-   * Validate and normalize timestamp to ensure it's in milliseconds
+   * Validate and normalize timestamp - GPS51 API returns timestamps in milliseconds
    */
   private validateAndNormalizeTimestamp(timestamp: number): number {
     if (timestamp === 0) return 0;
     
-    // If timestamp is in seconds (roughly before year 2100), convert to milliseconds
-    if (timestamp < 4000000000) {
-      console.warn(`Converting timestamp from seconds to milliseconds: ${timestamp}`);
-      return timestamp * 1000;
+    // GPS51 API already returns timestamps in milliseconds - no conversion needed
+    // Just validate it's a reasonable timestamp (after year 2020, before year 2100)
+    const year2020 = 1577836800000; // Jan 1, 2020 in milliseconds
+    const year2100 = 4102444800000; // Jan 1, 2100 in milliseconds
+    
+    if (timestamp < year2020 || timestamp > year2100) {
+      console.warn(`GPS51LiveDataEnhancer: Suspicious timestamp detected: ${timestamp} (${new Date(timestamp).toISOString()})`);
+      // Don't convert, just return as-is but log the warning
     }
     
-    // Already in milliseconds
     return timestamp;
   }
 

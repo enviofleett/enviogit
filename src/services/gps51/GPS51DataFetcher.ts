@@ -137,13 +137,41 @@ export class GPS51DataFetcher {
 
       console.log('GPS51DataFetcher: Device activity analysis:', activitySummary);
 
+      // CRITICAL FIX: If no online devices, try all devices as fallback
       if (onlineDevices.length === 0) {
-        console.warn('GPS51DataFetcher: No online devices found - all devices appear offline or inactive');
-        return { 
-          devices: allDevices, 
-          positions: [], 
-          lastQueryTime: lastQueryTime || GPS51TimeManager.getCurrentUtcTimestamp()
-        };
+        console.warn('GPS51DataFetcher: No online devices found - trying all devices as fallback...');
+        
+        // Fallback: Try all devices - maybe our activity detection is too strict
+        const allDeviceIds = allDevices.map(device => device.deviceid);
+        
+        try {
+          const { 
+            positions, 
+            lastQueryTime: newLastQueryTime,
+            serverTimeDrift,
+            responseMetadata
+          } = await this.liveDataEnhancer.fetchLivePositionsEnhanced(allDeviceIds);
+          
+          console.log('GPS51DataFetcher: Fallback fetch completed:', {
+            totalDevices: allDevices.length,
+            positionsRetrieved: positions.length,
+            serverTimeDrift: `${serverTimeDrift}s`,
+            responseMetadata
+          });
+          
+          return {
+            devices: allDevices,
+            positions,
+            lastQueryTime: newLastQueryTime
+          };
+        } catch (error) {
+          console.error('GPS51DataFetcher: Fallback fetch failed:', error);
+          return { 
+            devices: allDevices, 
+            positions: [], 
+            lastQueryTime: lastQueryTime || GPS51TimeManager.getCurrentUtcTimestamp()
+          };
+        }
       }
 
       // Step 2: Fetch live positions with enhanced error handling and time management

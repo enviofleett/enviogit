@@ -40,12 +40,13 @@ export class GPS51TimeManager {
   }
 
   /**
-   * Validate if timestamp is recent (within expected range)
+   * Validate if timestamp is recent (within expected range) - all timestamps in milliseconds
    */
   static isRecentTimestamp(timestamp: number, maxAgeMinutes: number = 30): boolean {
     const currentUtc = this.getCurrentUtcTimestamp();
-    const ageSeconds = currentUtc - timestamp;
-    return ageSeconds <= (maxAgeMinutes * 60);
+    const ageMs = currentUtc - timestamp; // Both in milliseconds
+    const maxAgeMs = maxAgeMinutes * 60 * 1000; // Convert minutes to milliseconds
+    return ageMs <= maxAgeMs;
   }
 
   /**
