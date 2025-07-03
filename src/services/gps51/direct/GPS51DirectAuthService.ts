@@ -141,7 +141,7 @@ export class GPS51DirectAuthService {
       hasUser: !!response.user
     });
 
-    if (response.status === GPS51_STATUS.SUCCESS && response.token) {
+    if (response.status === 0 && response.token) {
       // Authentication successful
       const tokenExpiry = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
       
@@ -206,7 +206,7 @@ export class GPS51DirectAuthService {
         this.state.token
       );
 
-      if (response.status === GPS51_STATUS.SUCCESS) {
+      if (response.status === 0) {
         // Token is still valid, update expiry
         this.state.tokenExpiry = Date.now() + (24 * 60 * 60 * 1000);
         
@@ -296,9 +296,9 @@ export class GPS51DirectAuthService {
       const latency = Date.now() - startTime;
 
       return {
-        success: response.status === GPS51_STATUS.SUCCESS,
+        success: response.status === 0,
         latency,
-        error: response.status !== GPS51_STATUS.SUCCESS ? response.message : undefined
+        error: response.status !== 0 ? response.message : undefined
       };
     } catch (error) {
       return {

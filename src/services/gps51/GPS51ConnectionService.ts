@@ -157,7 +157,7 @@ export class GPS51ConnectionService {
         hasUser: !!authResult.user
       });
       
-      if (authResult.status === 1 && authResult.token) {
+      if (authResult.status === 0 && authResult.token) {
         // Save configuration for proxy use
         const authCredentials: GPS51Credentials = {
           username: credentials.username,

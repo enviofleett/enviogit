@@ -82,7 +82,7 @@ export class GPS51AuthenticationService {
       credentials.apiUrl
     );
 
-    if (response.status === 1 && response.token) {
+    if (response.status === 0 && response.token) {
       return {
         success: true,
         token: response.token,
@@ -117,7 +117,7 @@ export class GPS51AuthenticationService {
       'POST'
     );
 
-    if (response.status === 1 && response.token) {
+    if (response.status === 0 && response.token) {
       return {
         success: true,
         token: response.token,
