@@ -1,5 +1,6 @@
 import { gps51AuthService } from '../gp51/GPS51AuthService';
 import { GPS51CredentialsManager } from '../gp51/GPS51CredentialsManager';
+import { gps51LiveDataService } from './GPS51LiveDataService';
 
 export class GPS51StartupService {
   private static instance: GPS51StartupService;
@@ -97,8 +98,7 @@ export class GPS51StartupService {
   }
 
   getLiveDataService() {
-    // Import and return the actual live data service
-    const { gps51LiveDataService } = require('./GPS51LiveDataService');
+    // Return the actual live data service
     return gps51LiveDataService;
   }
 
