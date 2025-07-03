@@ -26,7 +26,7 @@ export class GPS51EnhancedApiClient {
   private metrics: RequestMetrics[] = [];
   private maxMetricsHistory = 100;
 
-  constructor(baseURL = GPS51_DEFAULTS.BASE_URL) {
+  constructor(baseURL: string = GPS51_DEFAULTS.BASE_URL) {
     this.baseURL = baseURL;
     this.defaultOptions = {
       timeout: 30000,
