@@ -1,6 +1,7 @@
 import { gps51EnhancedSyncService } from './GPS51EnhancedSyncService';
 import { gps51StartupService } from './GPS51StartupService';
 import { gps51IntelligentConnectionManager } from './GPS51IntelligentConnectionManager';
+import { gps51DatabaseIntegration } from './GPS51DatabaseIntegration';
 import type { EnhancedLiveDataState } from './GPS51EnhancedStateManager';
 
 export interface LiveDataManagerStatus {
@@ -10,6 +11,8 @@ export interface LiveDataManagerStatus {
   lastUpdate: Date | null;
   deviceCount: number;
   positionCount: number;
+  databaseSyncEnabled: boolean;
+  lastDatabaseSync: Date | null;
   errors: string[];
 }
 
@@ -54,7 +57,7 @@ export class GPS51LiveDataManager {
   }
 
   /**
-   * Start enhanced polling with callback
+   * Start enhanced polling with callback and database integration
    */
   startEnhancedPolling(callback?: (data: EnhancedLiveDataState) => void): void {
     if (this.isPolling) {
@@ -65,15 +68,30 @@ export class GPS51LiveDataManager {
     this.pollingCallback = callback;
     this.isPolling = true;
 
-    console.log('GPS51LiveDataManager: Starting enhanced polling...');
+    console.log('GPS51LiveDataManager: Starting enhanced polling with database integration...');
 
     // Use the enhanced sync service with comprehensive data processing
-    gps51EnhancedSyncService.startEnhancedPolling((data) => {
+    gps51EnhancedSyncService.startEnhancedPolling(async (data) => {
       console.log('GPS51LiveDataManager: Live data update received:', {
         devices: data.devices.length,
         positions: data.positions.length,
         lastUpdate: data.lastUpdate
       });
+
+      // Sync to database if we have meaningful data
+      if (data.devices.length > 0) {
+        try {
+          const syncResult = await gps51DatabaseIntegration.syncToDatabase(data);
+          console.log('GPS51LiveDataManager: Database sync completed:', {
+            success: syncResult.success,
+            vehiclesProcessed: syncResult.vehiclesProcessed,
+            positionsStored: syncResult.positionsStored,
+            executionTime: `${syncResult.executionTime}ms`
+          });
+        } catch (syncError) {
+          console.warn('GPS51LiveDataManager: Database sync failed:', syncError);
+        }
+      }
 
       // Dispatch custom event for dashboard updates
       window.dispatchEvent(new CustomEvent('gps51-live-data-update', { 
@@ -91,7 +109,7 @@ export class GPS51LiveDataManager {
       }
     });
 
-    console.log('GPS51LiveDataManager: Enhanced polling started');
+    console.log('GPS51LiveDataManager: Enhanced polling with database integration started');
   }
 
   /**
@@ -110,7 +128,7 @@ export class GPS51LiveDataManager {
   }
 
   /**
-   * Get current live data status
+   * Get current live data status with database sync information
    */
   getStatus(): LiveDataManagerStatus {
     const syncService = gps51EnhancedSyncService;
@@ -125,6 +143,8 @@ export class GPS51LiveDataManager {
       lastUpdate: currentState.lastUpdate,
       deviceCount: currentState.devices.length,
       positionCount: currentState.positions.length,
+      databaseSyncEnabled: true,
+      lastDatabaseSync: currentState.lastUpdate, // Approximation
       errors: [] // Can be populated with error tracking if needed
     };
   }
@@ -137,11 +157,11 @@ export class GPS51LiveDataManager {
   }
 
   /**
-   * Force a manual sync
+   * Force a manual sync with database integration
    */
   async forceLiveDataSync(): Promise<EnhancedLiveDataState> {
     try {
-      console.log('GPS51LiveDataManager: Manual sync requested...');
+      console.log('GPS51LiveDataManager: Manual sync with database integration requested...');
       
       // Ensure authentication first
       const isAuthenticated = await gps51StartupService.ensureAuthenticated();
@@ -156,6 +176,20 @@ export class GPS51LiveDataManager {
         devices: data.devices.length,
         positions: data.positions.length
       });
+
+      // Sync to database
+      if (data.devices.length > 0) {
+        try {
+          const syncResult = await gps51DatabaseIntegration.syncToDatabase(data);
+          console.log('GPS51LiveDataManager: Manual database sync completed:', {
+            success: syncResult.success,
+            vehiclesProcessed: syncResult.vehiclesProcessed,
+            positionsStored: syncResult.positionsStored
+          });
+        } catch (syncError) {
+          console.warn('GPS51LiveDataManager: Manual database sync failed:', syncError);
+        }
+      }
 
       // Dispatch update event
       window.dispatchEvent(new CustomEvent('gps51-live-data-update', { 
@@ -183,7 +217,7 @@ export class GPS51LiveDataManager {
   }
 
   /**
-   * Get comprehensive diagnostic information
+   * Get comprehensive diagnostic information with database status
    */
   getDiagnosticInfo() {
     return {
@@ -193,8 +227,26 @@ export class GPS51LiveDataManager {
       },
       syncService: gps51EnhancedSyncService.exportDebugInfo(),
       startup: gps51StartupService.getInitializationStatus(),
-      connection: gps51IntelligentConnectionManager.getConnectionHealth()
+      connection: gps51IntelligentConnectionManager.getConnectionHealth(),
+      database: {
+        integrationEnabled: true,
+        canTestConnection: true
+      }
     };
+  }
+
+  /**
+   * Test database connectivity
+   */
+  async testDatabaseConnection(): Promise<{ success: boolean; error?: string }> {
+    return gps51DatabaseIntegration.testDatabaseConnection();
+  }
+
+  /**
+   * Get database sync statistics
+   */
+  async getDatabaseSyncStats() {
+    return gps51DatabaseIntegration.getSyncJobStats();
   }
 }
 

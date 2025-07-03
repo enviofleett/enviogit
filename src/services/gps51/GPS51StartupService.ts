@@ -1,6 +1,6 @@
-import { gps51AuthService } from '../gp51/GPS51AuthService';
+import { gps51AuthenticationService } from './GPS51AuthenticationService';
 import { GPS51CredentialsManager } from '../gp51/GPS51CredentialsManager';
-import { gps51LiveDataService } from './GPS51LiveDataService';
+import { gps51LiveDataManager } from './GPS51LiveDataManager';
 
 export class GPS51StartupService {
   private static instance: GPS51StartupService;
@@ -16,7 +16,7 @@ export class GPS51StartupService {
 
   async initializeAuthentication(): Promise<boolean> {
     if (this.isInitialized) {
-      return gps51AuthService.isAuthenticated();
+      return this.isAuthenticated();
     }
 
     try {
@@ -33,7 +33,6 @@ export class GPS51StartupService {
       console.log('GPS51StartupService: Found saved credentials, attempting authentication');
       
       // Use the enhanced authentication service
-      const { gps51AuthenticationService } = await import('./GPS51AuthenticationService');
       const authResult = await gps51AuthenticationService.authenticate(savedCredentials);
       
       if (authResult.success && authResult.token) {
@@ -44,34 +43,38 @@ export class GPS51StartupService {
         // Store authentication token
         localStorage.setItem('gps51_auth_token', authResult.token);
         
-        // Start live data polling after successful authentication
-        const liveDataService = this.getLiveDataService();
-        console.log('GPS51StartupService: Starting live data polling...');
+        // Start live data system after successful authentication
+        console.log('GPS51StartupService: Initializing live data system...');
         
-        // Start polling with callback
-        liveDataService.startPolling((data) => {
-          console.log('GPS51StartupService: Live data update received:', {
-            devices: data.devices.length,
-            positions: data.positions.length,
-            lastUpdate: data.lastUpdate
-          });
-          
-          // Dispatch custom event for dashboard updates
-          window.dispatchEvent(new CustomEvent('gps51-live-data-update', { detail: data }));
-        });
-        
-        // Trigger initial data fetch
         try {
-          const initialData = await liveDataService.fetchLiveData();
-          console.log('GPS51StartupService: Initial data fetch completed:', {
-            devices: initialData.devices.length,
-            positions: initialData.positions.length
-          });
-          
-          // Dispatch initial data event
-          window.dispatchEvent(new CustomEvent('gps51-live-data-update', { detail: initialData }));
+          const initialized = await gps51LiveDataManager.initializeLiveDataSystem();
+          if (initialized) {
+            console.log('GPS51StartupService: Live data system initialized successfully');
+            
+            // Start enhanced polling with callback
+            gps51LiveDataManager.startEnhancedPolling((data) => {
+              console.log('GPS51StartupService: Live data update received:', {
+                devices: data.devices.length,
+                positions: data.positions.length,
+                lastUpdate: data.lastUpdate
+              });
+              
+              // Dispatch custom event for dashboard updates
+              window.dispatchEvent(new CustomEvent('gps51-live-data-update', { detail: data }));
+            });
+            
+            // Trigger initial data sync
+            const initialData = await gps51LiveDataManager.forceLiveDataSync();
+            console.log('GPS51StartupService: Initial data sync completed:', {
+              devices: initialData.devices.length,
+              positions: initialData.positions.length
+            });
+            
+          } else {
+            console.warn('GPS51StartupService: Live data system initialization failed');
+          }
         } catch (dataError) {
-          console.warn('GPS51StartupService: Initial data fetch failed, but authentication succeeded:', dataError);
+          console.warn('GPS51StartupService: Live data initialization failed, but authentication succeeded:', dataError);
         }
         
         return true;
@@ -86,11 +89,16 @@ export class GPS51StartupService {
   }
 
   async ensureAuthenticated(): Promise<boolean> {
-    if (gps51AuthService.isAuthenticated()) {
+    if (this.isAuthenticated()) {
       return true;
     }
 
     return await this.initializeAuthentication();
+  }
+  
+  isAuthenticated(): boolean {
+    const token = localStorage.getItem('gps51_auth_token');
+    return !!token && this.isInitialized;
   }
 
   // Legacy compatibility methods
@@ -106,8 +114,8 @@ export class GPS51StartupService {
   getInitializationStatus(): { initialized: boolean; authenticated: boolean; liveDataActive: boolean } {
     return {
       initialized: this.isInitialized,
-      authenticated: gps51AuthService.isAuthenticated(),
-      liveDataActive: this.isInitialized && gps51AuthService.isAuthenticated()
+      authenticated: this.isAuthenticated(),
+      liveDataActive: this.isInitialized && this.isAuthenticated()
     };
   }
 
@@ -120,9 +128,9 @@ export class GPS51StartupService {
     return this.systemInitialized;
   }
 
-  getLiveDataService() {
-    // Return the actual live data service
-    return gps51LiveDataService;
+  getLiveDataManager() {
+    // Return the enhanced live data manager
+    return gps51LiveDataManager;
   }
 
   reset(): void {
