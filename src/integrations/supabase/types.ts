@@ -600,6 +600,113 @@ export type Database = {
           },
         ]
       }
+      geofence_events: {
+        Row: {
+          acknowledged: boolean
+          geofence_id: string
+          id: string
+          location: Json
+          metadata: Json | null
+          severity: string
+          speed: number | null
+          timestamp: string
+          type: string
+          vehicle_id: string
+        }
+        Insert: {
+          acknowledged?: boolean
+          geofence_id: string
+          id?: string
+          location: Json
+          metadata?: Json | null
+          severity?: string
+          speed?: number | null
+          timestamp?: string
+          type: string
+          vehicle_id: string
+        }
+        Update: {
+          acknowledged?: boolean
+          geofence_id?: string
+          id?: string
+          location?: Json
+          metadata?: Json | null
+          severity?: string
+          speed?: number | null
+          timestamp?: string
+          type?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "geofence_events_geofence_id_fkey"
+            columns: ["geofence_id"]
+            isOneToOne: false
+            referencedRelation: "geofences"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      geofences: {
+        Row: {
+          alert_on_entry: boolean
+          alert_on_exit: boolean
+          alert_on_violation: boolean
+          center_lat: number | null
+          center_lng: number | null
+          coordinates: Json | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          radius: number | null
+          schedules: Json | null
+          tags: string[] | null
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          alert_on_entry?: boolean
+          alert_on_exit?: boolean
+          alert_on_violation?: boolean
+          center_lat?: number | null
+          center_lng?: number | null
+          coordinates?: Json | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          radius?: number | null
+          schedules?: Json | null
+          tags?: string[] | null
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          alert_on_entry?: boolean
+          alert_on_exit?: boolean
+          alert_on_violation?: boolean
+          center_lat?: number | null
+          center_lng?: number | null
+          coordinates?: Json | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          radius?: number | null
+          schedules?: Json | null
+          tags?: string[] | null
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       gps51_sync_jobs: {
         Row: {
           completed_at: string | null
