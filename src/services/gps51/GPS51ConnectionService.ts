@@ -68,9 +68,9 @@ export class GPS51ConnectionService {
       
       console.log('GPS51ConnectionService: Authentication result:', {
         success: authResult.success,
-        method: authResult.method,
         hasToken: !!authResult.token,
-        error: authResult.error
+        error: authResult.error,
+        diagnostics: authResult.diagnostics
       });
       
       if (authResult.success && authResult.token) {
@@ -79,14 +79,14 @@ export class GPS51ConnectionService {
         
         // Store authentication results
         localStorage.setItem('gps51_auth_token', authResult.token);
-        localStorage.setItem('gps51_use_proxy', authResult.method === 'proxy' ? 'true' : 'false');
+        localStorage.setItem('gps51_use_proxy', 'true'); // Using proxy by default
         
         // Trigger authentication success events
         window.dispatchEvent(new CustomEvent('gps51-authentication-changed', { 
-          detail: { authenticated: true, method: authResult.method } 
+          detail: { authenticated: true, method: 'proxy' } 
         }));
         
-        console.log(`GPS51ConnectionService: Authentication successful via ${authResult.method}`);
+        console.log('GPS51ConnectionService: Authentication successful via proxy');
         return { success: true };
       } else {
         throw new Error(authResult.error || 'Authentication failed - no token received');

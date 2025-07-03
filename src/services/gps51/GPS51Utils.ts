@@ -14,6 +14,32 @@ export class GPS51Utils {
     return md5Regex.test(password);
   }
 
+  static ensureMD5Hash(password: string): string {
+    // If password is already a valid MD5 hash, return as-is
+    if (this.validateMD5Hash(password)) {
+      return password;
+    }
+    
+    // Import MD5 function and hash the password
+    try {
+      const { md5 } = require('js-md5');
+      return md5(password).toLowerCase();
+    } catch (error) {
+      // Fallback if module import fails
+      console.warn('MD5 module import failed, password may not be hashed properly');
+      return password;
+    }
+  }
+
+  static createGPS51LoginParams(credentials: any): any {
+    return {
+      username: credentials.username,
+      password: this.ensureMD5Hash(credentials.password),
+      from: credentials.from || 'WEB',
+      type: credentials.type || 'USER'
+    };
+  }
+
   static normalizeApiUrl(apiUrl: string): string {
     if (apiUrl.includes('www.gps51.com')) {
       console.warn('Correcting API URL from www.gps51.com to api.gps51.com');

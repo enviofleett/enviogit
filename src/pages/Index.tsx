@@ -14,11 +14,30 @@ const Index = () => {
   });
 
   useEffect(() => {
+    const initializeSystem = async () => {
+      console.log('Index: Initializing GPS51 system...');
+      
+      // Initialize authentication and start services
+      const initialized = await gps51StartupService.initializeAuthentication();
+      console.log('Index: System initialization result:', initialized);
+      
+      if (initialized) {
+        checkSystemStatus();
+      }
+    };
+
     const checkSystemStatus = () => {
       const isInitialized = gps51StartupService.isSystemInitialized();
       const liveDataService = gps51StartupService.getLiveDataService();
       const serviceStatus = liveDataService.getServiceStatus();
       const currentState = liveDataService.getCurrentState();
+      
+      console.log('Index: System status check:', {
+        isInitialized,
+        isPolling: serviceStatus.isPolling,
+        deviceCount: currentState.devices.length,
+        lastUpdate: currentState.lastUpdate
+      });
       
       setSystemStatus({
         isInitialized,
@@ -28,24 +47,31 @@ const Index = () => {
       });
     };
 
-    // Initial check
-    checkSystemStatus();
+    // Initialize system
+    initializeSystem();
 
     // Listen for live data updates
     const handleLiveDataUpdate = (event: CustomEvent) => {
       const data = event.detail;
+      console.log('Index: Live data update received:', {
+        devices: data.devices?.length || 0,
+        positions: data.positions?.length || 0,
+        lastUpdate: data.lastUpdate
+      });
+      
       setSystemStatus(prev => ({
         ...prev,
-        vehicleCount: data.devices.length,
-        lastUpdate: data.lastUpdate,
-        isLiveDataActive: true
+        vehicleCount: data.devices?.length || 0,
+        lastUpdate: data.lastUpdate || new Date(),
+        isLiveDataActive: true,
+        isInitialized: true
       }));
     };
 
     window.addEventListener('gps51-live-data-update', handleLiveDataUpdate as EventListener);
 
-    // Check status every 10 seconds
-    const interval = setInterval(checkSystemStatus, 10000);
+    // Check status every 30 seconds
+    const interval = setInterval(checkSystemStatus, 30000);
 
     return () => {
       clearInterval(interval);

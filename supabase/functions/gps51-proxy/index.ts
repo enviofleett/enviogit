@@ -16,6 +16,8 @@ interface GPS51ProxyRequest {
 }
 
 serve(async (req) => {
+  const startTime = Date.now();
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -25,7 +27,8 @@ serve(async (req) => {
     console.log('GPS51 Proxy: Incoming request:', {
       method: req.method,
       url: req.url,
-      headers: Object.fromEntries(req.headers.entries())
+      headers: Object.fromEntries(req.headers.entries()),
+      timestamp: new Date().toISOString()
     });
 
     if (req.method !== 'POST') {
@@ -135,14 +138,30 @@ serve(async (req) => {
       headers: requestOptions.headers
     });
 
-    // Make request to GPS51 API with timeout and retry logic
+    // Make request to GPS51 API with enhanced timeout and retry logic
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
     
     try {
       requestOptions.signal = controller.signal;
+      const requestStartTime = Date.now();
+      
+      console.log('GPS51 Proxy: Starting fetch request:', {
+        url: targetUrl.toString(),
+        startTime: new Date(requestStartTime).toISOString(),
+        timeout: '30s'
+      });
+      
       const response = await fetch(targetUrl.toString(), requestOptions);
       clearTimeout(timeoutId);
+      
+      const requestDuration = Date.now() - requestStartTime;
+      console.log('GPS51 Proxy: Fetch completed:', {
+        status: response.status,
+        statusText: response.statusText,
+        duration: `${requestDuration}ms`,
+        url: targetUrl.toString()
+      });
       
       const responseText = await response.text();
 
@@ -204,20 +223,27 @@ serve(async (req) => {
       }
     }
 
-    // Add proxy metadata
+    // Add proxy metadata with enhanced timing
+    const totalDuration = Date.now() - startTime;
     responseData.proxy_metadata = {
       processedAt: new Date().toISOString(),
       apiUrl: targetUrl.toString(),
       responseStatus: response.status,
-      responseTime: Date.now()
+      responseTime: Date.now(),
+      requestDuration: requestDuration,
+      totalDuration: totalDuration,
+      proxyVersion: '2.0'
     };
 
-    console.log('GPS51 Proxy: Returning processed response:', {
-      status: responseData.status,
-      message: responseData.message,
-      hasData: !!responseData.data,
-      hasRecords: !!responseData.records
-    });
+      console.log('GPS51 Proxy: Returning processed response:', {
+        status: responseData.status,
+        message: responseData.message,
+        hasData: !!responseData.data,
+        hasRecords: !!responseData.records,
+        hasToken: !!responseData.token,
+        totalDuration: totalDuration,
+        success: responseData.status === 0 || responseData.status === '0'
+      });
 
       return new Response(
         JSON.stringify(responseData),
@@ -234,20 +260,35 @@ serve(async (req) => {
       
       console.error('GPS51 Proxy: Fetch error:', fetchError);
       
-      // Handle specific fetch errors
+      // Handle specific fetch errors with enhanced debugging
+      const fetchDuration = Date.now() - startTime;
       let errorMessage = 'Request failed';
+      let errorCode = 'UNKNOWN_ERROR';
+      
       if (fetchError.name === 'AbortError') {
         errorMessage = 'Request timeout - GPS51 API did not respond within 30 seconds';
+        errorCode = 'REQUEST_TIMEOUT';
       } else if (fetchError.message.includes('fetch')) {
         errorMessage = 'Network error - Unable to reach GPS51 API server';
+        errorCode = 'NETWORK_ERROR';
+      } else if (fetchError.message.includes('DNS')) {
+        errorMessage = 'DNS resolution failed for GPS51 API server';
+        errorCode = 'DNS_ERROR';
+      } else if (fetchError.message.includes('SSL') || fetchError.message.includes('TLS')) {
+        errorMessage = 'SSL/TLS connection error to GPS51 API server';
+        errorCode = 'SSL_ERROR';
       }
       
       return new Response(
         JSON.stringify({
           error: errorMessage,
           proxy_error: true,
+          error_code: errorCode,
           timestamp: new Date().toISOString(),
-          details: fetchError.message
+          details: fetchError.message,
+          fetchDuration: fetchDuration,
+          targetUrl: targetUrl.toString(),
+          requestAction: requestData.action
         }),
         {
           status: 502,
@@ -260,13 +301,20 @@ serve(async (req) => {
     }
 
   } catch (error) {
+    const totalDuration = Date.now() - startTime;
     console.error('GPS51 Proxy: Error processing request:', error);
     
     return new Response(
       JSON.stringify({
         error: error instanceof Error ? error.message : 'Unknown proxy error',
         proxy_error: true,
-        timestamp: new Date().toISOString()
+        error_code: 'PROXY_PROCESSING_ERROR',
+        timestamp: new Date().toISOString(),
+        totalDuration: totalDuration,
+        requestDetails: {
+          method: req.method,
+          hasBody: req.method === 'POST'
+        }
       }),
       {
         status: 500,
