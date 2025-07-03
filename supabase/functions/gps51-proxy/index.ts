@@ -131,7 +131,8 @@ serve(async (req) => {
     console.log('GPS51 Proxy: Making request to GPS51 API:', {
       url: targetUrl.toString(),
       method: requestOptions.method,
-      hasBody: !!requestOptions.body
+      hasBody: !!requestOptions.body,
+      headers: requestOptions.headers
     });
 
     // Make request to GPS51 API with timeout and retry logic
@@ -150,7 +151,8 @@ serve(async (req) => {
         statusText: response.statusText,
         contentType: response.headers.get('Content-Type'),
         bodyLength: responseText.length,
-        isJSON: responseText.trim().startsWith('{') || responseText.trim().startsWith('[')
+        isJSON: responseText.trim().startsWith('{') || responseText.trim().startsWith('['),
+        responsePreview: responseText.substring(0, 200)
       });
 
       // Handle different response types

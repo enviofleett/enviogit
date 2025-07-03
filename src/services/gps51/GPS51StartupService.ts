@@ -35,6 +35,21 @@ export class GPS51StartupService {
       if (authResult) {
         console.log('GPS51StartupService: Authentication successful');
         this.isInitialized = true;
+        this.systemInitialized = true;
+        
+        // Start live data polling after successful authentication
+        const liveDataService = this.getLiveDataService();
+        console.log('GPS51StartupService: Starting live data polling...');
+        liveDataService.startPolling((data) => {
+          console.log('GPS51StartupService: Live data update received:', {
+            devices: data.devices.length,
+            positions: data.positions.length
+          });
+          
+          // Dispatch custom event for dashboard updates
+          window.dispatchEvent(new CustomEvent('gps51-live-data-update', { detail: data }));
+        });
+        
         return true;
       } else {
         console.log('GPS51StartupService: Authentication failed with saved credentials');
@@ -81,16 +96,10 @@ export class GPS51StartupService {
     return this.systemInitialized;
   }
 
-  getLiveDataService(): any {
-    // Import and return live data service using dynamic import
-    import('./GPS51LiveDataService').then(module => {
-      return module.gps51LiveDataService;
-    });
-    // For now, return a mock object to prevent errors
-    return {
-      getServiceStatus: () => ({ isPolling: false, retryCount: 0, stateStats: { totalDevices: 0, totalPositions: 0, lastUpdate: new Date() } }),
-      getCurrentState: () => ({ devices: [], positions: [], lastUpdate: new Date(), lastQueryPositionTime: 0 })
-    };
+  getLiveDataService() {
+    // Import and return the actual live data service
+    const { gps51LiveDataService } = require('./GPS51LiveDataService');
+    return gps51LiveDataService;
   }
 
   reset(): void {

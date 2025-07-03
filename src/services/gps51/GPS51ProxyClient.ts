@@ -34,6 +34,7 @@ export class GPS51ProxyClient {
         console.log(`GPS51ProxyClient: Making request via Supabase Edge Function (attempt ${attempt}/${maxRetries}):`, {
           action,
           hasToken: !!token,
+          tokenLength: token?.length,
           params,
           method,
           apiUrl
@@ -65,6 +66,7 @@ export class GPS51ProxyClient {
           message: data.message,
           hasData: !!data.data,
           hasRecords: !!data.records,
+          hasToken: !!data.token,
           proxyMetadata: data.proxy_metadata
         });
 
