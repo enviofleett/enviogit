@@ -24,7 +24,7 @@ export class GPS51ProxyClient {
     token: string,
     params: Record<string, any> = {},
     method: 'GET' | 'POST' = 'POST',
-    apiUrl?: string
+    apiUrl: string = 'https://api.gps51.com/openapi'
   ): Promise<GPS51ApiResponse> {
     const maxRetries = 3;
     let lastError: Error;
@@ -41,7 +41,7 @@ export class GPS51ProxyClient {
 
         const requestData: GPS51ProxyRequestData = {
           action,
-          token,
+          token: action === 'login' ? undefined : token, // Don't send token for login
           params,
           method,
           apiUrl

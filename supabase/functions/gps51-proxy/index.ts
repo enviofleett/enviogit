@@ -63,9 +63,11 @@ serve(async (req) => {
     const targetUrl = new URL(apiUrl);
     targetUrl.searchParams.append('action', requestData.action);
     
-    // Only add token for non-login actions
-    if (requestData.token && requestData.action !== 'login') {
-      targetUrl.searchParams.append('token', requestData.token);
+    // Add token for all actions except login (even if empty for debugging)
+    if (requestData.action !== 'login') {
+      const token = requestData.token || 'no-token';
+      targetUrl.searchParams.append('token', token);
+      console.log('GPS51 Proxy: Added token parameter:', { action: requestData.action, hasToken: !!requestData.token });
     }
 
     // Add undocumented parameters for specific actions
@@ -97,7 +99,8 @@ serve(async (req) => {
         
         console.log('GPS51 Proxy: Sending JSON login request:', {
           bodyParams: requestData.params,
-          jsonBody: requestOptions.body
+          jsonBody: requestOptions.body,
+          endpoint: targetUrl.toString()
         });
       } else {
         // Use form-encoded for other requests
@@ -117,8 +120,10 @@ serve(async (req) => {
         requestOptions.body = formParams.toString();
 
         console.log('GPS51 Proxy: Sending form-encoded request:', {
+          action: requestData.action,
           bodyParams: requestData.params,
-          formBody: requestOptions.body
+          formBody: requestOptions.body,
+          endpoint: targetUrl.toString()
         });
       }
     }

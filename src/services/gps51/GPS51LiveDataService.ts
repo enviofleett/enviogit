@@ -35,6 +35,14 @@ export class GPS51LiveDataService {
     try {
       console.log('GPS51LiveDataService: Starting live data fetch...');
       
+      // Import and ensure authentication before fetching data
+      const { gps51StartupService } = await import('./GPS51StartupService');
+      const isAuthenticated = await gps51StartupService.ensureAuthenticated();
+      
+      if (!isAuthenticated) {
+        throw new Error('GPS51 authentication required. Please configure credentials in Settings.');
+      }
+      
       const currentState = this.stateManager.getCurrentState();
       
       const { devices, positions, lastQueryTime } = await this.dataFetcher.fetchCompleteLiveData(

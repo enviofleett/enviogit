@@ -14,6 +14,7 @@ import { GPS51BatchSyncPanel } from './GPS51BatchSyncPanel';
 import { GPS51ConnectivityDiagnostics } from './GPS51ConnectivityDiagnostics';
 import { GPS51ConnectionTest } from './GPS51ConnectionTest';
 import { GPS51AuthDiagnosticsPanel } from './GPS51AuthDiagnosticsPanel';
+import { GPS51ProductionReadinessPanel } from './GPS51ProductionReadinessPanel';
 
 export const GPS51Settings = () => {
   return (
@@ -61,6 +62,7 @@ export const GPS51Settings = () => {
 
         <TabsContent value="debug">
           <div className="space-y-6">
+            <GPS51ProductionReadinessPanel />
             <GPS51AuthDiagnosticsPanel />
             <GPS51SupabaseSecretsTest />
             <GPS51RealTimeTestPanel />
