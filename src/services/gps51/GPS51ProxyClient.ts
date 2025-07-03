@@ -26,49 +26,67 @@ export class GPS51ProxyClient {
     method: 'GET' | 'POST' = 'POST',
     apiUrl?: string
   ): Promise<GPS51ApiResponse> {
-    try {
-      console.log('GPS51ProxyClient: Making request via Supabase Edge Function:', {
-        action,
-        hasToken: !!token,
-        params,
-        method,
-        apiUrl
-      });
+    const maxRetries = 3;
+    let lastError: Error;
 
-      const requestData: GPS51ProxyRequestData = {
-        action,
-        token,
-        params,
-        method,
-        apiUrl
-      };
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`GPS51ProxyClient: Making request via Supabase Edge Function (attempt ${attempt}/${maxRetries}):`, {
+          action,
+          hasToken: !!token,
+          params,
+          method,
+          apiUrl
+        });
 
-      const { data, error } = await supabase.functions.invoke('gps51-proxy', {
-        body: requestData
-      });
+        const requestData: GPS51ProxyRequestData = {
+          action,
+          token,
+          params,
+          method,
+          apiUrl
+        };
 
-      if (error) {
-        console.error('GPS51ProxyClient: Supabase function error:', error);
-        throw new Error(`Proxy request failed: ${error.message}`);
+        const { data, error } = await supabase.functions.invoke('gps51-proxy', {
+          body: requestData
+        });
+
+        if (error) {
+          console.error('GPS51ProxyClient: Supabase function error:', error);
+          throw new Error(`Proxy request failed: ${error.message}`);
+        }
+
+        if (!data) {
+          throw new Error('No data received from proxy');
+        }
+
+        console.log('GPS51ProxyClient: Received response:', {
+          status: data.status,
+          message: data.message,
+          hasData: !!data.data,
+          hasRecords: !!data.records,
+          proxyMetadata: data.proxy_metadata
+        });
+
+        // Validate response
+        if (data.proxy_error) {
+          throw new Error(`Proxy error: ${data.error || 'Unknown proxy error'}`);
+        }
+
+        return data;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Unknown error');
+        console.error(`GPS51ProxyClient: Request failed (attempt ${attempt}/${maxRetries}):`, lastError);
+        
+        if (attempt < maxRetries) {
+          const delay = Math.pow(2, attempt - 1) * 1000; // Exponential backoff
+          console.log(`GPS51ProxyClient: Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
       }
-
-      if (!data) {
-        throw new Error('No data received from proxy');
-      }
-
-      console.log('GPS51ProxyClient: Received response:', {
-        status: data.status,
-        message: data.message,
-        hasData: !!data.data,
-        hasRecords: !!data.records,
-        proxyMetadata: data.proxy_metadata
-      });
-
-      return data;
-    } catch (error) {
-      console.error('GPS51ProxyClient: Request failed:', error);
-      throw new Error(`Proxy client error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+
+    throw new Error(`Proxy client error after ${maxRetries} attempts: ${lastError.message}`);
   }
 
   async testConnection(apiUrl?: string): Promise<{

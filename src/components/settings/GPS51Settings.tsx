@@ -12,6 +12,7 @@ import { GPS51DeviceRecoveryTool } from './GPS51DeviceRecoveryTool';
 import { GPS51SupabaseSecretsTest } from './GPS51SupabaseSecretsTest';
 import { GPS51BatchSyncPanel } from './GPS51BatchSyncPanel';
 import { GPS51ConnectivityDiagnostics } from './GPS51ConnectivityDiagnostics';
+import { GPS51ConnectionTest } from './GPS51ConnectionTest';
 
 export const GPS51Settings = () => {
   return (
@@ -40,6 +41,7 @@ export const GPS51Settings = () => {
         <TabsContent value="credentials">
           <div className="space-y-6">
             <GPS51CredentialsForm />
+            <GPS51ConnectionTest />
             <GPS51ConnectivityDiagnostics />
           </div>
         </TabsContent>

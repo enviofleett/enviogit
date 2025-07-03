@@ -73,12 +73,14 @@ serve(async (req) => {
       targetUrl.searchParams.append('send', '2');
     }
 
-    // Prepare request options
+    // Prepare request options with enhanced headers
     const requestOptions: RequestInit = {
       method: requestData.method || 'POST',
       headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'GPS51-Proxy/1.0',
+        'Accept': 'application/json, text/plain, */*',
+        'User-Agent': 'Mozilla/5.0 (compatible; GPS51-Proxy/1.0)',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
       }
     };
 
@@ -112,21 +114,28 @@ serve(async (req) => {
       hasBody: !!requestOptions.body
     });
 
-    // Make request to GPS51 API
-    const response = await fetch(targetUrl.toString(), requestOptions);
-    const responseText = await response.text();
+    // Make request to GPS51 API with timeout and retry logic
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    
+    try {
+      requestOptions.signal = controller.signal;
+      const response = await fetch(targetUrl.toString(), requestOptions);
+      clearTimeout(timeoutId);
+      
+      const responseText = await response.text();
 
-    console.log('GPS51 Proxy: GPS51 API response:', {
-      status: response.status,
-      statusText: response.statusText,
-      contentType: response.headers.get('Content-Type'),
-      bodyLength: responseText.length,
-      isJSON: responseText.trim().startsWith('{') || responseText.trim().startsWith('[')
-    });
+      console.log('GPS51 Proxy: GPS51 API response:', {
+        status: response.status,
+        statusText: response.statusText,
+        contentType: response.headers.get('Content-Type'),
+        bodyLength: responseText.length,
+        isJSON: responseText.trim().startsWith('{') || responseText.trim().startsWith('[')
+      });
 
-    // Handle different response types
-    let responseData: any;
-    const contentType = response.headers.get('Content-Type') || '';
+      // Handle different response types
+      let responseData: any;
+      const contentType = response.headers.get('Content-Type') || '';
     
     if (contentType.includes('application/octet-stream') || contentType.includes('binary')) {
       console.warn('GPS51 Proxy: Received binary response, may indicate parameter issues');
@@ -188,16 +197,45 @@ serve(async (req) => {
       hasRecords: !!responseData.records
     });
 
-    return new Response(
-      JSON.stringify(responseData),
-      {
-        status: response.ok ? 200 : response.status,
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
+      return new Response(
+        JSON.stringify(responseData),
+        {
+          status: response.ok ? 200 : response.status,
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json' 
+          }
         }
+      );
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      
+      console.error('GPS51 Proxy: Fetch error:', fetchError);
+      
+      // Handle specific fetch errors
+      let errorMessage = 'Request failed';
+      if (fetchError.name === 'AbortError') {
+        errorMessage = 'Request timeout - GPS51 API did not respond within 30 seconds';
+      } else if (fetchError.message.includes('fetch')) {
+        errorMessage = 'Network error - Unable to reach GPS51 API server';
       }
-    );
+      
+      return new Response(
+        JSON.stringify({
+          error: errorMessage,
+          proxy_error: true,
+          timestamp: new Date().toISOString(),
+          details: fetchError.message
+        }),
+        {
+          status: 502,
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json' 
+          }
+        }
+      );
+    }
 
   } catch (error) {
     console.error('GPS51 Proxy: Error processing request:', error);
