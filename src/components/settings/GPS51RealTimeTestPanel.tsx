@@ -56,15 +56,17 @@ export const GPS51RealTimeTestPanel = () => {
       const thirtyMinutesAgo = now - (30 * 60 * 1000);
       
       const sampleDeviceTimestamps = devices.slice(0, 10).map(device => {
-        const lastActiveTime = device.lastactivetime || 0;
+        const lastActiveTimeRaw = device.lastactivetime || 0;
+        // GPS51 API returns timestamps in seconds, convert to milliseconds for JavaScript Date operations  
+        const lastActiveTime = lastActiveTimeRaw * 1000;
         return {
           deviceName: device.devicename,
           deviceId: device.deviceid,
-          lastActiveTime,
-          asMilliseconds: lastActiveTime ? new Date(lastActiveTime).toISOString() : 'Never',
-          asSeconds: lastActiveTime ? new Date(lastActiveTime * 1000).toISOString() : 'Never',
-          isOnlineMs: lastActiveTime > thirtyMinutesAgo,
-          isOnlineSeconds: (lastActiveTime * 1000) > thirtyMinutesAgo
+          lastActiveTime: lastActiveTimeRaw,
+          asMilliseconds: lastActiveTimeRaw ? new Date(lastActiveTimeRaw).toISOString() : 'Never',
+          asSeconds: lastActiveTimeRaw ? new Date(lastActiveTime).toISOString() : 'Never',
+          isOnlineMs: lastActiveTimeRaw > thirtyMinutesAgo,
+          isOnlineSeconds: lastActiveTime > thirtyMinutesAgo
         };
       });
 
@@ -74,7 +76,7 @@ export const GPS51RealTimeTestPanel = () => {
         sampleDeviceTimestamps
       });
 
-      addLog(`📊 Time analysis complete. Found ${sampleDeviceTimestamps.filter(d => d.isOnlineMs).length} online (ms) vs ${sampleDeviceTimestamps.filter(d => d.isOnlineSeconds).length} online (seconds)`);
+      addLog(`📊 Time analysis complete. Found ${sampleDeviceTimestamps.filter(d => d.isOnlineMs).length} online (raw ms) vs ${sampleDeviceTimestamps.filter(d => d.isOnlineSeconds).length} online (converted seconds)`);
 
     } catch (error) {
       addLog(`❌ Time analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`);

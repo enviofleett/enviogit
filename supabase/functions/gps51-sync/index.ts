@@ -129,16 +129,49 @@ serve(async (req) => {
     let finalPassword = password;
 
     if (!finalApiUrl || !finalUsername || !finalPassword) {
-      console.log('Getting credentials from system settings...');
-      // For cron jobs, we need to get credentials from a secure location
-      // This is a placeholder - in production, store these securely
-      finalApiUrl = Deno.env.get('GPS51_API_URL') || apiUrl;
-      finalUsername = Deno.env.get('GPS51_USERNAME') || username;
-      finalPassword = Deno.env.get('GPS51_PASSWORD_HASH') || password;
+      console.log('Getting credentials from environment variables...');
+      
+      // Get credentials from Supabase secrets for automated sync
+      const envApiUrl = Deno.env.get('GPS51_API_URL');
+      const envUsername = Deno.env.get('GPS51_USERNAME');
+      const envPassword = Deno.env.get('GPS51_PASSWORD_HASH');
+      
+      console.log('Environment variable status:', {
+        hasApiUrl: !!envApiUrl,
+        hasUsername: !!envUsername,
+        hasPassword: !!envPassword,
+        apiUrl: envApiUrl || 'not set',
+        username: envUsername || 'not set',
+        passwordLength: envPassword?.length || 0
+      });
+      
+      finalApiUrl = envApiUrl || apiUrl;
+      finalUsername = envUsername || username;
+      finalPassword = envPassword || password;
     }
 
     if (!finalApiUrl || !finalUsername || !finalPassword) {
-      throw new Error('GPS51 credentials not available for automated sync');
+      const missingFields = [];
+      if (!finalApiUrl) missingFields.push('API URL');
+      if (!finalUsername) missingFields.push('Username');
+      if (!finalPassword) missingFields.push('Password');
+      
+      const errorMsg = `GPS51 credentials missing: ${missingFields.join(', ')}. Please configure Supabase secrets: GPS51_API_URL, GPS51_USERNAME, GPS51_PASSWORD_HASH`;
+      console.error('AUTHENTICATION FAILURE:', errorMsg);
+      
+      // Update job status if this was a scheduled job
+      if (jobId) {
+        await supabase
+          .from('gps51_sync_jobs')
+          .update({
+            completed_at: new Date().toISOString(),
+            status: 'error',
+            error_message: errorMsg
+          })
+          .eq('id', jobId);
+      }
+      
+      throw new Error(errorMsg);
     }
     
     // Ensure we use the correct GPS51 API URL
@@ -357,7 +390,7 @@ serve(async (req) => {
       positionUrl.searchParams.append('token', token);
 
       const positionPayload = {
-        deviceids: deviceIds,
+        deviceids: deviceIds.join(','), // GPS51 API expects comma-separated string
         lastquerypositiontime: 0
       };
 
