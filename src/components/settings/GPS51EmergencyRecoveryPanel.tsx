@@ -18,46 +18,30 @@ import {
 } from 'lucide-react';
 import { gps51DataRecoveryService, RecoveryReport, DeviceRecoveryResult } from '@/services/gps51/GPS51DataRecoveryService';
 import { useToast } from '@/hooks/use-toast';
+import { useGPS51EmergencyRecovery } from '@/hooks/useGPS51EmergencyRecovery';
 
 export const GPS51EmergencyRecoveryPanel = () => {
-  const [isRecovering, setIsRecovering] = useState(false);
-  const [recoveryReport, setRecoveryReport] = useState<RecoveryReport | null>(null);
-  const [progress, setProgress] = useState(0);
+  const { 
+    isRecovering, 
+    recoveryReport, 
+    progress, 
+    isAuthenticated, 
+    startRecovery, 
+    reset 
+  } = useGPS51EmergencyRecovery();
   const { toast } = useToast();
 
-  const startEmergencyRecovery = async () => {
-    setIsRecovering(true);
-    setProgress(0);
-    setRecoveryReport(null);
-
-    try {
-      // Simulate progress updates
-      const progressInterval = setInterval(() => {
-        setProgress(prev => Math.min(prev + Math.random() * 15, 90));
-      }, 1000);
-
-      const report = await gps51DataRecoveryService.emergencyDataRecovery();
-      
-      clearInterval(progressInterval);
-      setProgress(100);
-      setRecoveryReport(report);
-
+  const handleStartRecovery = async () => {
+    if (!isAuthenticated) {
       toast({
-        title: "Emergency Recovery Completed",
-        description: `Successfully processed ${report.totalDevicesProcessed} devices, fixed ${report.successfullyFixed} positions`,
-      });
-
-    } catch (error) {
-      console.error('Emergency recovery failed:', error);
-      toast({
-        title: "Emergency Recovery Failed",
-        description: error instanceof Error ? error.message : 'Unknown error occurred',
+        title: "Authentication Required",
+        description: "Please authenticate with your GPS51 account in the Credentials tab first.",
         variant: "destructive",
       });
-    } finally {
-      setIsRecovering(false);
-      setProgress(0);
+      return;
     }
+    
+    await startRecovery();
   };
 
   const getSeverityColor = (severity: string) => {
@@ -92,10 +76,20 @@ export const GPS51EmergencyRecoveryPanel = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Authentication Status */}
+          {!isAuthenticated && (
+            <Alert className="mb-4">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                GPS51 authentication required. Please go to the <strong>Credentials</strong> tab and authenticate with your GPS51 account first.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="flex items-center gap-4">
             <Button 
-              onClick={startEmergencyRecovery}
-              disabled={isRecovering}
+              onClick={handleStartRecovery}
+              disabled={isRecovering || !isAuthenticated}
               className="min-w-48"
             >
               {isRecovering ? (

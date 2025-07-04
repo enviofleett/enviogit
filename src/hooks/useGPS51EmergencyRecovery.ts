@@ -1,11 +1,13 @@
 import { useState, useCallback } from 'react';
 import { gps51DataRecoveryService, RecoveryReport } from '@/services/gps51/GPS51DataRecoveryService';
 import { useToast } from './use-toast';
+import { gps51AuthService } from '@/services/gp51/GPS51AuthService';
 
 export interface UseGPS51EmergencyRecoveryReturn {
   isRecovering: boolean;
   recoveryReport: RecoveryReport | null;
   progress: number;
+  isAuthenticated: boolean;
   startRecovery: () => Promise<void>;
   reset: () => void;
   getRecoveryStats: () => {
@@ -20,6 +22,8 @@ export function useGPS51EmergencyRecovery(): UseGPS51EmergencyRecoveryReturn {
   const [recoveryReport, setRecoveryReport] = useState<RecoveryReport | null>(null);
   const [progress, setProgress] = useState(0);
   const { toast } = useToast();
+
+  const isAuthenticated = gps51AuthService.isAuthenticated();
 
   const startRecovery = useCallback(async () => {
     if (isRecovering) return;
@@ -104,6 +108,7 @@ export function useGPS51EmergencyRecovery(): UseGPS51EmergencyRecoveryReturn {
     isRecovering,
     recoveryReport,
     progress,
+    isAuthenticated,
     startRecovery,
     reset,
     getRecoveryStats

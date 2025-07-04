@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { GPS51Device, GPS51Position } from './GPS51Types';
 import { GPS51Client } from './GPS51Client';
 import { gps51DatabaseIntegration } from './GPS51DatabaseIntegration';
+import { gps51AuthService } from '../gp51/GPS51AuthService';
 
 export interface RecoveryConfig {
   apiEndpoint?: string;
@@ -82,23 +83,19 @@ export class GPS51DataRecoveryService {
     try {
       console.log('🚨 GPS51DataRecoveryService: Starting emergency data recovery...');
 
-      // Ensure GPS51 client is authenticated
-      if (!this.gps51Client.isAuthenticated()) {
-        console.warn('GPS51DataRecoveryService: Client not authenticated, attempting to restore...');
+      // Ensure GPS51 authentication is available
+      if (!gps51AuthService.isAuthenticated()) {
+        console.warn('GPS51DataRecoveryService: Not authenticated, attempting to restore...');
         
         // Try to restore authentication from stored credentials
         try {
-          // Check if we have the authManager available
-          const authManager = (this.gps51Client as any).authManager;
-          if (authManager && typeof authManager.restoreAuthentication === 'function') {
-            const restored = await authManager.restoreAuthentication();
-            if (restored) {
-              console.log('GPS51DataRecoveryService: Authentication restored successfully');
-            } else {
-              throw new Error('Could not restore authentication from stored credentials');
-            }
+          const restored = await gps51AuthService.restoreAuthentication();
+          if (restored) {
+            console.log('GPS51DataRecoveryService: Authentication restored successfully');
+            // Get the authenticated client from the auth service
+            this.gps51Client = gps51AuthService.getClient();
           } else {
-            throw new Error('Authentication manager not available');
+            throw new Error('Could not restore authentication from stored credentials');
           }
         } catch (authError) {
           console.error('GPS51DataRecoveryService: Failed to restore authentication:', authError);
@@ -106,9 +103,12 @@ export class GPS51DataRecoveryService {
         }
         
         // Double-check authentication was successful
-        if (!this.gps51Client.isAuthenticated()) {
+        if (!gps51AuthService.isAuthenticated()) {
           throw new Error('GPS51 authentication required. Please go to the "Credentials" tab and authenticate with your GPS51 account first, then try again.');
         }
+      } else {
+        // Use the authenticated client from the auth service
+        this.gps51Client = gps51AuthService.getClient();
       }
 
       // Step 1: Get all devices
