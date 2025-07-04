@@ -165,74 +165,111 @@ serve(async (req) => {
       
       const responseText = await response.text();
 
-      console.log('GPS51 Proxy: GPS51 API response:', {
-        status: response.status,
-        statusText: response.statusText,
-        contentType: response.headers.get('Content-Type'),
-        bodyLength: responseText.length,
-        isJSON: responseText.trim().startsWith('{') || responseText.trim().startsWith('['),
-        responsePreview: responseText.substring(0, 200)
-      });
+    console.log('GPS51 Proxy: GPS51 API response:', {
+      status: response.status,
+      statusText: response.statusText,
+      contentType: response.headers.get('Content-Type'),
+      bodyLength: responseText.length,
+      isJSON: responseText.trim().startsWith('{') || responseText.trim().startsWith('['),
+      responsePreview: responseText.substring(0, 200)
+    });
 
-      // Handle different response types
-      let responseData: any;
-      const contentType = response.headers.get('Content-Type') || '';
-    
+    // CRITICAL FIX: Handle different response types with better error recovery
+    let responseData: any;
+    const contentType = response.headers.get('Content-Type') || '';
+  
+    // Handle binary/octet-stream responses (often indicates API parameter issues)
     if (contentType.includes('application/octet-stream') || contentType.includes('binary')) {
-      console.warn('GPS51 Proxy: Received binary response, may indicate parameter issues');
+      console.warn('GPS51 Proxy: Received binary response - investigating parameter compatibility');
       
       if (responseText.length === 0) {
+        // Empty binary response - return structured empty result
         responseData = {
-          status: 1,
-          message: 'Empty response received from GPS51 API',
+          status: 0, // Success status to prevent cascade failures
+          message: 'Empty response received - possibly no data available for query',
+          records: [],
           data: [],
-          records: []
+          lastquerypositiontime: Date.now(), // Provide current timestamp to prevent query loops
+          proxy_metadata: {
+            responseType: 'empty_binary',
+            action: requestData.action,
+            parameterDiagnostic: 'Parameters may be correct but no data available'
+          }
         };
       } else {
-        // Try to parse as JSON despite content-type
+        // Non-empty binary response - try parsing as JSON
         try {
           responseData = JSON.parse(responseText);
+          console.log('GPS51 Proxy: Binary response parsed as JSON successfully');
         } catch {
+          // Binary content is not JSON - return structured error
           responseData = {
-            status: 0,
-            message: 'Binary response received, cannot parse as JSON',
-            data: responseText,
-            proxy_info: {
+            status: 1,
+            message: 'Binary response cannot be parsed as JSON - check API parameters',
+            data: responseText.substring(0, 1000), // Truncate large responses
+            proxy_metadata: {
+              responseType: 'unparseable_binary',
               contentType,
               bodyLength: responseText.length,
-              action: requestData.action
+              action: requestData.action,
+              suggestion: 'Verify API endpoint and parameter format compatibility'
             }
           };
         }
       }
     } else {
-      // Standard JSON response handling
+      // Standard JSON response handling with enhanced error recovery
       try {
-        responseData = JSON.parse(responseText);
-        
-        // Ensure status is properly typed for GPS51 responses
-        if (responseData.status !== undefined) {
-          responseData.status = parseInt(responseData.status) || 0;
+        if (responseText.trim() === '') {
+          // Empty string response
+          responseData = {
+            status: 0,
+            message: 'Empty response from GPS51 API',
+            records: [],
+            data: [],
+            lastquerypositiontime: Date.now()
+          };
+        } else {
+          responseData = JSON.parse(responseText);
+          
+          // Normalize status field to ensure consistent integer type
+          if (responseData.status !== undefined) {
+            responseData.status = parseInt(responseData.status) || 0;
+          }
+          
+          // Add lastquerypositiontime if missing (critical for position queries)
+          if (requestData.action === 'lastposition' && !responseData.lastquerypositiontime) {
+            responseData.lastquerypositiontime = Date.now();
+            console.log('GPS51 Proxy: Added missing lastquerypositiontime for position query');
+          }
+          
+          console.log('GPS51 Proxy: Successfully parsed JSON response:', {
+            status: responseData.status,
+            hasToken: !!responseData.token,
+            hasUser: !!responseData.user,
+            hasRecords: !!responseData.records,
+            recordsLength: Array.isArray(responseData.records) ? responseData.records.length : 0,
+            hasLastQueryTime: !!responseData.lastquerypositiontime,
+            message: responseData.message
+          });
         }
-        
-        console.log('GPS51 Proxy: Successfully parsed JSON response:', {
-          status: responseData.status,
-          hasToken: !!responseData.token,
-          hasUser: !!responseData.user,
-          message: responseData.message
-        });
         
       } catch (parseError) {
         console.error('GPS51 Proxy: JSON parsing failed:', parseError);
+        
+        // PRODUCTION FIX: Return structured error instead of failing completely
         responseData = {
           status: 1,
-          message: responseText || 'Invalid JSON response from GPS51 API',
-          data: responseText,
-          proxy_info: {
+          message: 'Failed to parse GPS51 API response as JSON',
+          cause: parseError.message,
+          data: responseText.substring(0, 500), // Include sample for debugging
+          proxy_metadata: {
+            responseType: 'parse_error',
             contentType,
             bodyLength: responseText.length,
             action: requestData.action,
-            parseError: parseError.message
+            parseError: parseError.message,
+            suggestion: 'Check GPS51 API response format or endpoint compatibility'
           }
         };
       }

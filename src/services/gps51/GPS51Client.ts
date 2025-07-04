@@ -286,7 +286,8 @@ export class GPS51Client {
         responseKeys: Object.keys(response)
       });
 
-      if (response.status === GPS51_STATUS.SUCCESS) {
+      // CRITICAL FIX: Handle both success and "empty but valid" responses
+      if (response.status === GPS51_STATUS.SUCCESS || response.status === 0) {
         let positions: GPS51Position[] = [];
         
         if (response.records && Array.isArray(response.records)) {
@@ -299,21 +300,41 @@ export class GPS51Client {
           positions = response.positions;
           console.log(`GPS51 POSITION SUCCESS: Retrieved ${positions.length} positions from positions field`);
         } else {
-          console.warn('GPS51 POSITION WARNING: No position data found in response:', {
+          // No position data found - this is valid for incremental queries with no new data
+          console.log('GPS51 POSITION INFO: No position data in response (normal for incremental queries):', {
             hasRecords: !!response.records,
             hasData: !!response.data,
             hasPositions: !!response.positions,
+            responseStatus: response.status,
+            responseMessage: response.message,
+            isIncrementalQuery: !!lastQueryTime && lastQueryTime > 0,
             responseKeys: Object.keys(response)
           });
         }
         
-        // CRITICAL FIX: Return the server's lastquerypositiontime for next call
-        const serverLastQueryTime = response.lastquerypositiontime || lastQueryTime || 0;
+        // CRITICAL FIX: Always return valid lastquerypositiontime to prevent query loops
+        let serverLastQueryTime = response.lastquerypositiontime;
         
-        console.log('GPS51 Position Final Result:', {
+        // Fallback timestamp strategies if server doesn't provide one
+        if (!serverLastQueryTime || serverLastQueryTime <= 0) {
+          if (lastQueryTime && lastQueryTime > 0) {
+            // Use previous timestamp if server doesn't provide new one
+            serverLastQueryTime = lastQueryTime;
+            console.log('GPS51 POSITION: Using previous lastQueryTime as fallback');
+          } else {
+            // Use current timestamp as last resort
+            serverLastQueryTime = Date.now();
+            console.log('GPS51 POSITION: Using current timestamp as fallback');
+          }
+        }
+        
+        console.log('GPS51 Position Final Result (ENHANCED):', {
           positionsRetrieved: positions.length,
           serverLastQueryTime,
-          nextCallTimestamp: serverLastQueryTime ? new Date(serverLastQueryTime).toISOString() : 'N/A'
+          nextCallTimestamp: new Date(serverLastQueryTime).toISOString(),
+          queryType: lastQueryTime ? 'incremental' : 'initial',
+          timestampSource: response.lastquerypositiontime ? 'server' : 'fallback',
+          isEmptyButValid: positions.length === 0 && response.status === 0
         });
         
         return {
@@ -321,13 +342,25 @@ export class GPS51Client {
           lastQueryTime: serverLastQueryTime
         };
       } else {
-        const errorMessage = response.message || response.cause || 'Failed to fetch realtime positions';
-        console.error('GPS51 Position API Error:', {
+        // Enhanced error handling for different status codes
+        let errorMessage = response.message || response.cause || 'Failed to fetch realtime positions';
+        
+        if (response.status === 1) {
+          errorMessage = `GPS51 API Error (Status 1): ${response.message || response.cause || 'Authentication or parameter error'}`;
+        } else if (response.status === 8901) {
+          errorMessage = `GPS51 API Error (Status 8901): Parameter validation failed - ${response.message || response.cause}`;
+        }
+        
+        console.error('GPS51 Position API Error (ENHANCED):', {
           status: response.status,
           message: response.message,
           cause: response.cause,
-          fullResponse: response
+          fullResponse: response,
+          deviceCount: deviceids.length,
+          hasTimestamp: !!lastQueryTime,
+          errorEnhancement: 'Check device IDs validity and API connectivity'
         });
+        
         throw new Error(errorMessage);
       }
     } catch (error) {

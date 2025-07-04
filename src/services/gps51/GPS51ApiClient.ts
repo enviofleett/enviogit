@@ -80,7 +80,13 @@ export class GPS51ApiClient {
             if (Array.isArray(value)) {
               formParams.append(key, value.join(','));
             } else {
-              formParams.append(key, String(value));
+              // CRITICAL FIX: Ensure timestamps are properly formatted
+              if (key === 'lastquerypositiontime' && typeof value === 'number') {
+                // GPS51 API expects timestamps as strings
+                formParams.append(key, value.toString());
+              } else {
+                formParams.append(key, String(value));
+              }
             }
           });
           requestOptions.body = formParams.toString();
@@ -90,7 +96,12 @@ export class GPS51ApiClient {
             method: 'POST',
             headers: requestOptions.headers,
             body: requestOptions.body,
-            bodyObject: params
+            bodyObject: params,
+            timestampFormatting: params.lastquerypositiontime ? {
+              originalValue: params.lastquerypositiontime,
+              formattedValue: String(params.lastquerypositiontime),
+              type: typeof params.lastquerypositiontime
+            } : 'No timestamp parameter'
           });
         }
       }

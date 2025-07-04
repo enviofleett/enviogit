@@ -106,22 +106,28 @@ export class GPS51ProxyClient {
     success: boolean;
     responseTime: number;
     error?: string;
+    healthStatus?: any;
   }> {
     const startTime = Date.now();
     
     try {
-      console.log('GPS51ProxyClient: Testing Edge Function health...');
+      console.log('GPS51ProxyClient: Testing production-ready Edge Function health...');
       
       // Test with a simple health check that should work regardless of credentials
       const testUrl = apiUrl || 'https://api.gps51.com/openapi';
       
       console.log(`GPS51ProxyClient: Testing connection to ${testUrl}`);
       
-      // Use a minimal request that tests the proxy without authentication
+      // PRODUCTION FIX: Use a lightweight health check request
       const { data, error } = await supabase.functions.invoke('gps51-proxy', {
         body: {
           action: 'login',
-          params: { username: 'health-check', password: 'd41d8cd98f00b204e9800998ecf8427e' }, // empty string MD5
+          params: { 
+            username: 'health-check', 
+            password: 'health-check-password',
+            from: 'WEB',
+            type: 'USER'
+          },
           method: 'POST',
           apiUrl: testUrl
         }
@@ -134,7 +140,11 @@ export class GPS51ProxyClient {
         return {
           success: false,
           responseTime,
-          error: `Edge Function error: ${error.message}`
+          error: `Edge Function communication failed: ${error.message}`,
+          healthStatus: {
+            edgeFunctionStatus: 'Error',
+            error: error.message
+          }
         };
       }
       
@@ -143,21 +153,37 @@ export class GPS51ProxyClient {
         return {
           success: false,
           responseTime,
-          error: 'Edge Function returned no data - may be a deployment issue'
+          error: 'Edge Function returned no response - deployment issue detected',
+          healthStatus: {
+            edgeFunctionStatus: 'No Response',
+            recommendation: 'Check Edge Function deployment'
+          }
         };
       }
       
-      // Consider it successful if the Edge Function responded at all
-      console.log('GPS51ProxyClient: Edge Function responded:', {
+      // ENHANCED: Analyze response to determine connection quality
+      const healthStatus = {
+        edgeFunctionStatus: 'Operational',
+        responseTime: `${responseTime}ms`,
+        apiConnectivity: data.proxy_error ? 'Failed' : 'Success',
+        performanceRating: responseTime < 1000 ? 'Excellent' : responseTime < 3000 ? 'Good' : 'Slow',
+        recommendation: responseTime > 2000 ? 'Consider performance optimization' : 'Connection optimal'
+      };
+      
+      console.log('GPS51ProxyClient: Edge Function health assessment:', {
         hasData: !!data,
         responseTime,
         dataStatus: data.status,
-        dataType: typeof data
+        dataType: typeof data,
+        hasProxyError: !!data.proxy_error,
+        healthStatus
       });
       
+      // Even failed authentication is considered successful for connectivity testing
       return {
         success: true,
-        responseTime
+        responseTime,
+        healthStatus
       };
       
     } catch (error) {
@@ -168,7 +194,12 @@ export class GPS51ProxyClient {
       return {
         success: false,
         responseTime,
-        error: error instanceof Error ? error.message : 'Unknown connection test error'
+        error: error instanceof Error ? error.message : 'Unknown connection test error',
+        healthStatus: {
+          edgeFunctionStatus: 'Exception',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          recommendation: 'Check network connectivity and Edge Function status'
+        }
       };
     }
   }

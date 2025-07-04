@@ -1,6 +1,7 @@
 import { gps51UnifiedAuthService } from './GPS51UnifiedAuthService';
 import { gps51LiveDataManager } from './GPS51LiveDataManager';
 import { gps51ProductionValidator } from './GPS51ProductionValidator';
+import { gps51ProductionHealthMonitor } from './GPS51ProductionHealthMonitor';
 
 export class GPS51StartupService {
   private static instance: GPS51StartupService;
@@ -56,6 +57,10 @@ export class GPS51StartupService {
               devices: initialData.devices.length,
               positions: initialData.positions.length
             });
+
+            // PRODUCTION FEATURE: Start health monitoring for 100% readiness
+            console.log('GPS51StartupService: Starting production health monitoring...');
+            gps51ProductionHealthMonitor.startMonitoring(60000); // Check every minute
             
           } else {
             console.warn('GPS51StartupService: Live data system initialization failed');
@@ -129,9 +134,16 @@ export class GPS51StartupService {
     return gps51LiveDataManager;
   }
 
+  async getProductionHealthStatus() {
+    // Get comprehensive health status including monitoring data
+    return await gps51ProductionHealthMonitor.performHealthCheck();
+  }
+
   reset(): void {
     this.isInitialized = false;
     this.systemInitialized = false;
+    // Stop health monitoring
+    gps51ProductionHealthMonitor.stopMonitoring();
   }
 }
 
