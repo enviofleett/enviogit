@@ -36,47 +36,29 @@ export class GPS51LiveDataEnhancer {
       
       const devices = await this.client.getDeviceList();
       const now = GPS51TimeManager.getCurrentUtcTimestamp();
-      const fourHoursAgo = now - (4 * 60 * 60 * 1000); // 4 hours in milliseconds
-      const thirtyMinutesAgo = now - (30 * 60 * 1000); // 30 minutes in milliseconds
-      const fiveMinutesAgo = now - (5 * 60 * 1000); // 5 minutes in milliseconds
+      const twentyFourHoursAgo = now - (24 * 60 * 60 * 1000); // 24 hours - more realistic for GPS devices
+      const twelveHoursAgo = now - (12 * 60 * 60 * 1000); // 12 hours fallback
+      const thirtyMinutesAgo = now - (30 * 60 * 1000); // 30 minutes for recent activity
 
-      // DIAGNOSTIC: Log time comparison values for debugging
-      console.log('🕐 GPS51LiveDataEnhancer: Time comparison debug:', {
-        currentTimestamp: now,
-        currentDate: new Date(now).toISOString(),
-        fourHoursAgo,
-        fourHoursAgoDate: new Date(fourHoursAgo).toISOString(),
-        thirtyMinutesAgo,
-        thirtyMinutesAgoDate: new Date(thirtyMinutesAgo).toISOString(),
-        fiveMinutesAgo,
-        fiveMinutesAgoDate: new Date(fiveMinutesAgo).toISOString()
+      console.log('GPS51LiveDataEnhancer: Time thresholds for device activity:', {
+        currentTime: new Date(now).toISOString(),
+        twentyFourHoursAgo: new Date(twentyFourHoursAgo).toISOString(),
+        twelveHoursAgo: new Date(twelveHoursAgo).toISOString(),
+        totalDevices: devices.length
       });
 
       const onlineDevices: GPS51Device[] = [];
       const offlineDevices: GPS51Device[] = [];
       let recentlyActiveCount = 0;
 
-      // CRITICAL DIAGNOSTIC: Let's examine the first 5 devices in detail to understand the time issue
-      const sampleDevices = devices.slice(0, 5);
-      console.log('🔍 CRITICAL TIME DIAGNOSTIC - Analyzing first 5 devices:', {
-        currentTimestamp: now,
-        currentDate: new Date(now).toISOString(),
-        thirtyMinutesAgo,
-        thirtyMinutesAgoDate: new Date(thirtyMinutesAgo).toISOString(),
-        totalDevices: devices.length
-      });
-
+      // Sample first few devices for activity analysis
+      const sampleDevices = devices.slice(0, 3);
       for (const device of sampleDevices) {
         const lastActiveTime = device.lastactivetime || 0;
-        console.log(`🔍 SAMPLE Device: ${device.devicename}`, {
+        console.log(`Device Sample: ${device.devicename}`, {
           deviceid: device.deviceid,
-          lastactivetime: lastActiveTime,
-          lastActiveAsDate: lastActiveTime ? new Date(lastActiveTime).toISOString() : 'Never',
-          lastActiveAsDateSeconds: lastActiveTime ? new Date(lastActiveTime * 1000).toISOString() : 'Never (as seconds)',
-          timeDifferenceMs: now - lastActiveTime,
-          timeDifferenceMinutes: lastActiveTime ? Math.floor((now - lastActiveTime) / (60 * 1000)) : 'N/A',
-          isValidFutureDate: lastActiveTime > now,
-          comparisonResult: `${lastActiveTime} > ${thirtyMinutesAgo} = ${lastActiveTime > thirtyMinutesAgo}`
+          lastActiveTime: lastActiveTime ? new Date(lastActiveTime).toISOString() : 'Never',
+          hoursAgo: lastActiveTime ? Math.floor((now - lastActiveTime) / (60 * 60 * 1000)) : 'N/A'
         });
       }
 
@@ -85,7 +67,7 @@ export class GPS51LiveDataEnhancer {
         // CRITICAL FIX: GPS51 API already returns timestamps in milliseconds, no conversion needed
         const lastActiveTime = GPS51TimestampUtils.validateAndNormalizeTimestamp(lastActiveTimeRaw);
         
-        const isOnline = lastActiveTime > fourHoursAgo; // Expanded from 30 minutes to 4 hours
+        const isOnline = lastActiveTime > twentyFourHoursAgo; // 24 hours - realistic for GPS fleet devices
         const isRecentlyActive = lastActiveTime > thirtyMinutesAgo;
         this.deviceActivityCache.set(device.deviceid, {
           lastActive: lastActiveTime,
@@ -112,7 +94,7 @@ export class GPS51LiveDataEnhancer {
             isRecentlyActive,
             minutesSinceLastActive: lastActiveTime ? Math.floor((now - lastActiveTime) / (60 * 1000)) : 'N/A',
             thirtyMinutesAgo,
-            comparisonDebug: `${lastActiveTime} > ${fourHoursAgo} = ${isOnline}`
+            comparisonDebug: `${lastActiveTime} > ${twentyFourHoursAgo} = ${isOnline}`
           });
         }
       }
@@ -156,6 +138,10 @@ export class GPS51LiveDataEnhancer {
   }> {
     try {
       GPS51TimeManager.logTimeSyncInfo('PreLivePositionQuery', this.lastQueryPositionTime);
+      
+      // Define time thresholds for fallback strategies
+      const now = GPS51TimeManager.getCurrentUtcTimestamp();
+      const twelveHoursAgo = now - (12 * 60 * 60 * 1000);
 
       // Filter to only query online devices
       const onlineDeviceIds = deviceIds.filter(deviceId => {
@@ -181,30 +167,30 @@ export class GPS51LiveDataEnhancer {
         
         // Progressive fallback: Try different strategies
         const fallbackStrategies = [
-          // Strategy 1: Query 10 most recently active devices
+          // Strategy 1: Try 12-hour threshold (more lenient)
           {
-            name: 'Recent10',
+            name: 'Recent12Hours',
             devices: deviceIds
               .map(id => ({ id, activity: this.deviceActivityCache.get(id) }))
-              .filter(d => d.activity?.lastActive && d.activity.lastActive > 0)
+              .filter(d => d.activity?.lastActive && d.activity.lastActive > twelveHoursAgo)
               .sort((a, b) => (b.activity?.lastActive || 0) - (a.activity?.lastActive || 0))
-              .slice(0, 10)
+              .slice(0, 30)
               .map(d => d.id)
           },
-          // Strategy 2: Query first 20 devices (simple sampling)
+          // Strategy 2: Top 50 most recently active devices
           {
-            name: 'First20',
-            devices: deviceIds.slice(0, 20)
-          },
-          // Strategy 3: Query 50 devices with some activity
-          {
-            name: 'Active50',
+            name: 'Top50Active',
             devices: deviceIds
               .map(id => ({ id, activity: this.deviceActivityCache.get(id) }))
               .filter(d => d.activity?.lastActive && d.activity.lastActive > 0)
               .sort((a, b) => (b.activity?.lastActive || 0) - (a.activity?.lastActive || 0))
               .slice(0, 50)
               .map(d => d.id)
+          },
+          // Strategy 3: Sample devices to ensure we always query something
+          {
+            name: 'DeviceSample',
+            devices: deviceIds.slice(0, 20)
           }
         ];
         
