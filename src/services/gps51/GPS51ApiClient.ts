@@ -1,6 +1,7 @@
 
 import { GPS51ApiResponse } from './GPS51Types';
 import { GPS51_DEFAULTS } from './GPS51Constants';
+import { GPS51RateLimitError } from './GPS51RateLimitError';
 
 export class GPS51ApiClient {
   private baseURL: string;
@@ -197,6 +198,17 @@ export class GPS51ApiClient {
         }
       }
 
+      // Check for rate limiting status 8902
+      if (data.status === 8902) {
+        console.warn('GPS51 API Rate Limit Detected (Status 8902):', {
+          action,
+          message: data.message,
+          cause: data.cause,
+          retryAfter: 5000
+        });
+        throw GPS51RateLimitError.fromApiResponse(data);
+      }
+
       this.retryCount = 0;
       this.retryDelay = GPS51_DEFAULTS.RETRY_DELAY;
 
@@ -210,6 +222,23 @@ export class GPS51ApiClient {
         maxRetries: this.maxRetries
       });
       
+      // Handle rate limiting with exponential backoff
+      if (GPS51RateLimitError.isRateLimitError(error)) {
+        const rateLimitError = error as GPS51RateLimitError;
+        const delay = Math.max(rateLimitError.retryAfter, 5000); // Minimum 5 seconds
+        
+        console.warn(`GPS51 Rate Limit: Waiting ${delay}ms before retry (${this.retryCount + 1}/${this.maxRetries})`);
+        
+        if (this.retryCount < this.maxRetries) {
+          this.retryCount++;
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return this.makeRequest(action, token, params, method);
+        } else {
+          throw new GPS51RateLimitError('GPS51 API rate limit exceeded after all retries. Please wait before making more requests.');
+        }
+      }
+      
+      // Standard retry logic for other errors
       if (this.retryCount < this.maxRetries) {
         this.retryCount++;
         const delay = this.retryDelay * Math.pow(2, this.retryCount - 1);

@@ -3,6 +3,7 @@ import { GPS51Device, GPS51Position } from './GPS51Types';
 import { GPS51Client } from './GPS51Client';
 import { gps51DatabaseIntegration } from './GPS51DatabaseIntegration';
 import { gps51AuthService } from '../gp51/GPS51AuthService';
+import { GPS51RateLimitError } from './GPS51RateLimitError';
 
 export interface RecoveryConfig {
   apiEndpoint?: string;
@@ -54,6 +55,8 @@ export class GPS51DataRecoveryService {
   private processedDevices = new Set<string>();
   private failedDevices = new Map<string, string>();
   private gps51Client: GPS51Client;
+  private isRateLimited = false;
+  private rateLimitCooldownUntil = 0;
 
   constructor(config: RecoveryConfig = {}, client?: GPS51Client) {
     this.config = {
@@ -120,8 +123,11 @@ export class GPS51DataRecoveryService {
         return this.generateEmptyReport(startTime);
       }
 
-      // Step 2: Process devices in batches
-      const batches = this.chunkArray(devices, this.config.batchSize);
+      // Step 2: Process devices in smaller batches with rate limiting
+      const RECOVERY_BATCH_SIZE = 5; // Much smaller batches for emergency recovery
+      const BATCH_DELAY = 3000; // 3 seconds between batches
+      
+      const batches = this.chunkArray(devices, RECOVERY_BATCH_SIZE);
       let totalProcessed = 0;
       let totalFixed = 0;
       let totalFailed = 0;
@@ -129,16 +135,37 @@ export class GPS51DataRecoveryService {
 
       for (let i = 0; i < batches.length; i++) {
         const batch = batches[i];
-        console.log(`📊 Processing batch ${i + 1}/${batches.length} (${batch.length} devices)`);
+        console.log(`📊 Processing emergency recovery batch ${i + 1}/${batches.length} (${batch.length} devices)`);
 
-        const batchResults = await this.processBatch(batch);
-        totalProcessed += batchResults.processed;
-        totalFixed += batchResults.fixed;
-        totalFailed += batchResults.failed;
+        try {
+          // Check if we're in rate limit cooldown
+          if (this.isRateLimited && Date.now() < this.rateLimitCooldownUntil) {
+            const waitTime = this.rateLimitCooldownUntil - Date.now();
+            console.log(`⏳ Rate limit cooldown active, waiting ${Math.round(waitTime / 1000)}s...`);
+            await this.delay(waitTime);
+            this.isRateLimited = false;
+          }
 
-        // Small delay between batches to avoid API overwhelm
-        if (i < batches.length - 1) {
-          await this.delay(1000);
+          const batchResults = await this.processBatch(batch);
+          totalProcessed += batchResults.processed;
+          totalFixed += batchResults.fixed;
+          totalFailed += batchResults.failed;
+
+          // Mandatory delay between batches to prevent rate limiting
+          if (i < batches.length - 1) {
+            console.log(`⏸️ Batch delay: ${BATCH_DELAY}ms to prevent rate limiting`);
+            await this.delay(BATCH_DELAY);
+          }
+
+        } catch (error) {
+          if (GPS51RateLimitError.isRateLimitError(error)) {
+            console.warn(`🚫 Rate limit hit during batch ${i + 1}, activating cooldown`);
+            this.handleRateLimitError(error as GPS51RateLimitError);
+            // Skip this batch but continue with cooldown applied
+            totalFailed += batch.length;
+          } else {
+            throw error;
+          }
         }
       }
 
@@ -184,33 +211,41 @@ export class GPS51DataRecoveryService {
   }
 
   /**
-   * Process a batch of devices
+   * Process a batch of devices with rate limiting protection
    */
   private async processBatch(devices: GPS51Device[]): Promise<BatchProcessResult> {
-    const promises = devices.map(device => this.processDevice(device));
-    const results = await Promise.allSettled(promises);
-
     let processed = 0;
     let fixed = 0;
     let failed = 0;
 
-    results.forEach((result, index) => {
-      const device = devices[index];
-      processed++;
+    // Process devices sequentially to avoid overwhelming the API
+    for (const device of devices) {
+      try {
+        const result = await this.processDevice(device);
+        processed++;
 
-      if (result.status === 'fulfilled') {
-        if (result.value.success) {
+        if (result.success) {
           fixed++;
           this.processedDevices.add(device.deviceid);
         } else {
           failed++;
         }
-      } else {
+
+        // Small delay between individual device processing
+        await this.delay(500); // 500ms between devices
+        
+      } catch (error) {
         failed++;
-        console.error(`❌ Failed to process device ${device.deviceid}:`, result.reason);
-        this.failedDevices.set(device.deviceid, result.reason?.message || 'Unknown error');
+        if (GPS51RateLimitError.isRateLimitError(error)) {
+          console.warn(`🚫 Rate limit error for device ${device.deviceid}`);
+          this.handleRateLimitError(error as GPS51RateLimitError);
+          throw error; // Propagate rate limit error to batch level
+        } else {
+          console.error(`❌ Failed to process device ${device.deviceid}:`, error);
+          this.failedDevices.set(device.deviceid, error instanceof Error ? error.message : 'Unknown error');
+        }
       }
-    });
+    }
 
     return { processed, fixed, failed };
   }
@@ -273,13 +308,17 @@ export class GPS51DataRecoveryService {
   }
 
   /**
-   * Get device position using existing GPS51 client
+   * Get device position using existing GPS51 client with rate limit handling
    */
   private async getDevicePosition(deviceId: string): Promise<GPS51Position | null> {
     try {
       const { positions } = await this.gps51Client.getRealtimePositions([deviceId]);
       return positions.length > 0 ? positions[0] : null;
     } catch (error) {
+      if (GPS51RateLimitError.isRateLimitError(error)) {
+        console.warn(`🚫 Rate limit hit while fetching position for device ${deviceId}`);
+        throw error; // Propagate rate limit error
+      }
       console.error(`Failed to get position for device ${deviceId}:`, error);
       return null;
     }
@@ -491,11 +530,37 @@ export class GPS51DataRecoveryService {
   }
 
   /**
+   * Handle rate limit errors
+   */
+  private handleRateLimitError(error: GPS51RateLimitError): void {
+    this.isRateLimited = true;
+    this.rateLimitCooldownUntil = Date.now() + Math.max(error.retryAfter, 10000); // Minimum 10 seconds
+    console.warn(`🔒 GPS51 Rate Limit activated. Cooldown until: ${new Date(this.rateLimitCooldownUntil).toISOString()}`);
+  }
+
+  /**
+   * Check if currently rate limited
+   */
+  isCurrentlyRateLimited(): boolean {
+    return this.isRateLimited && Date.now() < this.rateLimitCooldownUntil;
+  }
+
+  /**
+   * Get time remaining in rate limit cooldown
+   */
+  getRateLimitCooldownRemaining(): number {
+    if (!this.isRateLimited) return 0;
+    return Math.max(0, this.rateLimitCooldownUntil - Date.now());
+  }
+
+  /**
    * Reset recovery state
    */
   reset(): void {
     this.processedDevices.clear();
     this.failedDevices.clear();
+    this.isRateLimited = false;
+    this.rateLimitCooldownUntil = 0;
   }
 }
 

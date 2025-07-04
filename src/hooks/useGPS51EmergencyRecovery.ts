@@ -8,6 +8,8 @@ export interface UseGPS51EmergencyRecoveryReturn {
   recoveryReport: RecoveryReport | null;
   progress: number;
   isAuthenticated: boolean;
+  isRateLimited: boolean;
+  rateLimitCooldownRemaining: number;
   startRecovery: () => Promise<void>;
   reset: () => void;
   getRecoveryStats: () => {
@@ -21,6 +23,8 @@ export function useGPS51EmergencyRecovery(): UseGPS51EmergencyRecoveryReturn {
   const [isRecovering, setIsRecovering] = useState(false);
   const [recoveryReport, setRecoveryReport] = useState<RecoveryReport | null>(null);
   const [progress, setProgress] = useState(0);
+  const [isRateLimited, setIsRateLimited] = useState(false);
+  const [rateLimitCooldownRemaining, setRateLimitCooldownRemaining] = useState(0);
   const { toast } = useToast();
 
   const isAuthenticated = gps51AuthService.isAuthenticated();
@@ -33,19 +37,29 @@ export function useGPS51EmergencyRecovery(): UseGPS51EmergencyRecoveryReturn {
     setRecoveryReport(null);
 
     try {
-      // Start progress simulation
+      // Start progress simulation (slower for rate-limited recovery)
       const progressInterval = setInterval(() => {
         setProgress(prev => {
-          const increment = Math.random() * 10 + 5; // 5-15% increments
-          return Math.min(prev + increment, 90);
+          const increment = Math.random() * 5 + 2; // Slower 2-7% increments for rate-limited recovery
+          return Math.min(prev + increment, 85);
         });
-      }, 1500);
+      }, 2500); // Slower updates
+
+      // Rate limit monitoring
+      const rateLimitInterval = setInterval(() => {
+        const isCurrentlyRateLimited = gps51DataRecoveryService.isCurrentlyRateLimited();
+        const cooldownRemaining = gps51DataRecoveryService.getRateLimitCooldownRemaining();
+        
+        setIsRateLimited(isCurrentlyRateLimited);
+        setRateLimitCooldownRemaining(cooldownRemaining);
+      }, 1000);
 
       console.log('Starting GPS51 emergency recovery...');
       const report = await gps51DataRecoveryService.emergencyDataRecovery();
       
       // Complete progress
       clearInterval(progressInterval);
+      clearInterval(rateLimitInterval);
       setProgress(100);
       setRecoveryReport(report);
 
@@ -90,7 +104,11 @@ export function useGPS51EmergencyRecovery(): UseGPS51EmergencyRecoveryReturn {
       });
     } finally {
       setIsRecovering(false);
-      setTimeout(() => setProgress(0), 2000); // Reset progress after 2 seconds
+      setTimeout(() => {
+        setProgress(0);
+        setIsRateLimited(false);
+        setRateLimitCooldownRemaining(0);
+      }, 2000); // Reset progress after 2 seconds
     }
   }, [isRecovering, toast]);
 
@@ -109,6 +127,8 @@ export function useGPS51EmergencyRecovery(): UseGPS51EmergencyRecoveryReturn {
     recoveryReport,
     progress,
     isAuthenticated,
+    isRateLimited,
+    rateLimitCooldownRemaining,
     startRecovery,
     reset,
     getRecoveryStats

@@ -26,6 +26,8 @@ export const GPS51EmergencyRecoveryPanel = () => {
     recoveryReport, 
     progress, 
     isAuthenticated, 
+    isRateLimited,
+    rateLimitCooldownRemaining,
     startRecovery, 
     reset 
   } = useGPS51EmergencyRecovery();
@@ -86,16 +88,31 @@ export const GPS51EmergencyRecoveryPanel = () => {
             </Alert>
           )}
 
+          {/* Rate Limit Warning */}
+          {isRateLimited && (
+            <Alert className="mb-4" variant="destructive">
+              <Clock className="h-4 w-4" />
+              <AlertDescription>
+                GPS51 API rate limit active. Please wait {Math.ceil(rateLimitCooldownRemaining / 1000)} seconds before making more requests.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="flex items-center gap-4">
             <Button 
               onClick={handleStartRecovery}
-              disabled={isRecovering || !isAuthenticated}
+              disabled={isRecovering || !isAuthenticated || isRateLimited}
               className="min-w-48"
             >
               {isRecovering ? (
                 <>
                   <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                   Running Recovery...
+                </>
+              ) : isRateLimited ? (
+                <>
+                  <Clock className="mr-2 h-4 w-4" />
+                  Rate Limited ({Math.ceil(rateLimitCooldownRemaining / 1000)}s)
                 </>
               ) : (
                 <>
@@ -108,10 +125,22 @@ export const GPS51EmergencyRecoveryPanel = () => {
             {isRecovering && (
               <div className="flex-1 max-w-md">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm text-muted-foreground">Progress</span>
+                  <span className="text-sm text-muted-foreground">
+                    {isRateLimited ? 'Rate Limited Progress' : 'Progress'}
+                  </span>
                   <span className="text-sm font-medium">{Math.round(progress)}%</span>
+                  {isRateLimited && (
+                    <Badge variant="outline" className="text-xs">
+                      Cooldown: {Math.ceil(rateLimitCooldownRemaining / 1000)}s
+                    </Badge>
+                  )}
                 </div>
                 <Progress value={progress} className="h-2" />
+                {isRateLimited && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Recovery is proceeding with rate limit protection (slower but safer)
+                  </p>
+                )}
               </div>
             )}
           </div>
