@@ -127,66 +127,50 @@ export class GPS51DatabaseIntegration {
   }
 
   /**
-   * Sync position data to database
+   * Sync position data to database using enhanced UPSERT function
    */
   private async syncPositions(positions: GPS51Position[]): Promise<number> {
     try {
-      console.log(`GPS51DatabaseIntegration: Syncing ${positions.length} positions to database...`);
+      console.log(`GPS51DatabaseIntegration: Syncing ${positions.length} positions using enhanced UPSERT...`);
 
-      // First, get vehicle IDs from our database based on GPS51 device IDs
-      const deviceIds = [...new Set(positions.map(p => p.deviceid))];
-      const { data: vehicles, error: vehicleError } = await supabase
-        .from('vehicles')
-        .select('id, gps51_device_id')
-        .in('gps51_device_id', deviceIds);
+      let successCount = 0;
+      const errors: string[] = [];
 
-      if (vehicleError) {
-        console.error('GPS51DatabaseIntegration: Error fetching vehicles:', vehicleError);
-        throw vehicleError;
+      // Process positions using the new upsert_vehicle_position function
+      for (const position of positions) {
+        try {
+          const { error } = await supabase.rpc('upsert_vehicle_position', {
+            p_gps51_device_id: position.deviceid,
+            p_latitude: parseFloat(position.callat.toString()),
+            p_longitude: parseFloat(position.callon.toString()),
+            p_timestamp: position.updatetime,
+            p_speed: position.speed || 0,
+            p_heading: position.course || 0,
+            p_altitude: 0, // GPS51 doesn't provide altitude
+            p_ignition_status: position.moving === 1,
+            p_fuel_level: position.fuel || null,
+            p_battery_level: position.voltage || null,
+            p_address: position.strstatus || null
+          });
+
+          if (error) {
+            console.error(`GPS51DatabaseIntegration: Error upserting position for device ${position.deviceid}:`, error);
+            errors.push(`Device ${position.deviceid}: ${error.message}`);
+          } else {
+            successCount++;
+          }
+        } catch (positionError) {
+          console.error(`GPS51DatabaseIntegration: Exception upserting position for device ${position.deviceid}:`, positionError);
+          errors.push(`Device ${position.deviceid}: ${positionError instanceof Error ? positionError.message : 'Unknown error'}`);
+        }
       }
 
-      const deviceToVehicleMap = new Map(
-        vehicles?.map(v => [v.gps51_device_id, v.id]) || []
-      );
-
-      // Prepare position data for database
-      const positionData = positions
-        .filter(position => deviceToVehicleMap.has(position.deviceid))
-        .map(position => ({
-          vehicle_id: deviceToVehicleMap.get(position.deviceid),
-          latitude: parseFloat(position.callat.toString()),
-          longitude: parseFloat(position.callon.toString()),
-          speed: position.speed || 0,
-          heading: position.course || 0,
-          altitude: 0, // GPS51 doesn't provide altitude
-          accuracy: 0, // GPS51 doesn't provide accuracy
-          timestamp: new Date(position.updatetime).toISOString(),
-          ignition_status: false, // GPS51 doesn't provide reliable ignition status
-          fuel_level: null, // Not provided by GPS51
-          engine_temperature: null, // Not provided by GPS51
-          battery_level: null, // Not provided by GPS51
-          recorded_at: new Date().toISOString(),
-          address: null // GPS51 address not available in current position type
-        }));
-
-      if (positionData.length === 0) {
-        console.warn('GPS51DatabaseIntegration: No valid positions to sync after filtering');
-        return 0;
+      if (errors.length > 0) {
+        console.warn(`GPS51DatabaseIntegration: ${errors.length} position sync errors:`, errors.slice(0, 5));
       }
 
-      // Insert position data
-      const { data, error } = await supabase
-        .from('vehicle_positions')
-        .insert(positionData)
-        .select();
-
-      if (error) {
-        console.error('GPS51DatabaseIntegration: Position sync error:', error);
-        throw error;
-      }
-
-      console.log(`GPS51DatabaseIntegration: Successfully synced ${data?.length || 0} positions`);
-      return data?.length || 0;
+      console.log(`GPS51DatabaseIntegration: Successfully synced ${successCount}/${positions.length} positions`);
+      return successCount;
 
     } catch (error) {
       console.error('GPS51DatabaseIntegration: Failed to sync positions:', error);

@@ -2832,6 +2832,13 @@ export type Database = {
             foreignKeyName: "vehicle_assignments_vehicle_id_fkey"
             columns: ["vehicle_id"]
             isOneToOne: false
+            referencedRelation: "vehicle_health_dashboard"
+            referencedColumns: ["vehicle_id"]
+          },
+          {
+            foreignKeyName: "vehicle_assignments_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
             referencedRelation: "vehicles"
             referencedColumns: ["id"]
           },
@@ -2893,6 +2900,13 @@ export type Database = {
           vehicle_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "vehicle_positions_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_health_dashboard"
+            referencedColumns: ["vehicle_id"]
+          },
           {
             foreignKeyName: "vehicle_positions_vehicle_id_fkey"
             columns: ["vehicle_id"]
@@ -2987,9 +3001,70 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      sync_job_monitoring: {
+        Row: {
+          avg_execution_time: number | null
+          failed_jobs: number | null
+          max_execution_time: number | null
+          successful_jobs: number | null
+          sync_hour: string | null
+          total_jobs: number | null
+          total_positions_stored: number | null
+          total_vehicles_processed: number | null
+        }
+        Relationships: []
+      }
+      vehicle_health_dashboard: {
+        Row: {
+          battery_level: number | null
+          brand: string | null
+          coordinate_status: string | null
+          fuel_level: number | null
+          gps51_device_id: string | null
+          ignition_status: boolean | null
+          last_position_time: string | null
+          latitude: number | null
+          license_plate: string | null
+          longitude: number | null
+          model: string | null
+          position_status: string | null
+          speed: number | null
+          vehicle_id: string | null
+          vehicle_status: Database["public"]["Enums"]["vehicle_status"] | null
+          vehicle_updated_at: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      analyze_sync_jobs: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          job_id: string
+          started_at: string
+          completed_at: string
+          success: boolean
+          vehicles_processed: number
+          positions_stored: number
+          execution_time_seconds: number
+          issue_summary: string
+        }[]
+      }
+      check_vehicle_data_quality: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          vehicle_id: string
+          gps51_device_id: string
+          license_plate: string
+          issue_type: string
+          issue_description: string
+          last_update: string
+        }[]
+      }
+      emergency_gps_data_recovery: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       get_cron_jobs_status: {
         Args: Record<PropertyKey, never>
         Returns: Json
@@ -3005,6 +3080,22 @@ export type Database = {
       is_admin: {
         Args: Record<PropertyKey, never>
         Returns: boolean
+      }
+      upsert_vehicle_position: {
+        Args: {
+          p_gps51_device_id: string
+          p_latitude: number
+          p_longitude: number
+          p_timestamp: number
+          p_speed?: number
+          p_heading?: number
+          p_altitude?: number
+          p_ignition_status?: boolean
+          p_fuel_level?: number
+          p_battery_level?: number
+          p_address?: string
+        }
+        Returns: undefined
       }
     }
     Enums: {
