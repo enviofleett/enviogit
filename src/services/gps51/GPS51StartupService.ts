@@ -27,9 +27,17 @@ export class GPS51StartupService {
       const savedCredentials = await credentialsManager.getCredentials();
       
       if (!savedCredentials) {
-        console.log('GPS51StartupService: No saved credentials found');
+        console.warn('GPS51StartupService: No saved credentials found - credentials manager should have set defaults');
         return false;
       }
+      
+      console.log('GPS51StartupService: Credentials loaded:', {
+        username: savedCredentials.username,
+        hasPassword: !!savedCredentials.password,
+        apiUrl: savedCredentials.apiUrl,
+        from: savedCredentials.from,
+        type: savedCredentials.type
+      });
 
       console.log('GPS51StartupService: Using intelligent connection manager for authentication...');
       
@@ -80,7 +88,22 @@ export class GPS51StartupService {
         
         return true;
       } else {
-        console.log('GPS51StartupService: Authentication failed:', connectionResult.error);
+        console.error('GPS51StartupService: Authentication failed:', {
+          error: connectionResult.error,
+          strategy: connectionResult.strategy,
+          responseTime: connectionResult.responseTime
+        });
+        
+        // Add troubleshooting information
+        console.log('GPS51StartupService: Troubleshooting information:', {
+          credentials: {
+            username: savedCredentials.username,
+            hasPassword: !!savedCredentials.password,
+            apiUrl: savedCredentials.apiUrl
+          },
+          connectionHealth: gps51IntelligentConnectionManager.getConnectionHealth()
+        });
+        
         return false;
       }
     } catch (error) {

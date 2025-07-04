@@ -110,61 +110,65 @@ export class GPS51ProxyClient {
     const startTime = Date.now();
     
     try {
-      // Use a lightweight test that doesn't require valid credentials
-      const testEndpoints = [
-        apiUrl,
-        apiUrl?.replace('/webapi', '/openapi'),
-        apiUrl?.replace('/openapi', '/webapi')
-      ].filter(Boolean);
-
-      let lastError: Error | null = null;
+      console.log('GPS51ProxyClient: Testing Edge Function health...');
       
-      for (const endpoint of testEndpoints) {
-        try {
-          console.log(`GPS51ProxyClient: Testing connection to ${endpoint}`);
-          
-          const result = await this.makeRequest(
-            'login',
-            'test-token',
-            { username: 'test', password: 'test' },
-            'POST',
-            endpoint
-          );
-          
-          const responseTime = Date.now() - startTime;
-          
-          // Consider it successful if we get any response, even an error
-          if (result) {
-            console.log(`GPS51ProxyClient: Connection test successful for ${endpoint}`, {
-              status: result.status,
-              hasResponse: true
-            });
-            
-            return {
-              success: true,
-              responseTime
-            };
-          }
-        } catch (error) {
-          lastError = error instanceof Error ? error : new Error(String(error));
-          console.warn(`GPS51ProxyClient: Connection test failed for ${endpoint}:`, lastError.message);
+      // Test with a simple health check that should work regardless of credentials
+      const testUrl = apiUrl || 'https://api.gps51.com/openapi';
+      
+      console.log(`GPS51ProxyClient: Testing connection to ${testUrl}`);
+      
+      // Use a minimal request that tests the proxy without authentication
+      const { data, error } = await supabase.functions.invoke('gps51-proxy', {
+        body: {
+          action: 'login',
+          params: { username: 'health-check', password: 'd41d8cd98f00b204e9800998ecf8427e' }, // empty string MD5
+          method: 'POST',
+          apiUrl: testUrl
         }
-      }
+      });
       
       const responseTime = Date.now() - startTime;
       
-      return {
-        success: false,
+      if (error) {
+        console.error('GPS51ProxyClient: Edge Function invoke error:', error);
+        return {
+          success: false,
+          responseTime,
+          error: `Edge Function error: ${error.message}`
+        };
+      }
+      
+      if (!data) {
+        console.warn('GPS51ProxyClient: Edge Function returned no data');
+        return {
+          success: false,
+          responseTime,
+          error: 'Edge Function returned no data - may be a deployment issue'
+        };
+      }
+      
+      // Consider it successful if the Edge Function responded at all
+      console.log('GPS51ProxyClient: Edge Function responded:', {
+        hasData: !!data,
         responseTime,
-        error: lastError?.message || 'All connection tests failed'
+        dataStatus: data.status,
+        dataType: typeof data
+      });
+      
+      return {
+        success: true,
+        responseTime
       };
+      
     } catch (error) {
       const responseTime = Date.now() - startTime;
       
+      console.error('GPS51ProxyClient: Connection test exception:', error);
+      
       return {
         success: false,
         responseTime,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown connection test error'
       };
     }
   }

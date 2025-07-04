@@ -31,11 +31,11 @@ export class GPS51IntelligentConnectionManager {
     this.authService = GPS51AuthenticationService.getInstance();
     this.proxyClient = GPS51ProxyClient.getInstance();
     
-    // Initialize connection strategies
+    // Initialize connection strategies with proper availability
     this.strategies.set('proxy', {
       name: 'proxy',
       priority: 1,
-      isAvailable: true
+      isAvailable: true // Proxy should always be available initially
     });
     
     this.strategies.set('direct', {
@@ -43,6 +43,14 @@ export class GPS51IntelligentConnectionManager {
       priority: 2,
       isAvailable: false // Will be enabled based on CORS detection
     });
+    
+    console.log('GPS51IntelligentConnectionManager: Initialized with strategies:', 
+      Array.from(this.strategies.entries()).map(([name, strategy]) => ({
+        name,
+        priority: strategy.priority,
+        isAvailable: strategy.isAvailable
+      }))
+    );
   }
 
   static getInstance(): GPS51IntelligentConnectionManager {
@@ -58,12 +66,18 @@ export class GPS51IntelligentConnectionManager {
   async connectWithBestStrategy(credentials: GPS51Credentials): Promise<ConnectionResult> {
     console.log('GPS51IntelligentConnectionManager: Starting intelligent connection...');
     
+    // First, test connection health to update strategy availability
+    console.log('GPS51IntelligentConnectionManager: Testing connection health before authentication...');
+    await this.testAllConnections();
+    
     // Sort strategies by priority and availability
     const availableStrategies = Array.from(this.strategies.values())
       .filter(strategy => strategy.isAvailable)
       .sort((a, b) => a.priority - b.priority);
 
-    console.log('Available connection strategies:', availableStrategies.map(s => s.name));
+    console.log('GPS51IntelligentConnectionManager: Available connection strategies:', 
+      availableStrategies.map(s => ({ name: s.name, priority: s.priority, isAvailable: s.isAvailable }))
+    );
 
     let lastError: string = '';
     
@@ -145,30 +159,57 @@ export class GPS51IntelligentConnectionManager {
   async testAllConnections(apiUrl?: string): Promise<Map<string, { success: boolean; responseTime: number; error?: string }>> {
     const results = new Map();
     
+    console.log('GPS51IntelligentConnectionManager: Testing proxy connection...');
+    
     // Test proxy connection
     try {
       const proxyResult = await this.proxyClient.testConnection(apiUrl);
       results.set('proxy', proxyResult);
       
-      // Update strategy availability
+      console.log('GPS51IntelligentConnectionManager: Proxy test result:', {
+        success: proxyResult.success,
+        responseTime: proxyResult.responseTime,
+        error: proxyResult.error
+      });
+      
+      // Update strategy availability - be more lenient for proxy availability
       const proxyStrategy = this.strategies.get('proxy');
       if (proxyStrategy) {
-        proxyStrategy.isAvailable = proxyResult.success;
+        // Consider proxy available even if test fails initially - Edge Function might be cold
+        proxyStrategy.isAvailable = true; // Always keep proxy available
         proxyStrategy.responseTime = proxyResult.responseTime;
+        if (!proxyResult.success) {
+          console.warn('GPS51IntelligentConnectionManager: Proxy test failed but keeping proxy strategy available for cold starts');
+        }
       }
     } catch (error) {
+      console.error('GPS51IntelligentConnectionManager: Proxy connection test error:', error);
       results.set('proxy', {
         success: false,
         responseTime: 0,
         error: error instanceof Error ? error.message : 'Proxy test failed'
       });
+      
+      // Keep proxy available even on error - might be a cold start
+      const proxyStrategy = this.strategies.get('proxy');
+      if (proxyStrategy) {
+        proxyStrategy.isAvailable = true;
+        console.warn('GPS51IntelligentConnectionManager: Keeping proxy strategy available despite test error');
+      }
     }
 
     // Test direct connection (placeholder for future CORS-free implementation)
+    console.log('GPS51IntelligentConnectionManager: Direct connection not yet implemented due to CORS');
     results.set('direct', {
       success: false,
       responseTime: 0,
       error: 'Direct connection not available due to CORS restrictions'
+    });
+
+    console.log('GPS51IntelligentConnectionManager: Connection test completed:', {
+      proxyAvailable: this.strategies.get('proxy')?.isAvailable,
+      directAvailable: this.strategies.get('direct')?.isAvailable,
+      totalStrategies: this.strategies.size
     });
 
     return results;
