@@ -174,9 +174,15 @@ serve(async (req) => {
       responsePreview: responseText.substring(0, 200)
     });
 
-    // CRITICAL FIX: Handle different response types with better error recovery
+    // PRODUCTION FIX: Enhanced response handling with better error recovery
     let responseData: any;
     const contentType = response.headers.get('Content-Type') || '';
+    
+    console.log('GPS51 Proxy: Processing response content:', {
+      contentType,
+      responseLength: responseText.length,
+      isEmpty: responseText.trim().length === 0
+    });
   
     // Handle binary/octet-stream responses (often indicates API parameter issues)
     if (contentType.includes('application/octet-stream') || contentType.includes('binary')) {

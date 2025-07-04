@@ -137,41 +137,64 @@ export class GPS51DataFetcher {
 
       console.log('GPS51DataFetcher: Device activity analysis:', activitySummary);
 
-      // CRITICAL FIX: If no online devices, try all devices as fallback
+      // PRODUCTION FIX: Enhanced device selection strategy
+      let targetDevices = onlineDevices;
+      let targetDeviceIds = onlineDevices.map(device => device.deviceid);
+      
       if (onlineDevices.length === 0) {
-        console.warn('GPS51DataFetcher: No online devices found - trying all devices as fallback...');
+        console.warn('GPS51DataFetcher: No online devices found - using smart fallback strategy...');
         
-        // Fallback: Try all devices - maybe our activity detection is too strict
-        const allDeviceIds = allDevices.map(device => device.deviceid);
+        // Smart fallback: Use devices with recent activity or all devices if none have activity
+        const devicesWithRecentActivity = allDevices.filter(device => 
+          device.lastactivetime && device.lastactivetime > (Date.now() - (6 * 60 * 60 * 1000)) // 6 hours
+        );
         
-        try {
-          const { 
-            positions, 
-            lastQueryTime: newLastQueryTime,
-            serverTimeDrift,
-            responseMetadata
-          } = await this.liveDataEnhancer.fetchLivePositionsEnhanced(allDeviceIds);
-          
-          console.log('GPS51DataFetcher: Fallback fetch completed:', {
-            totalDevices: allDevices.length,
-            positionsRetrieved: positions.length,
-            serverTimeDrift: `${serverTimeDrift}s`,
-            responseMetadata
-          });
-          
-          return {
-            devices: allDevices,
-            positions,
-            lastQueryTime: newLastQueryTime
-          };
-        } catch (error) {
-          console.error('GPS51DataFetcher: Fallback fetch failed:', error);
-          return { 
-            devices: allDevices, 
-            positions: [], 
-            lastQueryTime: lastQueryTime || GPS51TimeManager.getCurrentUtcTimestamp()
-          };
+        if (devicesWithRecentActivity.length > 0) {
+          targetDevices = devicesWithRecentActivity;
+          targetDeviceIds = devicesWithRecentActivity.map(device => device.deviceid);
+          console.log(`GPS51DataFetcher: Using ${targetDeviceIds.length} devices with recent activity (fallback strategy)`);
+        } else {
+          // Last resort: try a sample of all devices to avoid overwhelming the API
+          const maxDevicesToTry = Math.min(allDevices.length, 100); // Limit to 100 devices
+          targetDevices = allDevices.slice(0, maxDevicesToTry);
+          targetDeviceIds = targetDevices.map(device => device.deviceid);
+          console.log(`GPS51DataFetcher: Using first ${targetDeviceIds.length} devices (last resort fallback)`);
         }
+      }
+      
+      try {
+        const { 
+          positions, 
+          lastQueryTime: newLastQueryTime,
+          hasNewData,
+          serverTimeDrift,
+          responseMetadata
+        } = await this.liveDataEnhancer.fetchLivePositionsEnhanced(targetDeviceIds);
+        
+        console.log('GPS51DataFetcher: Enhanced fetch completed:', {
+          strategy: onlineDevices.length > 0 ? 'online_devices' : 'fallback_strategy',
+          totalDevices: allDevices.length,
+          targetDevices: targetDevices.length,
+          positionsRetrieved: positions.length,
+          hasNewData,
+          serverTimeDrift: `${serverTimeDrift}s`,
+          responseMetadata
+        });
+        
+        return {
+          devices: allDevices,
+          positions,
+          lastQueryTime: newLastQueryTime
+        };
+      } catch (error) {
+        console.error('GPS51DataFetcher: Enhanced fetch failed:', error);
+        
+        // Return devices without positions rather than failing completely
+        return { 
+          devices: allDevices, 
+          positions: [], 
+          lastQueryTime: lastQueryTime || GPS51TimeManager.getCurrentUtcTimestamp()
+        };
       }
 
       // Step 2: Fetch live positions with enhanced error handling and time management

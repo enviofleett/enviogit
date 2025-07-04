@@ -342,12 +342,27 @@ export class GPS51Client {
           lastQueryTime: serverLastQueryTime
         };
       } else {
-        // Enhanced error handling for different status codes
+        // CRITICAL FIX: Handle status 1 as valid empty response instead of error
+        if (response.status === 1) {
+          console.log('GPS51 POSITION: Status 1 - Empty response (normal for no new data):', {
+            message: response.message,
+            cause: response.cause,
+            lastQueryTime: lastQueryTime || 0,
+            isIncremental: !!lastQueryTime && lastQueryTime > 0
+          });
+          
+          // Return empty positions with valid timestamp for status 1
+          const fallbackTimestamp = lastQueryTime || Date.now();
+          return {
+            positions: [],
+            lastQueryTime: response.lastquerypositiontime || fallbackTimestamp
+          };
+        }
+        
+        // Enhanced error handling for other status codes
         let errorMessage = response.message || response.cause || 'Failed to fetch realtime positions';
         
-        if (response.status === 1) {
-          errorMessage = `GPS51 API Error (Status 1): ${response.message || response.cause || 'Authentication or parameter error'}`;
-        } else if (response.status === 8901) {
+        if (response.status === 8901) {
           errorMessage = `GPS51 API Error (Status 8901): Parameter validation failed - ${response.message || response.cause}`;
         }
         

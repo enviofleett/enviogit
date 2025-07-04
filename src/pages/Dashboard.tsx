@@ -12,12 +12,28 @@ import RealTimeConnectionStatus from '@/components/dashboard/RealTimeConnectionS
 import RealTimeGPS51Status from '@/components/dashboard/RealTimeGPS51Status';
 import { useGPS51Data } from '@/hooks/useGPS51Data';
 import { useGPS51LiveData } from '@/hooks/useGPS51LiveData';
+import { useGPS51ProductionData } from '@/hooks/useGPS51ProductionData';
+import { useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const Dashboard = () => {
-  const { vehicles: gps51Vehicles, loading: gps51Loading } = useGPS51Data();
+  // PRODUCTION FIX: Use production-grade data hook
+  const { 
+    state: productionState, 
+    actions: productionActions 
+  } = useGPS51ProductionData();
+  
+  // Fallback to legacy hook for compatibility
+  const { vehicles: legacyVehicles, loading: legacyLoading } = useGPS51Data();
+  
   const [enableRealTime, setEnableRealTime] = useState(true);
   const [enableGPS51RealTime, setEnableGPS51RealTime] = useState(true);
+
+  // Use production data if available, fallback to legacy data
+  const vehicles = productionState.isReady ? 
+    productionState.vehicles : legacyVehicles;
+  const isLoading = productionState.isReady ? 
+    productionState.isLoading : legacyLoading;
   
   // Use the enhanced live data hook with Phase 4 features
   const { 
@@ -34,8 +50,8 @@ const Dashboard = () => {
     refreshInterval: 30000
   });
 
-  // Transform GPS51 data to match existing VehicleCard interface
-  const vehicles = gps51Vehicles.map(vehicle => {
+  // Transform production data to match existing VehicleCard interface
+  const transformedVehicles = vehicles.map(vehicle => {
     const hasGPS = !!vehicle.latest_position;
     
     return {
@@ -58,8 +74,8 @@ const Dashboard = () => {
   });
 
   // Separate vehicles with and without GPS for better display
-  const vehiclesWithGPS = vehicles.filter(v => v.hasGPS);
-  const vehiclesWithoutGPS = vehicles.filter(v => !v.hasGPS);
+  const vehiclesWithGPS = transformedVehicles.filter(v => v.hasGPS);
+  const vehiclesWithoutGPS = transformedVehicles.filter(v => !v.hasGPS);
 
   const handleToggleRealTime = () => {
     setEnableRealTime(prev => !prev);
@@ -131,7 +147,7 @@ const Dashboard = () => {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xl font-semibold text-slate-900">
-                      {gps51Loading ? 'Loading Fleet...' : 'Fleet Status'}
+                      {isLoading ? 'Loading Fleet...' : 'Fleet Status'}
                     </h3>
                     <div className="flex items-center space-x-4 text-sm text-slate-600">
                       <div className="flex items-center space-x-2">
@@ -142,17 +158,17 @@ const Dashboard = () => {
                         <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
                         <span>{vehiclesWithoutGPS.length} offline</span>
                       </div>
-                      <span>{vehicles.length} total</span>
+                      <span>{transformedVehicles.length} total</span>
                     </div>
                   </div>
                   
-                  {gps51Loading ? (
+                  {isLoading ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                       {[1,2,3,4].map(i => (
                         <div key={i} className="h-48 bg-slate-200 animate-pulse rounded-lg"></div>
                       ))}
                     </div>
-                  ) : vehicles.length === 0 ? (
+                  ) : transformedVehicles.length === 0 ? (
                     <div className="text-center py-12 bg-white rounded-lg border border-slate-200">
                       <p className="text-slate-500">No vehicles found. Click "Sync GPS51" to load data.</p>
                     </div>
