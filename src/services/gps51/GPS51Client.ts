@@ -246,12 +246,16 @@ export class GPS51Client {
     this.ensureAuthenticated();
     
     try {
-      // CRITICAL FIX: Handle lastquerypositiontime correctly
-      // For first call: use 0 or omit to get all available positions
-      // For subsequent calls: use the server's lastquerypositiontime from previous response
-      const params: any = {
-        deviceids: deviceids.length > 0 ? deviceids.join(',') : ''
-      };
+      // CRITICAL FIX: Handle lastquerypositiontime and empty device list
+      const params: any = {};
+
+      // Always include deviceids parameter, even if empty (some APIs require it)
+      if (deviceids.length > 0) {
+        params.deviceids = deviceids.join(',');
+      } else {
+        // If no specific devices requested, query all devices by omitting deviceids
+        console.log('GPS51 Position Request: No specific devices - querying all available devices');
+      }
 
       // Only add lastquerypositiontime if we have a valid value from previous server response
       if (lastQueryTime !== undefined && lastQueryTime > 0) {
@@ -262,11 +266,12 @@ export class GPS51Client {
       }
 
       console.log('GPS51 Position Request Parameters (FIXED):', {
-        deviceidsCount: params.deviceids.length,
-        deviceids: params.deviceids.slice(0, 5), // Log first 5 for debugging
+        deviceidsCount: params.deviceids ? params.deviceids.split(',').length : 0,
+        deviceids: params.deviceids ? params.deviceids.split(',').slice(0, 5) : 'all devices', // Log first 5 for debugging
         lastQueryTime: params.lastquerypositiontime,
         isFirstCall: !params.lastquerypositiontime,
-        requestType: params.lastquerypositiontime ? 'incremental' : 'initial'
+        requestType: params.lastquerypositiontime ? 'incremental' : 'initial',
+        hasDeviceIds: !!params.deviceids
       });
 
       const response = await this.apiClient.makeRequest('lastposition', this.token!, params);

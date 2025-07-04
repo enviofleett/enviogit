@@ -1,5 +1,4 @@
-import { gps51IntelligentConnectionManager } from './GPS51IntelligentConnectionManager';
-import { GPS51CredentialsManager } from '../gp51/GPS51CredentialsManager';
+import { gps51UnifiedAuthService } from './GPS51UnifiedAuthService';
 import { gps51LiveDataManager } from './GPS51LiveDataManager';
 import { gps51ProductionValidator } from './GPS51ProductionValidator';
 
@@ -21,36 +20,15 @@ export class GPS51StartupService {
     }
 
     try {
-      console.log('GPS51StartupService: Initializing production-ready authentication system...');
+      console.log('GPS51StartupService: Initializing unified authentication system...');
       
-      const credentialsManager = new GPS51CredentialsManager();
-      const savedCredentials = await credentialsManager.getCredentials();
+      // Use unified authentication service
+      const authResult = await gps51UnifiedAuthService.initializeAuthentication();
       
-      if (!savedCredentials) {
-        console.warn('GPS51StartupService: No saved credentials found - credentials manager should have set defaults');
-        return false;
-      }
-      
-      console.log('GPS51StartupService: Credentials loaded:', {
-        username: savedCredentials.username,
-        hasPassword: !!savedCredentials.password,
-        apiUrl: savedCredentials.apiUrl,
-        from: savedCredentials.from,
-        type: savedCredentials.type
-      });
-
-      console.log('GPS51StartupService: Using intelligent connection manager for authentication...');
-      
-      // Use intelligent connection manager for robust authentication
-      const connectionResult = await gps51IntelligentConnectionManager.connectWithBestStrategy(savedCredentials);
-      
-      if (connectionResult.success && connectionResult.token) {
-        console.log('GPS51StartupService: Authentication successful via', connectionResult.strategy);
+      if (authResult) {
+        console.log('GPS51StartupService: Unified authentication successful');
         this.isInitialized = true;
         this.systemInitialized = true;
-        
-        // Store authentication token
-        localStorage.setItem('gps51_auth_token', connectionResult.token);
         
         // Start live data system after successful authentication
         console.log('GPS51StartupService: Initializing production-ready live data system...');
@@ -88,22 +66,7 @@ export class GPS51StartupService {
         
         return true;
       } else {
-        console.error('GPS51StartupService: Authentication failed:', {
-          error: connectionResult.error,
-          strategy: connectionResult.strategy,
-          responseTime: connectionResult.responseTime
-        });
-        
-        // Add troubleshooting information
-        console.log('GPS51StartupService: Troubleshooting information:', {
-          credentials: {
-            username: savedCredentials.username,
-            hasPassword: !!savedCredentials.password,
-            apiUrl: savedCredentials.apiUrl
-          },
-          connectionHealth: gps51IntelligentConnectionManager.getConnectionHealth()
-        });
-        
+        console.error('GPS51StartupService: Unified authentication failed');
         return false;
       }
     } catch (error) {
@@ -121,8 +84,7 @@ export class GPS51StartupService {
   }
   
   isAuthenticated(): boolean {
-    const token = localStorage.getItem('gps51_auth_token');
-    return !!token && this.isInitialized;
+    return gps51UnifiedAuthService.isCurrentlyAuthenticated() && this.isInitialized;
   }
 
   // Legacy compatibility methods
@@ -132,7 +94,12 @@ export class GPS51StartupService {
 
   async refreshAuthentication(): Promise<boolean> {
     this.isInitialized = false;
-    return await this.initializeAuthentication();
+    const refreshed = await gps51UnifiedAuthService.refreshAuthentication();
+    if (refreshed) {
+      this.isInitialized = true;
+      this.systemInitialized = true;
+    }
+    return refreshed;
   }
 
   getInitializationStatus(): { initialized: boolean; authenticated: boolean; liveDataActive: boolean; productionReady: boolean } {

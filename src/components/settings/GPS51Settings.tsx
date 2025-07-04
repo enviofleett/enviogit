@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { GPS51CredentialsForm } from './GPS51CredentialsForm';
+import { GPS51UnifiedCredentialsPanel } from './GPS51UnifiedCredentialsPanel';
 import GPS51DeviceManager from './GPS51DeviceManager';
 import { GPS51CronJobManager } from './GPS51CronJobManager';
 import { GPS51RealTimeActivationPanel } from './GPS51RealTimeActivationPanel';
@@ -12,7 +12,6 @@ import { GPS51DeviceRecoveryTool } from './GPS51DeviceRecoveryTool';
 import { GPS51SupabaseSecretsTest } from './GPS51SupabaseSecretsTest';
 import { GPS51BatchSyncPanel } from './GPS51BatchSyncPanel';
 import { GPS51ConnectivityDiagnostics } from './GPS51ConnectivityDiagnostics';
-import { GPS51ConnectionTest } from './GPS51ConnectionTest';
 import { GPS51AuthDiagnosticsPanel } from './GPS51AuthDiagnosticsPanel';
 import { GPS51ProductionReadinessPanel } from './GPS51ProductionReadinessPanel';
 
@@ -42,8 +41,7 @@ export const GPS51Settings = () => {
 
         <TabsContent value="credentials">
           <div className="space-y-6">
-            <GPS51CredentialsForm />
-            <GPS51ConnectionTest />
+            <GPS51UnifiedCredentialsPanel />
             <GPS51ConnectivityDiagnostics />
           </div>
         </TabsContent>

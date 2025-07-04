@@ -7,17 +7,17 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { 
-  TestTube, 
+  Settings, 
   CheckCircle, 
   AlertTriangle, 
   RefreshCw,
   Wifi,
-  Shield
+  Shield,
+  TestTube
 } from 'lucide-react';
-import { GPS51ConnectionService } from '@/services/gps51/GPS51ConnectionService';
-import { gps51AuthService } from '@/services/gps51/GPS51AuthenticationService';
+import { gps51UnifiedAuthService } from '@/services/gps51/GPS51UnifiedAuthService';
 
-export const GPS51ConnectionTest = () => {
+export const GPS51UnifiedCredentialsPanel = () => {
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [isTestingAuth, setIsTestingAuth] = useState(false);
   const [credentials, setCredentials] = useState({
@@ -43,7 +43,7 @@ export const GPS51ConnectionTest = () => {
     setConnectionResult(null);
     
     try {
-      const result = await gps51AuthService.testConnection(credentials.apiUrl);
+      const result = await gps51UnifiedAuthService.testConnection(credentials.apiUrl);
       setConnectionResult(result);
       
       if (result.success) {
@@ -90,8 +90,7 @@ export const GPS51ConnectionTest = () => {
     setAuthResult(null);
     
     try {
-      const connectionService = new GPS51ConnectionService();
-      const result = await connectionService.connect({
+      const result = await gps51UnifiedAuthService.authenticate({
         username: credentials.username,
         password: credentials.password,
         apiUrl: credentials.apiUrl,
@@ -141,8 +140,8 @@ export const GPS51ConnectionTest = () => {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <TestTube className="h-5 w-5" />
-          GPS51 Connection Test
+          <Settings className="h-5 w-5" />
+          GPS51 Unified Authentication & Testing
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -198,7 +197,7 @@ export const GPS51ConnectionTest = () => {
             className="flex items-center gap-2"
           >
             <Shield className={`h-4 w-4 ${isTestingAuth ? 'animate-spin' : ''}`} />
-            {isTestingAuth ? 'Authenticating...' : 'Test Authentication'}
+            {isTestingAuth ? 'Authenticating...' : 'Test & Save Credentials'}
           </Button>
         </div>
 
@@ -222,6 +221,13 @@ export const GPS51ConnectionTest = () => {
                     Error: {connectionResult.error}
                   </div>
                 )}
+                {connectionResult.healthStatus && (
+                  <div className="text-sm">
+                    <div className="font-medium">Connection Health:</div>
+                    <div>Overall Status: {connectionResult.healthStatus.overallHealth}</div>
+                    <div>Recommended Strategy: {connectionResult.healthStatus.recommendedStrategy}</div>
+                  </div>
+                )}
               </div>
             </AlertDescription>
           </Alert>
@@ -238,6 +244,12 @@ export const GPS51ConnectionTest = () => {
                     success={authResult.success} 
                     label={authResult.success ? 'Success' : 'Failed'} 
                   />
+                  {authResult.success && authResult.strategy && (
+                    <Badge variant="outline">via {authResult.strategy}</Badge>
+                  )}
+                  {authResult.success && authResult.responseTime && (
+                    <Badge variant="outline">{authResult.responseTime}ms</Badge>
+                  )}
                 </div>
                 {authResult.error && (
                   <div className="text-sm">
@@ -247,7 +259,12 @@ export const GPS51ConnectionTest = () => {
                 )}
                 {authResult.success && (
                   <div className="text-sm text-green-600">
-                    ✅ GPS51 authentication successful! You can now proceed with the live data synchronization.
+                    ✅ GPS51 authentication successful! Credentials saved and ready for live data.
+                    {authResult.user && (
+                      <div className="mt-1">
+                        User: {authResult.user.username} ({authResult.user.usertype})
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -256,15 +273,16 @@ export const GPS51ConnectionTest = () => {
         )}
 
         <Alert>
-          <CheckCircle className="h-4 w-4" />
+          <TestTube className="h-4 w-4" />
           <AlertDescription>
             <div className="space-y-1">
-              <div className="font-medium">Test Instructions:</div>
+              <div className="font-medium">Unified Testing Panel:</div>
               <ul className="list-disc list-inside text-sm space-y-1">
-                <li><strong>Connection Test:</strong> Verifies if the GPS51 API server is reachable</li>
-                <li><strong>Authentication Test:</strong> Tests your credentials and connection method</li>
-                <li>The system will automatically choose the best connection method (proxy or direct)</li>
-                <li>Both tests help diagnose connectivity issues before using the main application</li>
+                <li><strong>Connection Test:</strong> Verifies Edge Function availability and GPS51 API reachability</li>
+                <li><strong>Authentication Test:</strong> Validates credentials and saves them for live data access</li>
+                <li>Uses intelligent connection management with automatic fallback strategies</li>
+                <li>Consolidated interface eliminates conflicts between multiple authentication services</li>
+                <li>Real-time diagnostics show connection health and performance metrics</li>
               </ul>
             </div>
           </AlertDescription>
