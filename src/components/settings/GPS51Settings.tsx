@@ -14,6 +14,7 @@ import { GPS51BatchSyncPanel } from './GPS51BatchSyncPanel';
 import { GPS51ConnectivityDiagnostics } from './GPS51ConnectivityDiagnostics';
 import { GPS51AuthDiagnosticsPanel } from './GPS51AuthDiagnosticsPanel';
 import { GPS51ProductionReadinessPanel } from './GPS51ProductionReadinessPanel';
+import { GPS51EmergencyRecoveryPanel } from './GPS51EmergencyRecoveryPanel';
 
 export const GPS51Settings = () => {
   return (
@@ -26,11 +27,12 @@ export const GPS51Settings = () => {
       </div>
 
       <Tabs defaultValue="activation" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="activation">Real-Time</TabsTrigger>
           <TabsTrigger value="credentials">Credentials</TabsTrigger>
           <TabsTrigger value="devices">Devices</TabsTrigger>
           <TabsTrigger value="sync">Sync</TabsTrigger>
+          <TabsTrigger value="recovery">Recovery</TabsTrigger>
           <TabsTrigger value="scheduler">Scheduler</TabsTrigger>
           <TabsTrigger value="debug">Debug</TabsTrigger>
         </TabsList>
@@ -52,6 +54,10 @@ export const GPS51Settings = () => {
 
         <TabsContent value="sync">
           <GPS51BatchSyncPanel />
+        </TabsContent>
+
+        <TabsContent value="recovery">
+          <GPS51EmergencyRecoveryPanel />
         </TabsContent>
 
         <TabsContent value="scheduler">

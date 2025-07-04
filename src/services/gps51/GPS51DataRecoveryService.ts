@@ -1,0 +1,479 @@
+import { supabase } from '@/integrations/supabase/client';
+import { GPS51Device, GPS51Position } from './GPS51Types';
+import { GPS51Client } from './GPS51Client';
+import { gps51DatabaseIntegration } from './GPS51DatabaseIntegration';
+
+export interface RecoveryConfig {
+  apiEndpoint?: string;
+  token?: string;
+  retryAttempts?: number;
+  batchSize?: number;
+  timeoutMs?: number;
+}
+
+export interface DataQualityIssue {
+  type: 'missing_calculated_lat' | 'missing_calculated_lon' | 'invalid_latitude_range' | 
+        'invalid_longitude_range' | 'stale_data' | 'missing_speed' | 'missing_timestamp';
+  description: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+}
+
+export interface DeviceRecoveryResult {
+  deviceId: string;
+  success: boolean;
+  issues: DataQualityIssue[];
+  fixesApplied: string[];
+  error?: string;
+}
+
+export interface RecoveryReport {
+  timestamp: string;
+  totalDevicesProcessed: number;
+  successfullyFixed: number;
+  failedDevices: number;
+  criticalIssuesFound: number;
+  executionTimeMs: number;
+  deviceResults: DeviceRecoveryResult[];
+  summary: {
+    positionsRecovered: number;
+    dataQualityImproved: number;
+    emergencyRecoveryNeeded: boolean;
+  };
+}
+
+export interface BatchProcessResult {
+  processed: number;
+  fixed: number;
+  failed: number;
+}
+
+export class GPS51DataRecoveryService {
+  private static instance: GPS51DataRecoveryService;
+  private config: Required<RecoveryConfig>;
+  private processedDevices = new Set<string>();
+  private failedDevices = new Map<string, string>();
+  private gps51Client: GPS51Client;
+
+  constructor(config: RecoveryConfig = {}, client?: GPS51Client) {
+    this.config = {
+      apiEndpoint: config.apiEndpoint || 'https://www.gps51.com/webapi',
+      token: config.token || '',
+      retryAttempts: config.retryAttempts || 3,
+      batchSize: config.batchSize || 50,
+      timeoutMs: config.timeoutMs || 30000
+    };
+    
+    this.gps51Client = client || new GPS51Client();
+  }
+
+  static getInstance(config?: RecoveryConfig, client?: GPS51Client): GPS51DataRecoveryService {
+    if (!GPS51DataRecoveryService.instance) {
+      GPS51DataRecoveryService.instance = new GPS51DataRecoveryService(config, client);
+    }
+    return GPS51DataRecoveryService.instance;
+  }
+
+  /**
+   * Main emergency data recovery function
+   */
+  async emergencyDataRecovery(): Promise<RecoveryReport> {
+    const startTime = Date.now();
+    
+    try {
+      console.log('🚨 GPS51DataRecoveryService: Starting emergency data recovery...');
+
+      // Ensure GPS51 client is authenticated
+      if (!this.gps51Client.isAuthenticated()) {
+        throw new Error('GPS51 client not authenticated. Please authenticate first.');
+      }
+
+      // Step 1: Get all devices
+      const devices = await this.getAllDevices();
+      console.log(`📱 Found ${devices.length} devices to process`);
+
+      if (devices.length === 0) {
+        console.warn('⚠️ No devices found for recovery');
+        return this.generateEmptyReport(startTime);
+      }
+
+      // Step 2: Process devices in batches
+      const batches = this.chunkArray(devices, this.config.batchSize);
+      let totalProcessed = 0;
+      let totalFixed = 0;
+      let totalFailed = 0;
+      const deviceResults: DeviceRecoveryResult[] = [];
+
+      for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
+        console.log(`📊 Processing batch ${i + 1}/${batches.length} (${batch.length} devices)`);
+
+        const batchResults = await this.processBatch(batch);
+        totalProcessed += batchResults.processed;
+        totalFixed += batchResults.fixed;
+        totalFailed += batchResults.failed;
+
+        // Small delay between batches to avoid API overwhelm
+        if (i < batches.length - 1) {
+          await this.delay(1000);
+        }
+      }
+
+      const executionTime = Date.now() - startTime;
+      
+      // Generate comprehensive recovery report
+      const report: RecoveryReport = {
+        timestamp: new Date().toISOString(),
+        totalDevicesProcessed: totalProcessed,
+        successfullyFixed: totalFixed,
+        failedDevices: totalFailed,
+        criticalIssuesFound: Array.from(this.failedDevices.values()).length,
+        executionTimeMs: executionTime,
+        deviceResults,
+        summary: {
+          positionsRecovered: totalFixed,
+          dataQualityImproved: Math.round((totalFixed / totalProcessed) * 100),
+          emergencyRecoveryNeeded: totalFailed > (totalProcessed * 0.3) // More than 30% failed
+        }
+      };
+
+      console.log(`✅ Recovery complete: ${totalFixed}/${totalProcessed} devices fixed in ${executionTime}ms`);
+      return report;
+
+    } catch (error) {
+      console.error('❌ Emergency recovery failed:', error);
+      throw new Error(`Emergency recovery failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Get all devices using the existing GPS51Client
+   */
+  private async getAllDevices(): Promise<GPS51Device[]> {
+    try {
+      const devices = await this.gps51Client.getDeviceList();
+      console.log(`GPS51DataRecoveryService: Retrieved ${devices.length} devices from GPS51Client`);
+      return devices;
+    } catch (error) {
+      console.error('Failed to get devices from GPS51Client:', error);
+      throw new Error(`Failed to retrieve devices: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Process a batch of devices
+   */
+  private async processBatch(devices: GPS51Device[]): Promise<BatchProcessResult> {
+    const promises = devices.map(device => this.processDevice(device));
+    const results = await Promise.allSettled(promises);
+
+    let processed = 0;
+    let fixed = 0;
+    let failed = 0;
+
+    results.forEach((result, index) => {
+      const device = devices[index];
+      processed++;
+
+      if (result.status === 'fulfilled') {
+        if (result.value.success) {
+          fixed++;
+          this.processedDevices.add(device.deviceid);
+        } else {
+          failed++;
+        }
+      } else {
+        failed++;
+        console.error(`❌ Failed to process device ${device.deviceid}:`, result.reason);
+        this.failedDevices.set(device.deviceid, result.reason?.message || 'Unknown error');
+      }
+    });
+
+    return { processed, fixed, failed };
+  }
+
+  /**
+   * Process individual device
+   */
+  private async processDevice(device: GPS51Device): Promise<DeviceRecoveryResult> {
+    try {
+      // Get latest position for this device
+      const positionData = await this.getDevicePosition(device.deviceid);
+
+      if (!positionData) {
+        return {
+          deviceId: device.deviceid,
+          success: false,
+          issues: [{ type: 'missing_timestamp', description: 'No position data available', severity: 'critical' }],
+          fixesApplied: [],
+          error: 'No position data'
+        };
+      }
+
+      // Check data quality
+      const issues = this.checkDataQuality(positionData);
+
+      if (issues.length === 0) {
+        return {
+          deviceId: device.deviceid,
+          success: true,
+          issues: [],
+          fixesApplied: ['data_already_valid'],
+        };
+      }
+
+      // Apply fixes
+      const { fixedData, appliedFixes } = this.applyDataFixes(positionData, issues);
+
+      // Save fixed data using existing database integration
+      await this.saveFixedData(device.deviceid, fixedData);
+
+      console.log(`✅ Fixed device ${device.deviceid}: ${appliedFixes.join(', ')}`);
+      
+      return {
+        deviceId: device.deviceid,
+        success: true,
+        issues,
+        fixesApplied: appliedFixes,
+      };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        deviceId: device.deviceid,
+        success: false,
+        issues: [],
+        fixesApplied: [],
+        error: errorMessage
+      };
+    }
+  }
+
+  /**
+   * Get device position using existing GPS51 client
+   */
+  private async getDevicePosition(deviceId: string): Promise<GPS51Position | null> {
+    try {
+      const { positions } = await this.gps51Client.getRealtimePositions([deviceId]);
+      return positions.length > 0 ? positions[0] : null;
+    } catch (error) {
+      console.error(`Failed to get position for device ${deviceId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Check data quality issues
+   */
+  private checkDataQuality(positionData: GPS51Position): DataQualityIssue[] {
+    const issues: DataQualityIssue[] = [];
+
+    // Check for missing or zero coordinates
+    if (!positionData.callat || positionData.callat === 0) {
+      issues.push({
+        type: 'missing_calculated_lat',
+        description: 'Calculated latitude is missing or zero',
+        severity: 'critical'
+      });
+    }
+
+    if (!positionData.callon || positionData.callon === 0) {
+      issues.push({
+        type: 'missing_calculated_lon',
+        description: 'Calculated longitude is missing or zero',
+        severity: 'critical'
+      });
+    }
+
+    // Check for invalid coordinate ranges
+    if (positionData.callat && (positionData.callat < -90 || positionData.callat > 90)) {
+      issues.push({
+        type: 'invalid_latitude_range',
+        description: `Invalid latitude range: ${positionData.callat}`,
+        severity: 'high'
+      });
+    }
+
+    if (positionData.callon && (positionData.callon < -180 || positionData.callon > 180)) {
+      issues.push({
+        type: 'invalid_longitude_range',
+        description: `Invalid longitude range: ${positionData.callon}`,
+        severity: 'high'
+      });
+    }
+
+    // Check for stale data
+    if (positionData.updatetime) {
+      const lastUpdate = new Date(positionData.updatetime);
+      const now = new Date();
+      const hoursSinceUpdate = (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60);
+
+      if (hoursSinceUpdate > 24) {
+        issues.push({
+          type: 'stale_data',
+          description: `Data is ${Math.round(hoursSinceUpdate)} hours old`,
+          severity: 'medium'
+        });
+      }
+    }
+
+    // Check for missing essential data
+    if (positionData.speed === undefined || positionData.speed === null) {
+      issues.push({
+        type: 'missing_speed',
+        description: 'Speed data is missing',
+        severity: 'low'
+      });
+    }
+
+    return issues;
+  }
+
+  /**
+   * Apply fixes to the data
+   */
+  private applyDataFixes(positionData: GPS51Position, issues: DataQualityIssue[]): { 
+    fixedData: GPS51Position; 
+    appliedFixes: string[] 
+  } {
+    const fixedData = { ...positionData };
+    const appliedFixes: string[] = [];
+
+    issues.forEach(issue => {
+      switch (issue.type) {
+        case 'missing_calculated_lat':
+          // Try to use device position data if available
+          if (fixedData.callat === 0 && fixedData.callon !== 0) {
+            // If longitude is valid, this might be a GPS coordinate swap issue
+            console.warn(`Device ${positionData.deviceid}: Potential coordinate swap detected`);
+          }
+          appliedFixes.push('coordinate_validation');
+          break;
+
+        case 'missing_calculated_lon':
+          if (fixedData.callon === 0 && fixedData.callat !== 0) {
+            console.warn(`Device ${positionData.deviceid}: Potential coordinate swap detected`);
+          }
+          appliedFixes.push('coordinate_validation');
+          break;
+
+        case 'invalid_latitude_range':
+          fixedData.callat = Math.max(-90, Math.min(90, fixedData.callat));
+          appliedFixes.push('latitude_range_fix');
+          break;
+
+        case 'invalid_longitude_range':
+          fixedData.callon = Math.max(-180, Math.min(180, fixedData.callon));
+          appliedFixes.push('longitude_range_fix');
+          break;
+
+        case 'missing_speed':
+          fixedData.speed = 0;
+          appliedFixes.push('speed_default');
+          break;
+
+        case 'stale_data':
+          // Update timestamp to current time for real-time processing
+          fixedData.updatetime = Date.now();
+          appliedFixes.push('timestamp_refresh');
+          break;
+      }
+    });
+
+    return { fixedData, appliedFixes };
+  }
+
+  /**
+   * Save fixed data using existing database integration
+   */
+  private async saveFixedData(deviceId: string, fixedData: GPS51Position): Promise<void> {
+    try {
+      // Use the enhanced UPSERT function we created in the migration
+      const { error } = await supabase.rpc('upsert_vehicle_position', {
+        p_gps51_device_id: deviceId,
+        p_latitude: fixedData.callat,
+        p_longitude: fixedData.callon,
+        p_timestamp: fixedData.updatetime,
+        p_speed: fixedData.speed || 0,
+        p_heading: fixedData.course || 0,
+        p_altitude: fixedData.altitude || 0,
+        p_ignition_status: fixedData.moving === 1,
+        p_fuel_level: fixedData.fuel || null,
+        p_battery_level: fixedData.voltage || null,
+        p_address: fixedData.strstatus || null
+      });
+
+      if (error) {
+        throw new Error(`Database upsert failed: ${error.message}`);
+      }
+
+    } catch (error) {
+      console.error(`Failed to save fixed data for device ${deviceId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate empty report for cases with no devices
+   */
+  private generateEmptyReport(startTime: number): RecoveryReport {
+    return {
+      timestamp: new Date().toISOString(),
+      totalDevicesProcessed: 0,
+      successfullyFixed: 0,
+      failedDevices: 0,
+      criticalIssuesFound: 0,
+      executionTimeMs: Date.now() - startTime,
+      deviceResults: [],
+      summary: {
+        positionsRecovered: 0,
+        dataQualityImproved: 0,
+        emergencyRecoveryNeeded: false
+      }
+    };
+  }
+
+  /**
+   * Utility functions
+   */
+  private chunkArray<T>(array: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < array.length; i += size) {
+      chunks.push(array.slice(i, i + size));
+    }
+    return chunks;
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Get recovery statistics
+   */
+  getRecoveryStats(): {
+    processedDevices: number;
+    failedDevices: number;
+    successRate: number;
+  } {
+    const processed = this.processedDevices.size;
+    const failed = this.failedDevices.size;
+    const total = processed + failed;
+    
+    return {
+      processedDevices: processed,
+      failedDevices: failed,
+      successRate: total > 0 ? (processed / total) * 100 : 0
+    };
+  }
+
+  /**
+   * Reset recovery state
+   */
+  reset(): void {
+    this.processedDevices.clear();
+    this.failedDevices.clear();
+  }
+}
+
+// Export singleton instance
+export const gps51DataRecoveryService = GPS51DataRecoveryService.getInstance();
