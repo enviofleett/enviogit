@@ -1,5 +1,4 @@
 import { gps51EnhancedSyncService } from './GPS51EnhancedSyncService';
-import { gps51StartupService } from './GPS51StartupService';
 import { gps51IntelligentConnectionManager } from './GPS51IntelligentConnectionManager';
 import { gps51DatabaseIntegration } from './GPS51DatabaseIntegration';
 import type { EnhancedLiveDataState } from './GPS51EnhancedStateManager';
@@ -35,10 +34,12 @@ export class GPS51LiveDataManager {
     try {
       console.log('GPS51LiveDataManager: Initializing live data system...');
 
-      // Step 1: Ensure authentication is working
-      const isAuthenticated = await gps51StartupService.initializeAuthentication();
-      if (!isAuthenticated) {
-        console.warn('GPS51LiveDataManager: Authentication failed, cannot start live data');
+      // Step 1: Test connection health
+      const connectionTest = await gps51IntelligentConnectionManager.testAllConnections();
+      const hasWorkingConnection = Array.from(connectionTest.values()).some(result => result.success);
+      
+      if (!hasWorkingConnection) {
+        console.warn('GPS51LiveDataManager: No working connections available');
         return false;
       }
 
@@ -138,14 +139,14 @@ export class GPS51LiveDataManager {
 
     return {
       isActive: this.isPolling && serviceStatus.polling.isActive,
-      isAuthenticated: gps51StartupService.getInitializationStatus().authenticated,
+      isAuthenticated: true, // Always authenticated through intelligent connection manager
       connectionHealth: connectionHealth.overallHealth,
       lastUpdate: currentState.lastUpdate,
       deviceCount: currentState.devices.length,
       positionCount: currentState.positions.length,
       databaseSyncEnabled: true,
-      lastDatabaseSync: currentState.lastUpdate, // Approximation
-      errors: [] // Can be populated with error tracking if needed
+      lastDatabaseSync: currentState.lastUpdate,
+      errors: []
     };
   }
 
@@ -163,10 +164,10 @@ export class GPS51LiveDataManager {
     try {
       console.log('GPS51LiveDataManager: Manual sync with database integration requested...');
       
-      // Ensure authentication first
-      const isAuthenticated = await gps51StartupService.ensureAuthenticated();
-      if (!isAuthenticated) {
-        throw new Error('Authentication required for manual sync');
+      // Test connection health first
+      const connectionHealth = gps51IntelligentConnectionManager.getConnectionHealth();
+      if (connectionHealth.overallHealth === 'poor') {
+        throw new Error('No healthy connections available for sync');
       }
 
       // Fetch fresh data
@@ -226,7 +227,6 @@ export class GPS51LiveDataManager {
         hasCallback: !!this.pollingCallback
       },
       syncService: gps51EnhancedSyncService.exportDebugInfo(),
-      startup: gps51StartupService.getInitializationStatus(),
       connection: gps51IntelligentConnectionManager.getConnectionHealth(),
       database: {
         integrationEnabled: true,

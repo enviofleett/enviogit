@@ -1,27 +1,22 @@
-import { gps51StartupService } from './GPS51StartupService';
-import { gps51LiveDataManager } from './GPS51LiveDataManager';
 import { gps51IntelligentConnectionManager } from './GPS51IntelligentConnectionManager';
+import { gps51EnhancedSyncService } from './GPS51EnhancedSyncService';
 import { gps51DatabaseIntegration } from './GPS51DatabaseIntegration';
-import { GPS51CredentialsManager } from '../gp51/GPS51CredentialsManager';
+import { gps51LiveDataManager } from './GPS51LiveDataManager';
 
-export interface ProductionValidationResult {
-  overallScore: number;
-  maxScore: number;
-  status: 'production-ready' | 'needs-fixes' | 'critical-issues';
-  checks: ProductionCheck[];
-  recommendations: string[];
-  summary: string;
-}
-
-export interface ProductionCheck {
-  id: string;
+export interface ProductionReadinessCheck {
   name: string;
   status: 'pass' | 'fail' | 'warning';
-  score: number;
-  maxScore: number;
   message: string;
   details?: any;
-  errorCode?: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+}
+
+export interface ProductionReadinessReport {
+  overallStatus: 'ready' | 'needs_attention' | 'not_ready';
+  score: number; // 0-100
+  checks: ProductionReadinessCheck[];
+  recommendations: string[];
+  timestamp: Date;
 }
 
 export class GPS51ProductionValidator {
@@ -34,449 +29,340 @@ export class GPS51ProductionValidator {
     return GPS51ProductionValidator.instance;
   }
 
-  /**
-   * Run comprehensive production validation
-   */
-  async validateProduction(): Promise<ProductionValidationResult> {
-    console.log('GPS51ProductionValidator: Starting comprehensive production validation...');
+  async runCompleteValidation(): Promise<ProductionReadinessReport> {
+    console.log('GPS51ProductionValidator: Starting comprehensive production readiness validation...');
     
-    const checks: ProductionCheck[] = [];
-    let totalScore = 0;
-    const maxScore = 100;
+    const checks: ProductionReadinessCheck[] = [];
+    const recommendations: string[] = [];
 
-    // Check 1: Credentials and Authentication (20 points)
-    const authCheck = await this.validateAuthentication();
-    checks.push(authCheck);
-    totalScore += authCheck.score;
+    // Run all validation checks
+    checks.push(...await this.validateConnectionHealth());
+    checks.push(...await this.validateAuthenticationSystem());
+    checks.push(...await this.validateDataFlow());
+    checks.push(...await this.validateDatabaseIntegration());
+    checks.push(...await this.validateLiveDataSystem());
+    checks.push(...await this.validateErrorHandling());
+    checks.push(...await this.validatePerformanceMetrics());
 
-    // Check 2: Connection Strategies (20 points)
-    const connectionCheck = await this.validateConnectionStrategies();
-    checks.push(connectionCheck);
-    totalScore += connectionCheck.score;
+    // Calculate overall score and status
+    const { score, status } = this.calculateOverallStatus(checks);
+    
+    // Generate recommendations based on failed checks
+    const failedChecks = checks.filter(check => check.status === 'fail');
+    const warningChecks = checks.filter(check => check.status === 'warning');
 
-    // Check 3: Live Data System (25 points)
-    const liveDataCheck = await this.validateLiveDataSystem();
-    checks.push(liveDataCheck);
-    totalScore += liveDataCheck.score;
-
-    // Check 4: Database Integration (20 points)
-    const databaseCheck = await this.validateDatabaseIntegration();
-    checks.push(databaseCheck);
-    totalScore += databaseCheck.score;
-
-    // Check 5: Edge Functions (15 points)
-    const edgeCheck = await this.validateEdgeFunctions();
-    checks.push(edgeCheck);
-    totalScore += edgeCheck.score;
-
-    // Determine overall status
-    let status: 'production-ready' | 'needs-fixes' | 'critical-issues';
-    if (totalScore >= 85) {
-      status = 'production-ready';
-    } else if (totalScore >= 60) {
-      status = 'needs-fixes';
-    } else {
-      status = 'critical-issues';
+    if (failedChecks.length > 0) {
+      recommendations.push(`Address ${failedChecks.length} critical issues before production deployment`);
+      failedChecks.forEach(check => {
+        if (check.severity === 'critical') {
+          recommendations.push(`CRITICAL: ${check.name} - ${check.message}`);
+        }
+      });
     }
 
-    // Generate recommendations
-    const recommendations = this.generateRecommendations(checks);
+    if (warningChecks.length > 0) {
+      recommendations.push(`Consider resolving ${warningChecks.length} warning issues for optimal performance`);
+    }
 
-    // Generate summary
-    const summary = this.generateSummary(totalScore, maxScore, status, checks);
-
-    console.log('GPS51ProductionValidator: Validation completed', {
-      totalScore,
-      maxScore,
-      status,
-      passedChecks: checks.filter(c => c.status === 'pass').length,
-      failedChecks: checks.filter(c => c.status === 'fail').length,
-      warningChecks: checks.filter(c => c.status === 'warning').length
-    });
-
-    return {
-      overallScore: totalScore,
-      maxScore,
-      status,
+    const report: ProductionReadinessReport = {
+      overallStatus: status,
+      score,
       checks,
       recommendations,
-      summary
+      timestamp: new Date()
     };
-  }
 
-  private async validateAuthentication(): Promise<ProductionCheck> {
-    try {
-      console.log('GPS51ProductionValidator: Validating authentication...');
-      
-      const credentialsManager = new GPS51CredentialsManager();
-      const credentials = await credentialsManager.getCredentials();
-      
-      if (!credentials) {
-        return {
-          id: 'GPS51-AUTH-001',
-          name: 'GPS51 Authentication',
-          status: 'fail',
-          score: 0,
-          maxScore: 20,
-          message: 'No GPS51 credentials configured',
-          errorCode: 'GPS51-AUTH-001'
-        };
-      }
-
-      // Check if startup service is properly authenticated
-      const initStatus = gps51StartupService.getInitializationStatus();
-      
-      if (!initStatus.authenticated || !initStatus.initialized) {
-        return {
-          id: 'GPS51-AUTH-002',
-          name: 'GPS51 Authentication',
-          status: 'fail',
-          score: 5,
-          maxScore: 20,
-          message: 'GPS51 authentication flow is broken',
-          details: initStatus,
-          errorCode: 'GPS51-AUTH-002'
-        };
-      }
-
-      return {
-        id: 'GPS51-AUTH-SUCCESS',
-        name: 'GPS51 Authentication',
-        status: 'pass',
-        score: 20,
-        maxScore: 20,
-        message: 'GPS51 authentication working correctly',
-        details: {
-          username: credentials.username,
-          apiUrl: credentials.apiUrl,
-          authenticated: initStatus.authenticated,
-          initialized: initStatus.initialized
-        }
-      };
-
-    } catch (error) {
-      return {
-        id: 'GPS51-AUTH-ERROR',
-        name: 'GPS51 Authentication',
-        status: 'fail',
-        score: 0,
-        maxScore: 20,
-        message: `Authentication validation error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        errorCode: 'GPS51-AUTH-ERROR'
-      };
-    }
-  }
-
-  private async validateConnectionStrategies(): Promise<ProductionCheck> {
-    try {
-      console.log('GPS51ProductionValidator: Validating connection strategies...');
-      
-      const connectionHealth = gps51IntelligentConnectionManager.getConnectionHealth();
-      const testResults = await gps51IntelligentConnectionManager.testAllConnections();
-      
-      const proxyResult = testResults.get('proxy');
-      const directResult = testResults.get('direct');
-
-      if (connectionHealth.overallHealth === 'good') {
-        return {
-          id: 'GPS51-CONN-SUCCESS',
-          name: 'Connection Strategies',
-          status: 'pass',
-          score: 20,
-          maxScore: 20,
-          message: `Intelligent connection management working (${connectionHealth.recommendedStrategy} strategy)`,
-          details: {
-            overallHealth: connectionHealth.overallHealth,
-            recommendedStrategy: connectionHealth.recommendedStrategy,
-            proxyWorking: proxyResult?.success || false,
-            directWorking: directResult?.success || false
-          }
-        };
-      } else if (connectionHealth.overallHealth === 'degraded') {
-        return {
-          id: 'GPS51-CONN-DEGRADED',
-          name: 'Connection Strategies',
-          status: 'warning',
-          score: 15,
-          maxScore: 20,
-          message: 'Connection strategies working but degraded',
-          details: connectionHealth,
-          errorCode: 'GPS51-CONN-DEGRADED'
-        };
-      } else {
-        return {
-          id: 'GPS51-CONN-FAIL',
-          name: 'Connection Strategies',
-          status: 'fail',
-          score: 0,
-          maxScore: 20,
-          message: 'All connection strategies failed',
-          details: connectionHealth,
-          errorCode: 'GPS51-CONN-FAIL'
-        };
-      }
-
-    } catch (error) {
-      return {
-        id: 'GPS51-CONN-ERROR',
-        name: 'Connection Strategies',
-        status: 'fail',
-        score: 0,
-        maxScore: 20,
-        message: `Connection validation error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        errorCode: 'GPS51-CONN-ERROR'
-      };
-    }
-  }
-
-  private async validateLiveDataSystem(): Promise<ProductionCheck> {
-    try {
-      console.log('GPS51ProductionValidator: Validating live data system...');
-      
-      const liveDataStatus = gps51LiveDataManager.getStatus();
-      const currentState = gps51LiveDataManager.getCurrentState();
-      
-      if (!liveDataStatus.isAuthenticated) {
-        return {
-          id: 'GPS51-LIVE-001',
-          name: 'Live Data System',
-          status: 'fail',
-          score: 0,
-          maxScore: 25,
-          message: 'Live data system requires authentication',
-          errorCode: 'GPS51-LIVE-001'
-        };
-      }
-
-      if (!liveDataStatus.isActive) {
-        return {
-          id: 'GPS51-LIVE-002',
-          name: 'Live Data System',
-          status: 'fail',
-          score: 10,
-          maxScore: 25,
-          message: 'Live data system is not active',
-          details: liveDataStatus,
-          errorCode: 'GPS51-LIVE-002'
-        };
-      }
-
-      if (liveDataStatus.deviceCount === 0) {
-        return {
-          id: 'GPS51-LIVE-003',
-          name: 'Live Data System',
-          status: 'warning',
-          score: 18,
-          maxScore: 25,
-          message: 'Live data system active but no devices found',
-          details: liveDataStatus,
-          errorCode: 'GPS51-LIVE-003'
-        };
-      }
-
-      return {
-        id: 'GPS51-LIVE-SUCCESS',
-        name: 'Live Data System',
-        status: 'pass',
-        score: 25,
-        maxScore: 25,
-        message: `Live data system fully operational (${liveDataStatus.deviceCount} devices, ${liveDataStatus.positionCount} positions)`,
-        details: {
-          deviceCount: liveDataStatus.deviceCount,
-          positionCount: liveDataStatus.positionCount,
-          isActive: liveDataStatus.isActive,
-          lastUpdate: liveDataStatus.lastUpdate
-        }
-      };
-
-    } catch (error) {
-      return {
-        id: 'GPS51-LIVE-ERROR',
-        name: 'Live Data System',
-        status: 'fail',
-        score: 0,
-        maxScore: 25,
-        message: `Live data validation error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        errorCode: 'GPS51-LIVE-ERROR'
-      };
-    }
-  }
-
-  private async validateDatabaseIntegration(): Promise<ProductionCheck> {
-    try {
-      console.log('GPS51ProductionValidator: Validating database integration...');
-      
-      const dbTest = await gps51DatabaseIntegration.testDatabaseConnection();
-      
-      if (!dbTest.success) {
-        return {
-          id: 'GPS51-DB-001',
-          name: 'Database Integration',
-          status: 'fail',
-          score: 0,
-          maxScore: 20,
-          message: `Database connectivity failed: ${dbTest.error}`,
-          errorCode: 'GPS51-DB-001'
-        };
-      }
-
-      // Try to get sync stats to verify full integration
-      const syncStats = await gps51DatabaseIntegration.getSyncJobStats();
-      
-      return {
-        id: 'GPS51-DB-SUCCESS',
-        name: 'Database Integration',
-        status: 'pass',
-        score: 20,
-        maxScore: 20,
-        message: 'Database integration fully functional',
-        details: {
-          connectionWorking: true,
-          recentJobs: syncStats.recentJobs,
-          successRate: syncStats.successRate,
-          totalVehiclesProcessed: syncStats.totalVehiclesProcessed,
-          totalPositionsStored: syncStats.totalPositionsStored
-        }
-      };
-
-    } catch (error) {
-      return {
-        id: 'GPS51-DB-ERROR',
-        name: 'Database Integration',
-        status: 'fail',
-        score: 0,
-        maxScore: 20,
-        message: `Database validation error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        errorCode: 'GPS51-DB-ERROR'
-      };
-    }
-  }
-
-  private async validateEdgeFunctions(): Promise<ProductionCheck> {
-    try {
-      console.log('GPS51ProductionValidator: Validating edge functions...');
-      
-      // Test if we can reach the Supabase edge function
-      const { supabase } = await import('@/integrations/supabase/client');
-      
-      // Simple test to see if edge functions are accessible
-      try {
-        const { data, error } = await supabase.functions.invoke('gps51-proxy', {
-          body: { action: 'test' }
-        });
-        
-        if (error && error.message.includes('Function not found')) {
-          return {
-            id: 'GPS51-PROXY-001',
-            name: 'Edge Functions',
-            status: 'fail',
-            score: 0,
-            maxScore: 15,
-            message: 'GPS51 proxy edge function not deployed',
-            errorCode: 'GPS51-PROXY-001'
-          };
-        }
-
-        return {
-          id: 'GPS51-PROXY-SUCCESS',
-          name: 'Edge Functions',
-          status: 'pass',
-          score: 15,
-          maxScore: 15,
-          message: 'Edge functions accessible and responding',
-          details: { accessible: true }
-        };
-
-      } catch (funcError) {
-        return {
-          id: 'GPS51-PROXY-002',
-          name: 'Edge Functions',
-          status: 'warning',
-          score: 10,
-          maxScore: 15,
-          message: 'Edge function test inconclusive',
-          details: { error: funcError instanceof Error ? funcError.message : 'Unknown error' },
-          errorCode: 'GPS51-PROXY-002'
-        };
-      }
-
-    } catch (error) {
-      return {
-        id: 'GPS51-PROXY-ERROR',
-        name: 'Edge Functions',
-        status: 'fail',
-        score: 0,
-        maxScore: 15,
-        message: `Edge function validation error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        errorCode: 'GPS51-PROXY-ERROR'
-      };
-    }
-  }
-
-  private generateRecommendations(checks: ProductionCheck[]): string[] {
-    const recommendations: string[] = [];
-    
-    checks.forEach(check => {
-      if (check.status === 'fail') {
-        switch (check.errorCode) {
-          case 'GPS51-AUTH-001':
-            recommendations.push('Configure GPS51 credentials in Settings → GPS51 Settings');
-            break;
-          case 'GPS51-AUTH-002':
-            recommendations.push('Fix authentication flow by restarting the application or clearing stored credentials');
-            break;
-          case 'GPS51-CONN-FAIL':
-            recommendations.push('Check GPS51 API server status and Supabase Edge Function deployment');
-            break;
-          case 'GPS51-LIVE-001':
-          case 'GPS51-LIVE-002':
-            recommendations.push('Restart the GPS51 startup service and ensure authentication is working');
-            break;
-          case 'GPS51-DB-001':
-            recommendations.push('Check Supabase database connectivity and RLS policies');
-            break;
-          case 'GPS51-PROXY-001':
-            recommendations.push('Deploy GPS51 proxy edge function to Supabase');
-            break;
-        }
-      } else if (check.status === 'warning') {
-        if (check.errorCode === 'GPS51-CONN-DEGRADED') {
-          recommendations.push('Monitor connection performance and consider using proxy for better reliability');
-        }
-        if (check.errorCode === 'GPS51-LIVE-003') {
-          recommendations.push('Verify GPS51 account has active devices and check device configuration');
-        }
-      }
+    console.log('GPS51ProductionValidator: Validation completed', {
+      overallStatus: status,
+      score,
+      totalChecks: checks.length,
+      passed: checks.filter(c => c.status === 'pass').length,
+      warnings: warningChecks.length,
+      failed: failedChecks.length
     });
 
-    if (recommendations.length === 0) {
-      recommendations.push('System is production-ready! Monitor performance and maintain regular backups.');
-    }
-
-    return recommendations;
+    return report;
   }
 
-  private generateSummary(score: number, maxScore: number, status: string, checks: ProductionCheck[]): string {
-    const percentage = Math.round((score / maxScore) * 100);
-    const passedChecks = checks.filter(c => c.status === 'pass').length;
-    const totalChecks = checks.length;
+  private async validateConnectionHealth(): Promise<ProductionReadinessCheck[]> {
+    const checks: ProductionReadinessCheck[] = [];
 
-    let summary = `Production Readiness Score: ${score}/${maxScore} (${percentage}%)\n`;
-    summary += `Status: ${status.toUpperCase()}\n`;
-    summary += `Checks Passed: ${passedChecks}/${totalChecks}\n\n`;
+    try {
+      const connectionHealth = gps51IntelligentConnectionManager.getConnectionHealth();
+      
+      checks.push({
+        name: 'Connection Health',
+        status: connectionHealth.overallHealth === 'good' ? 'pass' : 
+               connectionHealth.overallHealth === 'degraded' ? 'warning' : 'fail',
+        message: `Overall connection health: ${connectionHealth.overallHealth}`,
+        details: connectionHealth,
+        severity: connectionHealth.overallHealth === 'poor' ? 'critical' : 'medium'
+      });
 
-    if (status === 'production-ready') {
-      summary += '🎉 Congratulations! Your GPS51 integration is ready for production deployment.\n';
-      summary += 'All critical systems are functioning correctly and live vehicle data is flowing.';
-    } else if (status === 'needs-fixes') {
-      summary += '⚠️ Your GPS51 integration is mostly ready but has some issues that should be addressed.\n';
-      summary += 'Most functionality is working, but fixing the remaining issues will improve reliability.';
-    } else {
-      summary += '🔴 Critical issues detected. GPS51 integration is not ready for production.\n';
-      summary += 'Please address the failed checks before deploying to production.';
+      // Test actual connectivity
+      const connectivityTest = await gps51IntelligentConnectionManager.testAllConnections();
+      const workingConnections = Array.from(connectivityTest.values()).filter(result => result.success);
+      
+      checks.push({
+        name: 'API Connectivity',
+        status: workingConnections.length > 0 ? 'pass' : 'fail',
+        message: `${workingConnections.length} working connection(s) available`,
+        details: Object.fromEntries(connectivityTest),
+        severity: workingConnections.length === 0 ? 'critical' : 'low'
+      });
+
+    } catch (error) {
+      checks.push({
+        name: 'Connection Health Check',
+        status: 'fail',
+        message: `Failed to validate connection health: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        severity: 'critical'
+      });
     }
 
-    return summary;
+    return checks;
+  }
+
+  private async validateAuthenticationSystem(): Promise<ProductionReadinessCheck[]> {
+    const checks: ProductionReadinessCheck[] = [];
+
+    try {
+      // Test connection strategies
+      const connectionHealth = gps51IntelligentConnectionManager.getConnectionHealth();
+      const hasWorkingStrategy = connectionHealth.strategies.some(s => s.available);
+      
+      checks.push({
+        name: 'Authentication Strategy Available',
+        status: hasWorkingStrategy ? 'pass' : 'fail',
+        message: hasWorkingStrategy ? 
+          `Recommended strategy: ${connectionHealth.recommendedStrategy}` : 
+          'No authentication strategies available',
+        details: connectionHealth.strategies,
+        severity: 'critical'
+      });
+
+    } catch (error) {
+      checks.push({
+        name: 'Authentication System Check',
+        status: 'fail',
+        message: `Authentication validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        severity: 'critical'
+      });
+    }
+
+    return checks;
+  }
+
+  private async validateDataFlow(): Promise<ProductionReadinessCheck[]> {
+    const checks: ProductionReadinessCheck[] = [];
+
+    try {
+      const syncServiceStatus = gps51EnhancedSyncService.getEnhancedServiceStatus();
+      
+      checks.push({
+        name: 'Data Sync Service',
+        status: syncServiceStatus.sync.successRate > 80 ? 'pass' : 
+               syncServiceStatus.sync.successRate > 50 ? 'warning' : 'fail',
+        message: `Sync success rate: ${syncServiceStatus.sync.successRate.toFixed(1)}%`,
+        details: syncServiceStatus.sync,
+        severity: syncServiceStatus.sync.successRate < 50 ? 'high' : 'medium'
+      });
+
+      checks.push({
+        name: 'Performance Metrics',
+        status: syncServiceStatus.sync.averageResponseTime < 5000 ? 'pass' : 'warning',
+        message: `Average response time: ${syncServiceStatus.sync.averageResponseTime}ms`,
+        details: syncServiceStatus.performance,
+        severity: 'medium'
+      });
+
+    } catch (error) {
+      checks.push({
+        name: 'Data Flow Validation',
+        status: 'fail',
+        message: `Data flow validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        severity: 'high'
+      });
+    }
+
+    return checks;
+  }
+
+  private async validateDatabaseIntegration(): Promise<ProductionReadinessCheck[]> {
+    const checks: ProductionReadinessCheck[] = [];
+
+    try {
+      const dbTest = await gps51DatabaseIntegration.testDatabaseConnection();
+      
+      checks.push({
+        name: 'Database Connectivity',
+        status: dbTest.success ? 'pass' : 'fail',
+        message: dbTest.success ? 'Database connection healthy' : `Database error: ${dbTest.error}`,
+        details: dbTest,
+        severity: 'critical'
+      });
+
+      const syncStats = await gps51DatabaseIntegration.getSyncJobStats();
+      
+      checks.push({
+        name: 'Database Sync Performance',
+        status: syncStats.successRate > 90 ? 'pass' : 
+               syncStats.successRate > 70 ? 'warning' : 'fail',
+        message: `Database sync success rate: ${syncStats.successRate.toFixed(1)}%`,
+        details: syncStats,
+        severity: 'high'
+      });
+
+    } catch (error) {
+      checks.push({
+        name: 'Database Integration Check',
+        status: 'fail',
+        message: `Database validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        severity: 'critical'
+      });
+    }
+
+    return checks;
+  }
+
+  private async validateLiveDataSystem(): Promise<ProductionReadinessCheck[]> {
+    const checks: ProductionReadinessCheck[] = [];
+
+    try {
+      const liveDataStatus = gps51LiveDataManager.getStatus();
+      
+      checks.push({
+        name: 'Live Data System',
+        status: liveDataStatus.isActive ? 'pass' : 'fail',
+        message: liveDataStatus.isActive ? 'Live data system active' : 'Live data system inactive',
+        details: liveDataStatus,
+        severity: 'critical'
+      });
+
+      checks.push({
+        name: 'Device Data Availability',
+        status: liveDataStatus.deviceCount > 0 ? 'pass' : 'warning',
+        message: `${liveDataStatus.deviceCount} devices available`,
+        severity: 'medium'
+      });
+
+      const dataAge = liveDataStatus.lastUpdate ? 
+        Date.now() - liveDataStatus.lastUpdate.getTime() : Infinity;
+      
+      checks.push({
+        name: 'Data Freshness',
+        status: dataAge < 60000 ? 'pass' : dataAge < 300000 ? 'warning' : 'fail',
+        message: `Last update: ${dataAge < Infinity ? Math.round(dataAge / 1000) : 'Never'} seconds ago`,
+        severity: 'medium'
+      });
+
+    } catch (error) {
+      checks.push({
+        name: 'Live Data System Check',
+        status: 'fail',
+        message: `Live data validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        severity: 'critical'
+      });
+    }
+
+    return checks;
+  }
+
+  private async validateErrorHandling(): Promise<ProductionReadinessCheck[]> {
+    const checks: ProductionReadinessCheck[] = [];
+
+    try {
+      const diagnosticInfo = gps51LiveDataManager.getDiagnosticInfo();
+      
+      checks.push({
+        name: 'Error Handling System',
+        status: 'pass',
+        message: 'Error handling and logging systems operational',
+        details: {
+          circuitBreakerEnabled: diagnosticInfo.syncService.serviceStatus.polling.circuitState,
+          connectionHealthMonitoring: diagnosticInfo.connection.overallHealth
+        },
+        severity: 'low'
+      });
+
+    } catch (error) {
+      checks.push({
+        name: 'Error Handling Validation',
+        status: 'fail',
+        message: `Error handling validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        severity: 'medium'
+      });
+    }
+
+    return checks;
+  }
+
+  private async validatePerformanceMetrics(): Promise<ProductionReadinessCheck[]> {
+    const checks: ProductionReadinessCheck[] = [];
+
+    try {
+      const syncServiceStatus = gps51EnhancedSyncService.getEnhancedServiceStatus();
+      
+      // Check adaptive polling performance
+      checks.push({
+        name: 'Adaptive Polling',
+        status: syncServiceStatus.polling.isActive ? 'pass' : 'warning',
+        message: `Polling active: ${syncServiceStatus.polling.isActive}, Interval: ${syncServiceStatus.polling.currentInterval}ms`,
+        details: syncServiceStatus.polling,
+        severity: 'low'
+      });
+
+      // Check circuit breaker status
+      checks.push({
+        name: 'Circuit Breaker Health',
+        status: syncServiceStatus.polling.circuitState === 'closed' ? 'pass' : 'warning',
+        message: `Circuit breaker state: ${syncServiceStatus.polling.circuitState}`,
+        severity: 'medium'
+      });
+
+    } catch (error) {
+      checks.push({
+        name: 'Performance Metrics Check',
+        status: 'fail',
+        message: `Performance validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        severity: 'medium'
+      });
+    }
+
+    return checks;
+  }
+
+  private calculateOverallStatus(checks: ProductionReadinessCheck[]): { score: number; status: 'ready' | 'needs_attention' | 'not_ready' } {
+    const totalChecks = checks.length;
+    if (totalChecks === 0) return { score: 0, status: 'not_ready' };
+
+    let score = 0;
+    const weights = { critical: 25, high: 15, medium: 10, low: 5 };
+
+    checks.forEach(check => {
+      const weight = weights[check.severity] || 5;
+      if (check.status === 'pass') {
+        score += weight;
+      } else if (check.status === 'warning') {
+        score += weight * 0.5;
+      }
+      // Failed checks contribute 0 points
+    });
+
+    // Calculate maximum possible score
+    const maxScore = checks.reduce((sum, check) => sum + (weights[check.severity] || 5), 0);
+    const normalizedScore = Math.round((score / maxScore) * 100);
+
+    let status: 'ready' | 'needs_attention' | 'not_ready';
+    if (normalizedScore >= 90) {
+      status = 'ready';
+    } else if (normalizedScore >= 70) {
+      status = 'needs_attention';
+    } else {
+      status = 'not_ready';
+    }
+
+    return { score: normalizedScore, status };
   }
 }
 

@@ -1,6 +1,7 @@
-import { gps51AuthenticationService } from './GPS51AuthenticationService';
+import { gps51IntelligentConnectionManager } from './GPS51IntelligentConnectionManager';
 import { GPS51CredentialsManager } from '../gp51/GPS51CredentialsManager';
 import { gps51LiveDataManager } from './GPS51LiveDataManager';
+import { gps51ProductionValidator } from './GPS51ProductionValidator';
 
 export class GPS51StartupService {
   private static instance: GPS51StartupService;
@@ -20,7 +21,7 @@ export class GPS51StartupService {
     }
 
     try {
-      console.log('GPS51StartupService: Initializing authentication...');
+      console.log('GPS51StartupService: Initializing production-ready authentication system...');
       
       const credentialsManager = new GPS51CredentialsManager();
       const savedCredentials = await credentialsManager.getCredentials();
@@ -30,21 +31,21 @@ export class GPS51StartupService {
         return false;
       }
 
-      console.log('GPS51StartupService: Found saved credentials, attempting authentication');
+      console.log('GPS51StartupService: Using intelligent connection manager for authentication...');
       
-      // Use the enhanced authentication service
-      const authResult = await gps51AuthenticationService.authenticate(savedCredentials);
+      // Use intelligent connection manager for robust authentication
+      const connectionResult = await gps51IntelligentConnectionManager.connectWithBestStrategy(savedCredentials);
       
-      if (authResult.success && authResult.token) {
-        console.log('GPS51StartupService: Authentication successful');
+      if (connectionResult.success && connectionResult.token) {
+        console.log('GPS51StartupService: Authentication successful via', connectionResult.strategy);
         this.isInitialized = true;
         this.systemInitialized = true;
         
         // Store authentication token
-        localStorage.setItem('gps51_auth_token', authResult.token);
+        localStorage.setItem('gps51_auth_token', connectionResult.token);
         
         // Start live data system after successful authentication
-        console.log('GPS51StartupService: Initializing live data system...');
+        console.log('GPS51StartupService: Initializing production-ready live data system...');
         
         try {
           const initialized = await gps51LiveDataManager.initializeLiveDataSystem();
@@ -79,7 +80,7 @@ export class GPS51StartupService {
         
         return true;
       } else {
-        console.log('GPS51StartupService: Authentication failed with saved credentials:', authResult.error);
+        console.log('GPS51StartupService: Authentication failed:', connectionResult.error);
         return false;
       }
     } catch (error) {
@@ -111,12 +112,17 @@ export class GPS51StartupService {
     return await this.initializeAuthentication();
   }
 
-  getInitializationStatus(): { initialized: boolean; authenticated: boolean; liveDataActive: boolean } {
+  getInitializationStatus(): { initialized: boolean; authenticated: boolean; liveDataActive: boolean; productionReady: boolean } {
     return {
       initialized: this.isInitialized,
       authenticated: this.isAuthenticated(),
-      liveDataActive: this.isInitialized && this.isAuthenticated()
+      liveDataActive: this.isInitialized && this.isAuthenticated(),
+      productionReady: this.systemInitialized
     };
+  }
+
+  async getProductionReadinessReport() {
+    return await gps51ProductionValidator.runCompleteValidation();
   }
 
   async restart(): Promise<boolean> {
