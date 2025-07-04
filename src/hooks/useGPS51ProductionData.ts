@@ -106,7 +106,7 @@ export function useGPS51ProductionData(): {
     };
   }, [toast]);
 
-  // Listen for data updates
+  // Listen for data updates and authentication events
   useEffect(() => {
     const handleDataUpdate = (event: CustomEvent) => {
       const data = event.detail;
@@ -133,14 +133,46 @@ export function useGPS51ProductionData(): {
       }));
     };
 
+    const handleAuthenticationError = (event: CustomEvent) => {
+      const errorData = event.detail;
+      console.error('useGPS51ProductionData: Authentication error received:', errorData);
+      
+      setState(prev => ({
+        ...prev,
+        isReady: false,
+        errors: [...prev.errors, 'Authentication error: ' + errorData.error]
+      }));
+
+      if (errorData.requiresReauth) {
+        toast({
+          title: "Authentication Lost",
+          description: "Please re-authenticate in the settings panel to restore live data.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    const handleAuthenticationSuccess = () => {
+      console.log('useGPS51ProductionData: Authentication success received');
+      setState(prev => ({
+        ...prev,
+        isReady: true,
+        errors: []
+      }));
+    };
+
     window.addEventListener('gps51-dashboard-data-update', handleDataUpdate as EventListener);
     window.addEventListener('gps51-health-update', handleHealthUpdate as EventListener);
+    window.addEventListener('gps51-authentication-error', handleAuthenticationError as EventListener);
+    window.addEventListener('gps51-authentication-success', handleAuthenticationSuccess as EventListener);
 
     return () => {
       window.removeEventListener('gps51-dashboard-data-update', handleDataUpdate as EventListener);
       window.removeEventListener('gps51-health-update', handleHealthUpdate as EventListener);
+      window.removeEventListener('gps51-authentication-error', handleAuthenticationError as EventListener);
+      window.removeEventListener('gps51-authentication-success', handleAuthenticationSuccess as EventListener);
     };
-  }, []);
+  }, [toast]);
 
   // Manual refresh action
   const refresh = useCallback(async () => {

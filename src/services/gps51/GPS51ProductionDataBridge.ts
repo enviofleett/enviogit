@@ -1,6 +1,7 @@
 import { gps51UnifiedAuthService } from './GPS51UnifiedAuthService';
 import { gps51LiveDataManager } from './GPS51LiveDataManager';
 import { gps51ProductionHealthMonitor } from './GPS51ProductionHealthMonitor';
+import { gps51Client } from './GPS51Client';
 
 /**
  * Production-grade data bridge to ensure reliable dashboard data flow
@@ -82,7 +83,7 @@ export class GPS51ProductionDataBridge {
   }
 
   /**
-   * Trigger initial data load with retries
+   * Trigger initial data load with retries and authentication recovery
    */
   private async triggerInitialDataLoad(): Promise<void> {
     const maxRetries = 3;
@@ -91,6 +92,15 @@ export class GPS51ProductionDataBridge {
     while (attempt < maxRetries) {
       try {
         console.log(`GPS51ProductionDataBridge: Initial data load attempt ${attempt + 1}/${maxRetries}`);
+        
+        // CRITICAL FIX: Check authentication before data load
+        if (!gps51Client.isAuthenticated()) {
+          console.warn('GPS51ProductionDataBridge: Client not authenticated, attempting re-authentication...');
+          const authResult = await gps51UnifiedAuthService.refreshAuthentication();
+          if (!authResult) {
+            throw new Error('Authentication required but refresh failed');
+          }
+        }
         
         const data = await gps51LiveDataManager.forceLiveDataSync();
         
@@ -106,6 +116,12 @@ export class GPS51ProductionDataBridge {
         }
       } catch (error) {
         console.error(`GPS51ProductionDataBridge: Initial data load attempt ${attempt + 1} failed:`, error);
+        
+        // Handle authentication errors specifically
+        if (error.message?.includes('Not authenticated') || error.message?.includes('authentication')) {
+          console.log('GPS51ProductionDataBridge: Authentication error detected, attempting recovery...');
+          await this.triggerAuthenticationRecovery();
+        }
       }
       
       attempt++;
@@ -179,15 +195,43 @@ export class GPS51ProductionDataBridge {
   }
 
   /**
-   * Trigger manual data refresh
+   * Trigger manual data refresh with authentication recovery
    */
   async triggerDataRefresh(): Promise<void> {
     try {
       console.log('GPS51ProductionDataBridge: Manual data refresh triggered...');
+      
+      // CRITICAL FIX: Verify authentication before data refresh
+      if (!gps51Client.isAuthenticated()) {
+        console.warn('GPS51ProductionDataBridge: Client not authenticated during refresh, attempting recovery...');
+        const authResult = await gps51UnifiedAuthService.refreshAuthentication();
+        if (!authResult) {
+          throw new Error('Authentication recovery failed during refresh');
+        }
+      }
+      
       const data = await gps51LiveDataManager.forceLiveDataSync();
       this.updateDashboardData(data);
+      
+      console.log('GPS51ProductionDataBridge: Manual data refresh successful:', {
+        devices: data.devices?.length || 0,
+        positions: data.positions?.length || 0
+      });
     } catch (error) {
       console.error('GPS51ProductionDataBridge: Manual data refresh failed:', error);
+      
+      // Handle authentication errors during refresh
+      if (error.message?.includes('Not authenticated') || error.message?.includes('authentication')) {
+        console.log('GPS51ProductionDataBridge: Authentication error during refresh, triggering recovery...');
+        await this.triggerAuthenticationRecovery();
+        
+        // Dispatch error event for UI to handle
+        window.dispatchEvent(new CustomEvent('gps51-authentication-error', {
+          detail: { error: error.message, requiresReauth: true }
+        }));
+      }
+      
+      throw error;
     }
   }
 

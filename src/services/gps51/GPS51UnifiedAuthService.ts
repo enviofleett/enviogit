@@ -1,6 +1,6 @@
 import { GPS51CredentialsManager, GPS51Credentials } from '../gp51/GPS51CredentialsManager';
 import { gps51IntelligentConnectionManager } from './GPS51IntelligentConnectionManager';
-import { GPS51Client } from './GPS51Client';
+import { GPS51Client, gps51Client } from './GPS51Client';
 
 /**
  * Unified GPS51 Authentication Service
@@ -16,7 +16,7 @@ export class GPS51UnifiedAuthService {
 
   constructor() {
     this.credentialsManager = new GPS51CredentialsManager();
-    this.client = new GPS51Client();
+    this.client = gps51Client; // Use shared instance
   }
 
   static getInstance(): GPS51UnifiedAuthService {
@@ -76,13 +76,18 @@ export class GPS51UnifiedAuthService {
         localStorage.setItem('gps51_auth_token', connectionResult.token);
         localStorage.setItem('gps51_connection_strategy', connectionResult.strategy);
 
-        // Initialize GPS51Client with our token
-        if (this.currentUser) {
-          // Set the client's internal state
-          (this.client as any).token = this.currentToken;
-          (this.client as any).user = this.currentUser;
-          (this.client as any).tokenExpiry = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
-        }
+        // CRITICAL FIX: Always update the shared GPS51Client instance
+        console.log('GPS51UnifiedAuthService: Updating shared client with authentication state');
+        (this.client as any).token = this.currentToken;
+        (this.client as any).user = connectionResult.user || { username: authCredentials.username };
+        (this.client as any).tokenExpiry = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
+        
+        console.log('GPS51UnifiedAuthService: Shared client state updated:', {
+          hasToken: !!(this.client as any).token,
+          tokenLength: ((this.client as any).token || '').length,
+          hasUser: !!(this.client as any).user,
+          isAuthenticated: this.client.isAuthenticated()
+        });
 
         // Dispatch authentication success event
         window.dispatchEvent(new CustomEvent('gps51-authentication-success', {
