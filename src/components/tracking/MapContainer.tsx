@@ -3,8 +3,10 @@ import { Map as MapTilerMap, Marker, NavigationControl, GeolocateControl } from 
 import '@maptiler/sdk/dist/maptiler-sdk.css';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MapPin, Satellite, RotateCcw } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { MapPin, Satellite, RotateCcw, AlertTriangle } from 'lucide-react';
 import type { GPS51Device } from '@/services/gps51/direct';
+import { maptilerService } from '@/services/maptiler/MaptilerService';
 
 interface MapContainerProps {
   vehicles: GPS51Device[];
@@ -18,29 +20,60 @@ export const MapContainer = ({ vehicles, selectedVehicle, onVehicleSelect }: Map
   const markersRef = useRef<Map<string, Marker>>(new Map());
   const [mapStyle, setMapStyle] = useState<'streets' | 'satellite'>('streets');
   const [isLoading, setIsLoading] = useState(true);
-
-  // Get Maptiler key from environment or use a default demo key
-  const MAPTILER_API_KEY = 'demo'; // TODO: Replace with actual API key from Supabase secrets
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [hasApiKey, setHasApiKey] = useState(false);
 
   useEffect(() => {
+    initializeMap();
+  }, []);
+
+  const initializeMap = async () => {
     if (!mapContainer.current || map.current) return;
 
-    // Initialize map
-    map.current = new MapTilerMap({
-      container: mapContainer.current,
-      style: `https://api.maptiler.com/maps/${mapStyle}/style.json?key=${MAPTILER_API_KEY}`,
-      center: [0, 0], // Will be updated based on vehicles
-      zoom: 10,
-    });
+    try {
+      // Get style URL with API key
+      const styleUrl = await maptilerService.getStyleUrl(mapStyle);
+      
+      if (!styleUrl) {
+        setMapError('Maptiler API key not configured. Please configure it in Settings → Maps.');
+        setIsLoading(false);
+        setHasApiKey(false);
+        return;
+      }
 
-    // Add controls
-    map.current.addControl(new NavigationControl(), 'top-right');
-    map.current.addControl(new GeolocateControl({}), 'top-right');
+      setHasApiKey(true);
+      setMapError(null);
 
-    map.current.on('load', () => {
+      // Initialize map
+      map.current = new MapTilerMap({
+        container: mapContainer.current,
+        style: styleUrl,
+        center: [0, 0], // Will be updated based on vehicles
+        zoom: 10,
+      });
+
+      // Add controls
+      map.current.addControl(new NavigationControl(), 'top-right');
+      map.current.addControl(new GeolocateControl({}), 'top-right');
+
+      map.current.on('load', () => {
+        setIsLoading(false);
+        fitMapToVehicles();
+        // Log usage for monitoring
+        maptilerService.logUsage('map_initialization');
+      });
+
+      map.current.on('error', (e) => {
+        console.error('Map error:', e);
+        setMapError('Failed to load map. Please check your Maptiler configuration.');
+        setIsLoading(false);
+      });
+
+    } catch (error) {
+      console.error('Map initialization error:', error);
+      setMapError('Failed to initialize map. Please check your internet connection.');
       setIsLoading(false);
-      fitMapToVehicles();
-    });
+    }
 
     return () => {
       if (map.current) {
@@ -48,14 +81,26 @@ export const MapContainer = ({ vehicles, selectedVehicle, onVehicleSelect }: Map
         map.current = null;
       }
     };
-  }, []);
+  };
 
   // Update map style
   useEffect(() => {
-    if (map.current) {
-      map.current.setStyle(`https://api.maptiler.com/maps/${mapStyle}/style.json?key=${MAPTILER_API_KEY}`);
-    }
+    updateMapStyle();
   }, [mapStyle]);
+
+  const updateMapStyle = async () => {
+    if (!map.current || !hasApiKey) return;
+
+    try {
+      const styleUrl = await maptilerService.getStyleUrl(mapStyle);
+      if (styleUrl) {
+        map.current.setStyle(styleUrl);
+        maptilerService.logUsage('style_change');
+      }
+    } catch (error) {
+      console.error('Failed to update map style:', error);
+    }
+  };
 
   // Update vehicle markers
   useEffect(() => {
@@ -236,6 +281,18 @@ export const MapContainer = ({ vehicles, selectedVehicle, onVehicleSelect }: Map
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
             <p className="text-sm text-muted-foreground">Loading map...</p>
           </div>
+        </div>
+      )}
+
+      {/* Error Overlay */}
+      {mapError && (
+        <div className="absolute inset-0 bg-background/95 flex items-center justify-center p-4">
+          <Alert variant="destructive" className="max-w-md">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="text-center">
+              {mapError}
+            </AlertDescription>
+          </Alert>
         </div>
       )}
 
