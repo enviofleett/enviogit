@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { useEffect } from "react";
 import Sidebar from "./components/layout/Sidebar";
 import Index from "./pages/Index";
+import TrackingPage from "./pages/TrackingPage";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import { gps51StartupService } from "./services/gps51/GPS51StartupService";
@@ -57,7 +58,7 @@ const App = () => {
             <main className="flex-1 overflow-auto">
               <Routes>
                 <Route path="/" element={<Index />} />
-                <Route path="/tracking" element={<Index />} />
+                <Route path="/tracking" element={<TrackingPage />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
