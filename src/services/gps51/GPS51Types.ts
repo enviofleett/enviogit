@@ -82,6 +82,14 @@ export interface GPS51ApiResponse {
   groups?: GPS51Group[];
   records?: GPS51Position[];
   lastquerypositiontime?: number;
+  // Command and geofence responses
+  id?: string;
+  geofenceid?: string;
+  // Trip data responses
+  trips?: any[];
+  // Video streaming responses
+  streamurl?: string;
+  url?: string;
 }
 
 export interface GPS51Group {
