@@ -1,6 +1,7 @@
 import { GPS51Client } from './GPS51Client';
 import { GPS51TimeManager } from './GPS51TimeManager';
 import { GPS51Device, GPS51Position } from './types';
+import { GPS51TimestampUtils } from './GPS51TimestampUtils';
 
 /**
  * Enhanced live data retrieval with robust error handling and device activity monitoring
@@ -82,7 +83,7 @@ export class GPS51LiveDataEnhancer {
       for (const device of devices) {
         const lastActiveTimeRaw = device.lastactivetime || 0;
         // CRITICAL FIX: GPS51 API already returns timestamps in milliseconds, no conversion needed
-        const lastActiveTime = this.validateAndNormalizeTimestamp(lastActiveTimeRaw);
+        const lastActiveTime = GPS51TimestampUtils.validateAndNormalizeTimestamp(lastActiveTimeRaw);
         
         const isOnline = lastActiveTime > fourHoursAgo; // Expanded from 30 minutes to 4 hours
         const isRecentlyActive = lastActiveTime > thirtyMinutesAgo;
@@ -394,24 +395,6 @@ export class GPS51LiveDataEnhancer {
     console.log('GPS51LiveDataEnhancer: Query state reset');
   }
 
-  /**
-   * Validate and normalize timestamp - GPS51 API returns timestamps in milliseconds
-   */
-  private validateAndNormalizeTimestamp(timestamp: number): number {
-    if (timestamp === 0) return 0;
-    
-    // GPS51 API already returns timestamps in milliseconds - no conversion needed
-    // Just validate it's a reasonable timestamp (after year 2020, before year 2100)
-    const year2020 = 1577836800000; // Jan 1, 2020 in milliseconds
-    const year2100 = 4102444800000; // Jan 1, 2100 in milliseconds
-    
-    if (timestamp < year2020 || timestamp > year2100) {
-      console.warn(`GPS51LiveDataEnhancer: Suspicious timestamp detected: ${timestamp} (${new Date(timestamp).toISOString()})`);
-      // Don't convert, just return as-is but log the warning
-    }
-    
-    return timestamp;
-  }
 
   /**
    * Get current synchronization status

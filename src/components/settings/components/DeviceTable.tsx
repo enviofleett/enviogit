@@ -5,6 +5,7 @@ import { RefreshCw, MapPin, Clock } from 'lucide-react';
 import { GPS51Device } from '@/services/gps51/GPS51Client';
 import { GPS51Position } from '@/services/gps51/types';
 import { DeviceStatusBadge } from './DeviceStatusBadge';
+import { GPS51TimestampUtils } from '@/services/gps51/GPS51TimestampUtils';
 
 interface EnhancedDeviceData extends GPS51Device {
   lastPosition?: GPS51Position;
@@ -23,50 +24,8 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({ devices, loading, sear
     device.devicetype.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Helper function to validate and normalize timestamps (same logic as GPS51LiveDataEnhancer)
-  const validateAndNormalizeTimestamp = (timestamp: number): number => {
-    if (timestamp === 0) return 0;
-    
-    // If timestamp is in seconds (roughly before year 2100), convert to milliseconds
-    if (timestamp < 4000000000) {
-      return timestamp * 1000;
-    }
-    
-    // Already in milliseconds
-    return timestamp;
-  };
-
   const formatLastActiveTime = (timestamp: number) => {
-    if (!timestamp) return 'Never';
-    
-    const normalizedTimestamp = validateAndNormalizeTimestamp(timestamp);
-    const now = Date.now();
-    const diffMs = now - normalizedTimestamp;
-    const diffMinutes = Math.floor(diffMs / (60 * 1000));
-    const diffHours = Math.floor(diffMs / (60 * 60 * 1000));
-    const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-    
-    // Enhanced relative time formatting
-    if (diffMinutes < 1) return 'Just now';
-    if (diffMinutes < 60) return `${diffMinutes}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    
-    // For older dates, show formatted date with time
-    const date = new Date(normalizedTimestamp);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    
-    // Check if it's today or yesterday
-    if (date.toDateString() === today.toDateString()) {
-      return `Today ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      return `Yesterday ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    }
-    
-    // For older dates, show full date and time
-    return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    return GPS51TimestampUtils.formatRelativeTime(timestamp);
   };
 
   const formatLocation = (lat?: number, lon?: number) => {
@@ -75,25 +34,7 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({ devices, loading, sear
   };
 
   const formatLocationTime = (timestamp?: number) => {
-    if (!timestamp) return '-';
-    const normalizedTimestamp = validateAndNormalizeTimestamp(timestamp);
-    const date = new Date(normalizedTimestamp);
-    const now = Date.now();
-    const diffMs = now - normalizedTimestamp;
-    const diffMinutes = Math.floor(diffMs / (60 * 1000));
-    
-    // Show relative time for recent updates
-    if (diffMinutes < 60) {
-      return diffMinutes < 1 ? 'Just now' : `${diffMinutes}m ago`;
-    }
-    
-    // Show time for today, date + time for older
-    const today = new Date();
-    if (date.toDateString() === today.toDateString()) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-    
-    return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    return GPS51TimestampUtils.formatLocationTime(timestamp);
   };
 
   return (
