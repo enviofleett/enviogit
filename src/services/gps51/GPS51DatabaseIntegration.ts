@@ -103,11 +103,11 @@ export class GPS51DatabaseIntegration {
         notes: `Last active: ${device.lastactivetime ? new Date(device.lastactivetime).toISOString() : 'Unknown'}`
       }));
 
-      // Upsert vehicles (insert or update based on gps51_device_id)
+      // Upsert vehicles with proper conflict resolution
       const { data, error } = await supabase
         .from('vehicles')
         .upsert(vehicleData, {
-          onConflict: 'gps51_device_id',
+          onConflict: 'license_plate',
           ignoreDuplicates: false
         })
         .select();

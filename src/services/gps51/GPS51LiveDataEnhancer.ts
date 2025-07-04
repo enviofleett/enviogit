@@ -36,14 +36,14 @@ export class GPS51LiveDataEnhancer {
       
       const devices = await this.client.getDeviceList();
       const now = GPS51TimeManager.getCurrentUtcTimestamp();
-      const twentyFourHoursAgo = now - (24 * 60 * 60 * 1000); // 24 hours - more realistic for GPS devices
-      const twelveHoursAgo = now - (12 * 60 * 60 * 1000); // 12 hours fallback
+      const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000); // 7 days - realistic for GPS fleet devices
+      const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000); // 30 days fallback
       const thirtyMinutesAgo = now - (30 * 60 * 1000); // 30 minutes for recent activity
 
       console.log('GPS51LiveDataEnhancer: Time thresholds for device activity:', {
         currentTime: new Date(now).toISOString(),
-        twentyFourHoursAgo: new Date(twentyFourHoursAgo).toISOString(),
-        twelveHoursAgo: new Date(twelveHoursAgo).toISOString(),
+        sevenDaysAgo: new Date(sevenDaysAgo).toISOString(),
+        thirtyDaysAgo: new Date(thirtyDaysAgo).toISOString(),
         totalDevices: devices.length
       });
 
@@ -67,7 +67,7 @@ export class GPS51LiveDataEnhancer {
         // CRITICAL FIX: GPS51 API already returns timestamps in milliseconds, no conversion needed
         const lastActiveTime = GPS51TimestampUtils.validateAndNormalizeTimestamp(lastActiveTimeRaw);
         
-        const isOnline = lastActiveTime > twentyFourHoursAgo; // 24 hours - realistic for GPS fleet devices
+        const isOnline = lastActiveTime > sevenDaysAgo; // 7 days - realistic for GPS fleet devices
         const isRecentlyActive = lastActiveTime > thirtyMinutesAgo;
         this.deviceActivityCache.set(device.deviceid, {
           lastActive: lastActiveTime,
@@ -94,7 +94,7 @@ export class GPS51LiveDataEnhancer {
             isRecentlyActive,
             minutesSinceLastActive: lastActiveTime ? Math.floor((now - lastActiveTime) / (60 * 1000)) : 'N/A',
             thirtyMinutesAgo,
-            comparisonDebug: `${lastActiveTime} > ${twentyFourHoursAgo} = ${isOnline}`
+            comparisonDebug: `${lastActiveTime} > ${sevenDaysAgo} = ${isOnline}`
           });
         }
       }
@@ -141,7 +141,7 @@ export class GPS51LiveDataEnhancer {
       
       // Define time thresholds for fallback strategies
       const now = GPS51TimeManager.getCurrentUtcTimestamp();
-      const twelveHoursAgo = now - (12 * 60 * 60 * 1000);
+      const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
 
       // Filter to only query online devices
       const onlineDeviceIds = deviceIds.filter(deviceId => {
@@ -165,19 +165,19 @@ export class GPS51LiveDataEnhancer {
       if (onlineDeviceIds.length === 0) {
         console.warn('GPS51LiveDataEnhancer: No online devices found, trying progressive fallback strategy...');
         
-        // Progressive fallback: Try different strategies
+        // Progressive fallback: Try different strategies with expanded thresholds
         const fallbackStrategies = [
-          // Strategy 1: Try 12-hour threshold (more lenient)
+          // Strategy 1: Try 30-day threshold (very lenient for fleet devices)
           {
-            name: 'Recent12Hours',
+            name: 'Recent30Days',
             devices: deviceIds
               .map(id => ({ id, activity: this.deviceActivityCache.get(id) }))
-              .filter(d => d.activity?.lastActive && d.activity.lastActive > twelveHoursAgo)
+              .filter(d => d.activity?.lastActive && d.activity.lastActive > thirtyDaysAgo)
               .sort((a, b) => (b.activity?.lastActive || 0) - (a.activity?.lastActive || 0))
-              .slice(0, 30)
+              .slice(0, 100)
               .map(d => d.id)
           },
-          // Strategy 2: Top 50 most recently active devices
+          // Strategy 2: Top 50 most recently active devices (any activity)
           {
             name: 'Top50Active',
             devices: deviceIds
@@ -187,10 +187,10 @@ export class GPS51LiveDataEnhancer {
               .slice(0, 50)
               .map(d => d.id)
           },
-          // Strategy 3: Sample devices to ensure we always query something
+          // Strategy 3: Smart device rotation - always select top devices
           {
-            name: 'DeviceSample',
-            devices: deviceIds.slice(0, 20)
+            name: 'SmartRotation',
+            devices: deviceIds.slice(0, 50)
           }
         ];
         
