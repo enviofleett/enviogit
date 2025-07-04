@@ -35,7 +35,7 @@ export const MapContainer = ({ vehicles, selectedVehicle, onVehicleSelect }: Map
 
     // Add controls
     map.current.addControl(new NavigationControl(), 'top-right');
-    map.current.addControl(new GeolocateControl(), 'top-right');
+    map.current.addControl(new GeolocateControl({}), 'top-right');
 
     map.current.on('load', () => {
       setIsLoading(false);
