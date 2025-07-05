@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { ProductionReadyDashboard } from '@/components/dashboard/ProductionReadyDashboard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Activity, Wifi, Users, MapPin, Settings } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Activity, Wifi, Users, MapPin, Settings, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
 
 const Index = () => {
   const [systemStatus, setSystemStatus] = useState({
@@ -11,7 +12,9 @@ const Index = () => {
     isLiveDataActive: false,
     vehicleCount: 0,
     lastUpdate: null as Date | null,
-    hasError: false
+    hasError: false,
+    connectionHealth: 'unknown' as 'good' | 'degraded' | 'poor' | 'unknown',
+    productionReady: false
   });
 
   useEffect(() => {
@@ -89,13 +92,46 @@ const Index = () => {
 
   const getStatusBadge = () => {
     if (systemStatus.hasError) {
-      return <Badge variant="destructive">System Error</Badge>;
+      return (
+        <Badge variant="destructive" className="flex items-center gap-1">
+          <XCircle className="w-3 h-3" />
+          System Error
+        </Badge>
+      );
     } else if (systemStatus.isInitialized && systemStatus.isLiveDataActive) {
-      return <Badge className="bg-green-100 text-green-800">Live & Active</Badge>;
+      return (
+        <Badge className="bg-green-100 text-green-800 flex items-center gap-1">
+          <CheckCircle className="w-3 h-3" />
+          Production Ready
+        </Badge>
+      );
     } else if (systemStatus.isInitialized) {
-      return <Badge className="bg-blue-100 text-blue-800">Connected</Badge>;
+      return (
+        <Badge className="bg-blue-100 text-blue-800 flex items-center gap-1">
+          <Activity className="w-3 h-3" />
+          Connected
+        </Badge>
+      );
     } else {
-      return <Badge variant="secondary">Not Configured</Badge>;
+      return (
+        <Badge variant="secondary" className="flex items-center gap-1">
+          <Settings className="w-3 h-3" />
+          Ready to Configure
+        </Badge>
+      );
+    }
+  };
+
+  const getConnectionHealthBadge = () => {
+    switch (systemStatus.connectionHealth) {
+      case 'good':
+        return <Badge className="bg-green-100 text-green-800">Excellent</Badge>;
+      case 'degraded':
+        return <Badge className="bg-yellow-100 text-yellow-800">Degraded</Badge>;
+      case 'poor':
+        return <Badge variant="destructive">Poor</Badge>;
+      default:
+        return <Badge variant="outline">Unknown</Badge>;
     }
   };
 
@@ -136,10 +172,13 @@ const Index = () => {
             <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
               <Wifi className="h-8 w-8 text-green-600" />
               <div>
-                <p className="text-sm text-slate-600">Connection</p>
-                <p className="text-lg font-bold">
-                  {systemStatus.isInitialized ? 'Connected' : 'Not Configured'}
-                </p>
+                <p className="text-sm text-slate-600">Connection Health</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-lg font-bold">
+                    {systemStatus.connectionHealth.charAt(0).toUpperCase() + systemStatus.connectionHealth.slice(1)}
+                  </p>
+                  {getConnectionHealthBadge()}
+                </div>
               </div>
             </div>
             
@@ -179,17 +218,25 @@ const Index = () => {
                 Your GPS51 fleet management system is ready to be configured. 
                 Set up your GPS51 API credentials to start tracking vehicles in real-time.
               </p>
-              <div className="mt-4">
+              <div className="flex flex-col sm:flex-row gap-3 mt-4">
                 <Link 
                   to="/settings" 
-                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   <Settings className="w-4 h-4 mr-2" />
                   Configure GPS51
                 </Link>
+                <Link 
+                  to="/tracking" 
+                  className="inline-flex items-center justify-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  <MapPin className="w-4 h-4 mr-2" />
+                  View Tracking
+                </Link>
               </div>
-              <div className="mt-4 text-xs text-gray-400">
-                <p>System Status: Production Ready • Error Boundaries: Active • Fallbacks: Enabled</p>
+              <div className="mt-4 text-xs text-gray-400 space-y-1">
+                <p><strong>System Status:</strong> Production Ready • Error Boundaries: Active • Fallbacks: Enabled</p>
+                <p><strong>Features:</strong> Circuit Breaker Pattern • Adaptive Polling • Database Integration • Real-time Updates</p>
               </div>
             </div>
           </CardContent>

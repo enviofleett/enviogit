@@ -1,4 +1,4 @@
-import { GPS51Device, GPS51Position } from './types';
+import { GPS51Device, GPS51Position } from './GPS51Types';
 
 export interface DatabaseSyncResult {
   vehiclesUpserted: number;
