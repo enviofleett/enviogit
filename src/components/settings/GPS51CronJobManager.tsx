@@ -20,12 +20,14 @@ export const GPS51CronJobManager = () => {
     try {
       console.log('Fetching cron job status...');
       
-      // Get cron job status from the new function
-      const { data: cronData, error: cronError } = await supabase
-        .rpc('get_cron_jobs_status');
+      // Fallback to sync jobs table to get basic info
+      const { data: syncJobs, error: syncError } = await supabase
+        .from('gps51_sync_jobs')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-      if (cronError) {
-        console.error('Error fetching cron jobs:', cronError);
+      if (syncError) {
+        console.error('Error fetching sync jobs:', syncError);
         // Fallback to mock data
         setCronJobs([
           {
@@ -58,13 +60,17 @@ export const GPS51CronJobManager = () => {
           }
         ]);
       } else {
-        // Handle both array and JSON string responses
-        if (Array.isArray(cronData)) {
-          setCronJobs(cronData as unknown as CronJobStatus[]);
-        } else {
-          const parsedData = typeof cronData === 'string' ? JSON.parse(cronData) : cronData;
-          setCronJobs(Array.isArray(parsedData) ? parsedData as CronJobStatus[] : []);
-        }
+        // Transform sync jobs to cron job format
+        const transformedJobs = (syncJobs || []).map(job => ({
+          id: job.id,
+          jobname: job.job_type,
+          schedule: '0 */15 * * *', // Default schedule
+          active: job.status !== 'cancelled',
+          last_run: job.started_at,
+          next_run: null, // Will be calculated
+          status: job.status
+        }));
+        setCronJobs(transformedJobs);
       }
 
       // Get sync job logs

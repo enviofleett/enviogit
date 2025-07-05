@@ -107,12 +107,11 @@ export class GPS51EmailService {
             continue;
           }
 
-          // Send email through delivery service
           const deliveryResult = await this.deliveryService.sendEmail({
             to: recipient,
             subject: renderedContent.subject,
-            html: renderedContent.body,
-            priority: request.priority || 'normal'
+            content: renderedContent.body,
+            metadata: { priority: request.priority || 'normal' }
           });
 
           // Update email log with delivery status
@@ -121,7 +120,7 @@ export class GPS51EmailService {
             .update({
               delivery_status: deliveryResult.success ? 'sent' : 'failed',
               provider_used: deliveryResult.provider,
-              provider_response: deliveryResult.response,
+              provider_response: { messageId: deliveryResult.messageId },
               error_message: deliveryResult.error,
               sent_at: deliveryResult.success ? new Date().toISOString() : null
             })
@@ -379,8 +378,8 @@ export class GPS51EmailService {
           await this.sendAlertEmail({
             alert: event.data,
             recipients,
-            vehicleData: event.metadata?.vehicleData,
-            gps51Data: event.metadata?.gps51Data
+            vehicleData: event.metadata?.vehicleData || {},
+            gps51Data: event.metadata?.gps51Data || {}
           });
         }
       } catch (error) {
