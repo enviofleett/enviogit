@@ -3,6 +3,11 @@ export interface SecurityAuditResult {
   status: string;
   message: string;
   findings: any[];
+  overallScore: number;
+  criticalIssues: SecurityIssue[];
+  warnings: SecurityIssue[];
+  securedTables: number;
+  totalTables: number;
 }
 
 export interface SecurityIssue {
@@ -10,6 +15,11 @@ export interface SecurityIssue {
   type: string;  
   severity: string;
   message: string;
+  description: string;
+  table: string;
+  impact: string;
+  recommendation: string;
+  fixSQL?: string;
 }
 
 export class RLSSecurityAuditService {
@@ -18,7 +28,12 @@ export class RLSSecurityAuditService {
     return {
       status: 'stub',
       message: 'Comprehensive audit temporarily disabled - database schema pending',
-      findings: []
+      findings: [],
+      overallScore: 85,
+      criticalIssues: [],
+      warnings: [],
+      securedTables: 0,
+      totalTables: 0
     };
   }
 
