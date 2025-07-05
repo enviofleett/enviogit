@@ -13,7 +13,7 @@ export interface SecurityAuditResult {
 export interface SecurityIssue {
   id: string;
   type: string;  
-  severity: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
   message: string;
   description: string;
   table: string;
@@ -45,11 +45,9 @@ export class RLSSecurityAuditService {
     };
   }
 
-  async generateSecurityReport(): Promise<any> {
+  async generateSecurityReport(): Promise<string> {
     console.log('RLSSecurityAuditService: Security report generation temporarily disabled - database schema pending');
-    return {
-      report: 'Security report temporarily disabled - database schema pending'
-    };
+    return 'Security report temporarily disabled - database schema pending';
   }
 
   static async performFullAudit(): Promise<any> {
