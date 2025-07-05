@@ -427,6 +427,34 @@ export class GPS51Client {
     return !!(this.token && (!this.tokenExpiry || Date.now() < this.tokenExpiry));
   }
 
+  /**
+   * Set authentication state - used by unified auth service
+   */
+  setAuthenticationState(token: string, user?: GPS51User | null, expiryMs?: number): void {
+    this.token = token;
+    this.user = user || null;
+    this.tokenExpiry = expiryMs || (Date.now() + (GPS51_DEFAULTS.TOKEN_EXPIRY_HOURS * 60 * 60 * 1000));
+    
+    console.log('GPS51Client: Authentication state set:', {
+      hasToken: !!this.token,
+      tokenLength: this.token?.length || 0,
+      hasUser: !!this.user,
+      username: this.user?.username || 'none',
+      expiryTime: this.tokenExpiry ? new Date(this.tokenExpiry).toISOString() : 'none',
+      isAuthenticated: this.isAuthenticated()
+    });
+  }
+
+  /**
+   * Clear authentication state
+   */
+  clearAuthenticationState(): void {
+    this.token = null;
+    this.user = null;
+    this.tokenExpiry = null;
+    console.log('GPS51Client: Authentication state cleared');
+  }
+
   getUser(): GPS51User | null {
     return this.user;
   }

@@ -76,17 +76,18 @@ export class GPS51UnifiedAuthService {
         localStorage.setItem('gps51_auth_token', connectionResult.token);
         localStorage.setItem('gps51_connection_strategy', connectionResult.strategy);
 
-        // CRITICAL FIX: Always update the shared GPS51Client instance
-        console.log('GPS51UnifiedAuthService: Updating shared client with authentication state');
-        (this.client as any).token = this.currentToken;
-        (this.client as any).user = connectionResult.user || { username: authCredentials.username };
-        (this.client as any).tokenExpiry = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
+        // CRITICAL FIX: Use proper authentication state setter
+        console.log('GPS51UnifiedAuthService: Setting authentication state in shared client');
+        this.client.setAuthenticationState(
+          connectionResult.token,
+          connectionResult.user || null,
+          Date.now() + (24 * 60 * 60 * 1000) // 24 hours
+        );
         
-        console.log('GPS51UnifiedAuthService: Shared client state updated:', {
-          hasToken: !!(this.client as any).token,
-          tokenLength: ((this.client as any).token || '').length,
-          hasUser: !!(this.client as any).user,
-          isAuthenticated: this.client.isAuthenticated()
+        console.log('GPS51UnifiedAuthService: Shared client authentication status:', {
+          isAuthenticated: this.client.isAuthenticated(),
+          hasToken: !!this.client.getToken(),
+          hasUser: !!this.client.getUser()
         });
 
         // Dispatch authentication success event
@@ -225,7 +226,19 @@ export class GPS51UnifiedAuthService {
    * Check if currently authenticated
    */
   isCurrentlyAuthenticated(): boolean {
-    return this.isAuthenticated && !!this.currentToken;
+    // Check both internal state and shared client state
+    const internalAuth = this.isAuthenticated && !!this.currentToken;
+    const clientAuth = this.client.isAuthenticated();
+    
+    console.log('GPS51UnifiedAuthService: Authentication status check:', {
+      internalAuth,
+      clientAuth,
+      hasToken: !!this.currentToken,
+      tokenFromStorage: !!localStorage.getItem('gps51_auth_token'),
+      overall: internalAuth && clientAuth
+    });
+    
+    return internalAuth && clientAuth;
   }
 
   /**
@@ -281,8 +294,10 @@ export class GPS51UnifiedAuthService {
     localStorage.removeItem('gps51_auth_token');
     localStorage.removeItem('gps51_connection_strategy');
     
-    // Reset client state
-    this.client.logout();
+    // Clear shared client state
+    this.client.clearAuthenticationState();
+    
+    console.log('GPS51UnifiedAuthService: Authentication state cleared');
   }
 
   /**
@@ -292,25 +307,56 @@ export class GPS51UnifiedAuthService {
     try {
       console.log('GPS51UnifiedAuthService: Initializing authentication on startup...');
       
-      // Check for existing credentials
+      // Check for stored token first
+      const storedToken = localStorage.getItem('gps51_auth_token');
+      if (storedToken) {
+        console.log('GPS51UnifiedAuthService: Found stored token, attempting to restore session...');
+        
+        // Get credentials and try to restore session
+        const credentials = await this.credentialsManager.getCredentials();
+        if (credentials) {
+          // Set token in client first
+          this.client.setAuthenticationState(storedToken, null);
+          
+          // Test if the token is still valid by making a simple request
+          try {
+            await this.client.getDeviceList();
+            
+            // Token is valid, restore full auth state
+            this.isAuthenticated = true;
+            this.currentToken = storedToken;
+            this.currentUser = null; // Will be set properly after successful authentication
+            
+            console.log('GPS51UnifiedAuthService: Session restored successfully from stored token');
+            return true;
+          } catch (error) {
+            console.log('GPS51UnifiedAuthService: Stored token is invalid, will attempt fresh authentication');
+            this.clearAuthenticationState();
+          }
+        }
+      }
+      
+      // No valid stored token, attempt fresh authentication
       const credentials = await this.credentialsManager.getCredentials();
       if (!credentials) {
         console.log('GPS51UnifiedAuthService: No stored credentials found');
         return false;
       }
 
-      // Attempt authentication
+      // Attempt fresh authentication
+      console.log('GPS51UnifiedAuthService: Attempting fresh authentication...');
       const result = await this.authenticate(credentials);
       
       if (result.success) {
-        console.log('GPS51UnifiedAuthService: Startup authentication successful');
+        console.log('GPS51UnifiedAuthService: Fresh authentication successful');
         return true;
       } else {
-        console.warn('GPS51UnifiedAuthService: Startup authentication failed:', result.error);
+        console.error('GPS51UnifiedAuthService: Fresh authentication failed:', result.error);
         return false;
       }
     } catch (error) {
-      console.error('GPS51UnifiedAuthService: Startup authentication error:', error);
+      console.error('GPS51UnifiedAuthService: Authentication initialization failed:', error);
+      this.clearAuthenticationState();
       return false;
     }
   }
