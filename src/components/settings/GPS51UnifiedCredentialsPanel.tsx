@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,13 +13,18 @@ import {
   RefreshCw,
   Wifi,
   Shield,
-  TestTube
+  TestTube,
+  User,
+  Key,
+  Globe
 } from 'lucide-react';
 import { gps51UnifiedAuthService } from '@/services/gps51/GPS51UnifiedAuthService';
+import { GPS51Utils } from '@/services/gps51/GPS51Utils';
 
 export const GPS51UnifiedCredentialsPanel = () => {
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [isTestingAuth, setIsTestingAuth] = useState(false);
+  const [isLoadingCredentials, setIsLoadingCredentials] = useState(true);
   const [credentials, setCredentials] = useState({
     username: '',
     password: '',
@@ -27,7 +32,38 @@ export const GPS51UnifiedCredentialsPanel = () => {
   });
   const [connectionResult, setConnectionResult] = useState<any>(null);
   const [authResult, setAuthResult] = useState<any>(null);
+  const [authStatus, setAuthStatus] = useState<any>(null);
   const { toast } = useToast();
+
+  // Load existing credentials and auth status on mount
+  useEffect(() => {
+    const loadCredentialsAndStatus = async () => {
+      try {
+        const { GPS51CredentialsManager } = await import('@/services/gp51/GPS51CredentialsManager');
+        const credentialsManager = new GPS51CredentialsManager();
+        const existingCredentials = await credentialsManager.getCredentials();
+        
+        if (existingCredentials) {
+          setCredentials({
+            username: existingCredentials.username || '',
+            password: '', // Don't pre-fill password for security
+            apiUrl: existingCredentials.apiUrl || 'https://api.gps51.com/openapi'
+          });
+        }
+
+        // Get current authentication status
+        const status = gps51UnifiedAuthService.getAuthenticationStatus();
+        setAuthStatus(status);
+        
+      } catch (error) {
+        console.error('Failed to load credentials:', error);
+      } finally {
+        setIsLoadingCredentials(false);
+      }
+    };
+
+    loadCredentialsAndStatus();
+  }, []);
 
   const testConnection = async () => {
     if (!credentials.apiUrl) {
@@ -90,9 +126,19 @@ export const GPS51UnifiedCredentialsPanel = () => {
     setAuthResult(null);
     
     try {
+      // CRITICAL FIX: Hash the password before authentication
+      console.log('GPS51UnifiedCredentialsPanel: Hashing password before authentication');
+      const hashedPassword = await GPS51Utils.ensureMD5Hash(credentials.password);
+      
+      console.log('GPS51UnifiedCredentialsPanel: Password validation:', {
+        originalLength: credentials.password.length,
+        hashedLength: hashedPassword.length,
+        isValidMD5: GPS51Utils.validateMD5Hash(hashedPassword)
+      });
+
       const result = await gps51UnifiedAuthService.authenticate({
         username: credentials.username,
-        password: credentials.password,
+        password: hashedPassword, // Use hashed password
         apiUrl: credentials.apiUrl,
         from: 'WEB',
         type: 'USER'
@@ -101,9 +147,13 @@ export const GPS51UnifiedCredentialsPanel = () => {
       setAuthResult(result);
       
       if (result.success) {
+        // Update auth status after successful authentication
+        const status = gps51UnifiedAuthService.getAuthenticationStatus();
+        setAuthStatus(status);
+        
         toast({
           title: "Authentication Successful",
-          description: "GPS51 credentials are valid and authentication succeeded",
+          description: "GPS51 credentials saved and authentication succeeded",
         });
       } else {
         toast({
@@ -129,6 +179,11 @@ export const GPS51UnifiedCredentialsPanel = () => {
     }
   };
 
+  const refreshAuthStatus = () => {
+    const status = gps51UnifiedAuthService.getAuthenticationStatus();
+    setAuthStatus(status);
+  };
+
   const StatusBadge = ({ success, label }: { success: boolean; label: string }) => (
     <Badge variant={success ? 'default' : 'destructive'} className="flex items-center gap-1">
       {success ? <CheckCircle className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
@@ -139,51 +194,105 @@ export const GPS51UnifiedCredentialsPanel = () => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Settings className="h-5 w-5" />
-          GPS51 Unified Authentication & Testing
+        <CardTitle className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Settings className="h-5 w-5" />
+            GPS51 Unified Authentication & Testing
+          </div>
+          <div className="flex items-center gap-2">
+            {authStatus && (
+              <Badge variant={authStatus.isAuthenticated ? 'default' : 'secondary'}>
+                {authStatus.isAuthenticated ? (
+                  <>
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Authenticated
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    Not Authenticated
+                  </>
+                )}
+              </Badge>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={refreshAuthStatus}
+              className="flex items-center gap-1"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Refresh
+            </Button>
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="test-username">Username</Label>
-            <Input
-              id="test-username"
-              type="text"
-              value={credentials.username}
-              onChange={(e) => setCredentials(prev => ({ ...prev, username: e.target.value }))}
-              placeholder="Enter GPS51 username"
-            />
+        {isLoadingCredentials && (
+          <div className="flex items-center justify-center py-4">
+            <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+            Loading credentials...
           </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="test-password">Password</Label>
-            <Input
-              id="test-password"
-              type="password"
-              value={credentials.password}
-              onChange={(e) => setCredentials(prev => ({ ...prev, password: e.target.value }))}
-              placeholder="Enter GPS51 password"
-            />
-          </div>
-        </div>
+        )}
+        {!isLoadingCredentials && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="test-username" className="flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  Username
+                </Label>
+                <Input
+                  id="test-username"
+                  type="text"
+                  value={credentials.username}
+                  onChange={(e) => setCredentials(prev => ({ ...prev, username: e.target.value }))}
+                  placeholder="Enter GPS51 username"
+                  disabled={isTestingAuth || isTestingConnection}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="test-password" className="flex items-center gap-2">
+                  <Key className="h-4 w-4" />
+                  Password
+                </Label>
+                <Input
+                  id="test-password"
+                  type="password"
+                  value={credentials.password}
+                  onChange={(e) => setCredentials(prev => ({ ...prev, password: e.target.value }))}
+                  placeholder="Enter GPS51 password (will be MD5 hashed)"
+                  disabled={isTestingAuth || isTestingConnection}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Password will be automatically MD5 hashed before authentication
+                </p>
+              </div>
+            </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="test-api-url">API URL</Label>
-          <Input
-            id="test-api-url"
-            type="url"
-            value={credentials.apiUrl}
-            onChange={(e) => setCredentials(prev => ({ ...prev, apiUrl: e.target.value }))}
-            placeholder="https://api.gps51.com/openapi"
-          />
-        </div>
+            <div className="space-y-2">
+              <Label htmlFor="test-api-url" className="flex items-center gap-2">
+                <Globe className="h-4 w-4" />
+                API URL
+              </Label>
+              <Input
+                id="test-api-url"
+                type="url"
+                value={credentials.apiUrl}
+                onChange={(e) => setCredentials(prev => ({ ...prev, apiUrl: e.target.value }))}
+                placeholder="https://api.gps51.com/openapi"
+                disabled={isTestingAuth || isTestingConnection}
+              />
+            </div>
+          </>
+        )}
+
 
         <div className="flex gap-2">
           <Button 
             onClick={testConnection}
-            disabled={isTestingConnection}
+            disabled={isTestingConnection || isLoadingCredentials || !credentials.apiUrl}
             variant="outline"
             className="flex items-center gap-2"
           >
@@ -193,7 +302,7 @@ export const GPS51UnifiedCredentialsPanel = () => {
           
           <Button 
             onClick={testAuthentication}
-            disabled={isTestingAuth}
+            disabled={isTestingAuth || isLoadingCredentials || !credentials.username || !credentials.password}
             className="flex items-center gap-2"
           >
             <Shield className={`h-4 w-4 ${isTestingAuth ? 'animate-spin' : ''}`} />
@@ -272,17 +381,57 @@ export const GPS51UnifiedCredentialsPanel = () => {
           </Alert>
         )}
 
+        {authStatus && (
+          <Alert>
+            <User className="h-4 w-4" />
+            <AlertDescription>
+              <div className="space-y-2">
+                <div className="font-medium">Current Authentication Status:</div>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium">Authenticated:</span>
+                    <Badge variant={authStatus.isAuthenticated ? 'default' : 'secondary'} className="ml-2">
+                      {authStatus.isAuthenticated ? 'Yes' : 'No'}
+                    </Badge>
+                  </div>
+                  <div>
+                    <span className="font-medium">Has Token:</span>
+                    <Badge variant={authStatus.hasToken ? 'default' : 'secondary'} className="ml-2">
+                      {authStatus.hasToken ? 'Yes' : 'No'}
+                    </Badge>
+                  </div>
+                  {authStatus.user && (
+                    <div className="col-span-2">
+                      <span className="font-medium">User:</span>
+                      <span className="ml-2">{authStatus.user.username} ({authStatus.user.usertype})</span>
+                    </div>
+                  )}
+                  {authStatus.connectionHealth && (
+                    <div className="col-span-2">
+                      <span className="font-medium">Connection Health:</span>
+                      <Badge variant={authStatus.connectionHealth.overallHealth === 'Good' ? 'default' : 'destructive'} className="ml-2">
+                        {authStatus.connectionHealth.overallHealth}
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
         <Alert>
           <TestTube className="h-4 w-4" />
           <AlertDescription>
             <div className="space-y-1">
-              <div className="font-medium">Unified Testing Panel:</div>
+              <div className="font-medium">Enhanced Testing Panel Features:</div>
               <ul className="list-disc list-inside text-sm space-y-1">
                 <li><strong>Connection Test:</strong> Verifies Edge Function availability and GPS51 API reachability</li>
-                <li><strong>Authentication Test:</strong> Validates credentials and saves them for live data access</li>
-                <li>Uses intelligent connection management with automatic fallback strategies</li>
-                <li>Consolidated interface eliminates conflicts between multiple authentication services</li>
-                <li>Real-time diagnostics show connection health and performance metrics</li>
+                <li><strong>Authentication Test:</strong> Validates credentials with automatic MD5 password hashing</li>
+                <li><strong>Credential Pre-loading:</strong> Automatically loads existing saved credentials</li>
+                <li><strong>Real-time Status:</strong> Shows current authentication state and connection health</li>
+                <li><strong>Intelligent Fallback:</strong> Uses automatic fallback strategies for maximum reliability</li>
+                <li><strong>Production Diagnostics:</strong> Comprehensive error analysis and troubleshooting</li>
               </ul>
             </div>
           </AlertDescription>
