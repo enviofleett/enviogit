@@ -466,7 +466,14 @@ export const GPS51UnifiedCredentialsPanel = () => {
                   {authStatus.connectionHealth && (
                     <div className="col-span-2">
                       <span className="font-medium">Connection Health:</span>
-                      <Badge variant={authStatus.connectionHealth.overallHealth === 'Good' ? 'default' : 'destructive'} className="ml-2">
+                      <Badge variant={
+                        authStatus.connectionHealth.overallHealth === 'Excellent' || 
+                        authStatus.connectionHealth.overallHealth === 'Good' 
+                          ? 'default' 
+                          : authStatus.connectionHealth.overallHealth === 'Fair' 
+                            ? 'secondary' 
+                            : 'destructive'
+                      } className="ml-2">
                         {authStatus.connectionHealth.overallHealth}
                       </Badge>
                     </div>

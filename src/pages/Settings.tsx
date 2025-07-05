@@ -1,11 +1,38 @@
 
 import React from 'react';
 import { GPS51Settings } from '@/components/settings/GPS51Settings';
+import { EmailConfigurationPanel } from '@/components/settings/EmailConfigurationPanel';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Settings as SettingsIcon, Mail } from 'lucide-react';
 
 const Settings = () => {
   return (
     <div className="container mx-auto p-6">
-      <GPS51Settings />
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold">Settings</h1>
+        <p className="text-muted-foreground">Configure your fleet management system</p>
+      </div>
+      
+      <Tabs defaultValue="gps51" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="gps51" className="flex items-center gap-2">
+            <SettingsIcon className="h-4 w-4" />
+            GPS51 Configuration
+          </TabsTrigger>
+          <TabsTrigger value="email" className="flex items-center gap-2">
+            <Mail className="h-4 w-4" />
+            Email Configuration
+          </TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="gps51">
+          <GPS51Settings />
+        </TabsContent>
+        
+        <TabsContent value="email">
+          <EmailConfigurationPanel />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
