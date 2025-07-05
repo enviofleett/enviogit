@@ -1,6 +1,6 @@
 
-import { GPS51EmergencyControlPanel } from './GPS51EmergencyControlPanel';
-import { GPS51Settings } from './GPS51Settings';
+import { GPS51EmergencyControlPanel } from '@/components/settings/GPS51EmergencyControlPanel';
+import { GPS51Settings } from '@/components/settings/GPS51Settings';
 import { RLSSecurityAuditDashboard } from '@/components/security/RLSSecurityAuditDashboard';
 import { SecurityPolicyGenerator } from '@/components/security/SecurityPolicyGenerator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';

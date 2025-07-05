@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useGPS51DirectVehicles } from './useGPS51DirectVehicles';
 import { useGPS51DirectPositions } from './useGPS51DirectPositions';
-import type { GPS51Device, PositionFilter } from '../services/gps51/direct';
+import type { GPS51Device } from '../services/gps51/direct';
+import type { PositionFilter } from './useGPS51DirectPositions';
 
 export interface SmartPollingConfig {
   baseInterval: number; // Base polling interval in ms
