@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { MobileAuthGuard } from '@/components/mobile/MobileAuthGuard';
 import { 
   Smartphone, 
   Car, 
@@ -16,7 +17,8 @@ import {
   Square, 
   Lock, 
   Unlock,
-  RefreshCw
+  RefreshCw,
+  LogOut
 } from 'lucide-react';
 
 interface MobileAppState {
@@ -37,19 +39,52 @@ export default function MobileApp() {
   });
   const { toast } = useToast();
 
-  // Mock authentication for demo
-  const mockAuth = {
-    user: {
-      id: 'demo-user-123',
-      name: 'John Doe',
-      email: 'john.doe@example.com'
-    },
-    gps51Token: 'demo-token-12345'
-  };
+  const [authState, setAuthState] = useState<{
+    user: any;
+    gps51Token: string;
+    isAuthenticated: boolean;
+  }>({
+    user: null,
+    gps51Token: '',
+    isAuthenticated: false
+  });
 
   useEffect(() => {
-    loadDashboard();
+    initializeAuth();
   }, []);
+
+  const initializeAuth = async () => {
+    try {
+      // Check for existing Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        // Try to authenticate with GPS51 using stored credentials
+        const { data: authData } = await supabase.functions.invoke('mobile-auth', {
+          body: {
+            sessionToken: session.access_token,
+            userId: session.user.id
+          }
+        });
+
+        if (authData?.success) {
+          setAuthState({
+            user: authData.user,
+            gps51Token: authData.auth.gps51Token,
+            isAuthenticated: true
+          });
+          loadDashboard();
+        }
+      }
+    } catch (error) {
+      console.error('Auth initialization failed:', error);
+      toast({
+        title: "Authentication Required",
+        description: "Please login to access mobile features",
+        variant: "destructive"
+      });
+    }
+  };
 
   const loadDashboard = async () => {
     setState(prev => ({ ...prev, isLoading: true }));
@@ -57,8 +92,8 @@ export default function MobileApp() {
     try {
       const { data, error } = await supabase.functions.invoke('mobile-dashboard-data', {
         body: {
-          userId: mockAuth.user.id,
-          gps51Token: mockAuth.gps51Token,
+          userId: authState.user?.id,
+          gps51Token: authState.gps51Token,
           includePositions: true,
           includeAlerts: true
         }
@@ -68,7 +103,7 @@ export default function MobileApp() {
 
       setState(prev => ({
         ...prev,
-        user: mockAuth.user,
+        user: authState.user,
         dashboardData: data.data,
         vehicles: data.data.vehicles || [],
         selectedVehicle: data.data.vehicles?.[0] || null,
@@ -86,6 +121,59 @@ export default function MobileApp() {
     }
   };
 
+  const handleAuthenticated = (authData: any) => {
+    setAuthState({
+      user: authData.user,
+      gps51Token: authData.gps51Token,
+      isAuthenticated: true
+    });
+    
+    // Load dashboard data
+    setState(prev => ({
+      ...prev,
+      user: authData.user,
+      dashboardData: {
+        summary: {
+          totalVehicles: authData.vehicles?.length || 0,
+          activeVehicles: authData.vehicles?.filter((v: any) => v.status === 'active').length || 0,
+          inactiveVehicles: authData.vehicles?.filter((v: any) => v.status !== 'active').length || 0
+        },
+        subscription: authData.subscription
+      },
+      vehicles: authData.vehicles || [],
+      selectedVehicle: authData.vehicles?.[0] || null
+    }));
+  };
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setAuthState({
+        user: null,
+        gps51Token: '',
+        isAuthenticated: false
+      });
+      setState({
+        user: null,
+        vehicles: [],
+        selectedVehicle: null,
+        dashboardData: null,
+        isLoading: false
+      });
+      toast({
+        title: "Logged Out",
+        description: "You have been successfully logged out"
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
+  // Show auth guard if not authenticated
+  if (!authState.isAuthenticated) {
+    return <MobileAuthGuard onAuthenticated={handleAuthenticated} />;
+  }
+
   const sendVehicleCommand = async (action: string) => {
     if (!state.selectedVehicle) return;
 
@@ -94,10 +182,10 @@ export default function MobileApp() {
     try {
       const { data, error } = await supabase.functions.invoke('mobile-vehicle-control', {
         body: {
-          userId: mockAuth.user.id,
+          userId: authState.user?.id,
           vehicleId: state.selectedVehicle.id,
           action,
-          gps51Token: mockAuth.gps51Token
+          gps51Token: authState.gps51Token
         }
       });
 
@@ -136,9 +224,14 @@ export default function MobileApp() {
               <Smartphone className="h-6 w-6 text-primary" />
               <h1 className="text-xl font-bold">Fleet Mobile</h1>
             </div>
-            <Button size="sm" variant="outline" onClick={loadDashboard} disabled={state.isLoading}>
-              <RefreshCw className={`h-4 w-4 ${state.isLoading ? 'animate-spin' : ''}`} />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={loadDashboard} disabled={state.isLoading}>
+                <RefreshCw className={`h-4 w-4 ${state.isLoading ? 'animate-spin' : ''}`} />
+              </Button>
+              <Button size="sm" variant="ghost" onClick={handleLogout}>
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
