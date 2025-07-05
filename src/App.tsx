@@ -8,6 +8,10 @@ import { useEffect } from "react";
 import Sidebar from "./components/layout/Sidebar";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import Settings from "./pages/Settings";
+import TrackingPage from "./pages/TrackingPage";
+import DevelopersPage from "./pages/DevelopersPage";
+import Dashboard from "./pages/Dashboard";
 import { gps51StartupService } from "./services/gps51/GPS51StartupService";
 
 const queryClient = new QueryClient();
@@ -56,36 +60,10 @@ const App = () => {
             <main className="flex-1 overflow-auto">
               <Routes>
                 <Route path="/" element={<Index />} />
-                <Route path="/tracking" element={
-                  <div className="p-6">
-                    <div className="text-center">
-                      <h1 className="text-2xl font-bold mb-4">Vehicle Tracking</h1>
-                      <p className="text-muted-foreground">
-                        Tracking features are temporarily unavailable while database migration completes.
-                      </p>
-                    </div>
-                  </div>
-                } />
-                <Route path="/settings" element={
-                  <div className="p-6">
-                    <div className="text-center">
-                      <h1 className="text-2xl font-bold mb-4">Settings</h1>
-                      <p className="text-muted-foreground">
-                        Settings panel is temporarily unavailable while database migration completes.
-                      </p>
-                    </div>
-                  </div>
-                } />
-                <Route path="/developers" element={
-                  <div className="p-6">
-                    <div className="text-center">
-                      <h1 className="text-2xl font-bold mb-4">Developers Console</h1>
-                      <p className="text-muted-foreground">
-                        Developer tools are temporarily unavailable while database migration completes.
-                      </p>
-                    </div>
-                  </div>
-                } />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/tracking" element={<TrackingPage />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/developers" element={<DevelopersPage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </main>

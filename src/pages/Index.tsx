@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import GPS51LiveDataDashboard from '@/components/dashboard/GPS51LiveDataDashboard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -217,12 +218,12 @@ const Index = () => {
                 To start tracking vehicles, please configure your GPS51 credentials in the Settings page.
               </p>
               <div className="mt-4">
-                <a 
-                  href="/settings" 
+                <Link 
+                  to="/settings" 
                   className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   Go to Settings
-                </a>
+                </Link>
               </div>
             </div>
           </CardContent>
