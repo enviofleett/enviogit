@@ -7,7 +7,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { useEffect } from "react";
 import Sidebar from "./components/layout/Sidebar";
 import Index from "./pages/Index";
-import TrackingPage from "./pages/TrackingPage";
 import NotFound from "./pages/NotFound";
 import { gps51StartupService } from "./services/gps51/GPS51StartupService";
 
@@ -57,7 +56,16 @@ const App = () => {
             <main className="flex-1 overflow-auto">
               <Routes>
                 <Route path="/" element={<Index />} />
-                <Route path="/tracking" element={<TrackingPage />} />
+                <Route path="/tracking" element={
+                  <div className="p-6">
+                    <div className="text-center">
+                      <h1 className="text-2xl font-bold mb-4">Vehicle Tracking</h1>
+                      <p className="text-muted-foreground">
+                        Tracking features are temporarily unavailable while database migration completes.
+                      </p>
+                    </div>
+                  </div>
+                } />
                 <Route path="/settings" element={
                   <div className="p-6">
                     <div className="text-center">
