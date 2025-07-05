@@ -9,6 +9,7 @@ import Sidebar from "./components/layout/Sidebar";
 import Index from "./pages/Index";
 import TrackingPage from "./pages/TrackingPage";
 import Settings from "./pages/Settings";
+import DevelopersPage from "./pages/DevelopersPage";
 import NotFound from "./pages/NotFound";
 import { gps51StartupService } from "./services/gps51/GPS51StartupService";
 
@@ -60,6 +61,7 @@ const App = () => {
                 <Route path="/" element={<Index />} />
                 <Route path="/tracking" element={<TrackingPage />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/developers" element={<DevelopersPage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </main>

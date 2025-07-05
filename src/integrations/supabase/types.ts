@@ -144,6 +144,103 @@ export type Database = {
           },
         ]
       }
+      api_calls_monitor: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          endpoint: string
+          error_message: string | null
+          id: string
+          method: string
+          organization_id: string | null
+          request_payload: Json | null
+          response_body: Json | null
+          response_status: number | null
+          timestamp: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          endpoint: string
+          error_message?: string | null
+          id?: string
+          method?: string
+          organization_id?: string | null
+          request_payload?: Json | null
+          response_body?: Json | null
+          response_status?: number | null
+          timestamp?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          endpoint?: string
+          error_message?: string | null
+          id?: string
+          method?: string
+          organization_id?: string | null
+          request_payload?: Json | null
+          response_body?: Json | null
+          response_status?: number | null
+          timestamp?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_calls_monitor_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_logs: {
+        Row: {
+          created_at: string
+          details: Json | null
+          id: string
+          level: string
+          message: string
+          organization_id: string | null
+          source: string | null
+          timestamp: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          details?: Json | null
+          id?: string
+          level: string
+          message: string
+          organization_id?: string | null
+          source?: string | null
+          timestamp?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          details?: Json | null
+          id?: string
+          level?: string
+          message?: string
+          organization_id?: string | null
+          source?: string | null
+          timestamp?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_logs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -731,6 +828,56 @@ export type Database = {
             columns: ["assigned_user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      edge_function_stats: {
+        Row: {
+          created_at: string
+          error_details: Json | null
+          execution_duration_ms: number | null
+          function_name: string
+          id: string
+          invocation_time: string
+          memory_usage_mb: number | null
+          organization_id: string | null
+          request_size_bytes: number | null
+          response_size_bytes: number | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          error_details?: Json | null
+          execution_duration_ms?: number | null
+          function_name: string
+          id?: string
+          invocation_time?: string
+          memory_usage_mb?: number | null
+          organization_id?: string | null
+          request_size_bytes?: number | null
+          response_size_bytes?: number | null
+          status: string
+        }
+        Update: {
+          created_at?: string
+          error_details?: Json | null
+          execution_duration_ms?: number | null
+          function_name?: string
+          id?: string
+          invocation_time?: string
+          memory_usage_mb?: number | null
+          organization_id?: string | null
+          request_size_bytes?: number | null
+          response_size_bytes?: number | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "edge_function_stats_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
