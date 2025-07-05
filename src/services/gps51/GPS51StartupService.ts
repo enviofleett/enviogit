@@ -81,15 +81,30 @@ export class GPS51StartupService {
   }
 
   async ensureAuthenticated(): Promise<boolean> {
+    // First check if we're already authenticated
     if (this.isAuthenticated()) {
+      console.log('GPS51StartupService: Already authenticated');
       return true;
     }
 
-    return await this.initializeAuthentication();
+    console.log('GPS51StartupService: Authentication required, initializing...');
+    const result = await this.initializeAuthentication();
+    
+    if (!result) {
+      console.error('GPS51StartupService: Authentication failed during ensure check');
+    }
+    
+    return result;
   }
   
   isAuthenticated(): boolean {
-    return gps51UnifiedAuthService.isCurrentlyAuthenticated() && this.isInitialized;
+    const authenticated = gps51UnifiedAuthService.isCurrentlyAuthenticated() && this.isInitialized;
+    console.log('GPS51StartupService: Authentication status check:', {
+      unifiedAuthService: gps51UnifiedAuthService.isCurrentlyAuthenticated(),
+      startupInitialized: this.isInitialized,
+      overall: authenticated
+    });
+    return authenticated;
   }
 
   // Legacy compatibility methods

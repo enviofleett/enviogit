@@ -131,17 +131,26 @@ export class GPS51DatabaseIntegration {
    */
   private async syncPositions(positions: GPS51Position[]): Promise<number> {
     try {
-      console.log(`GPS51DatabaseIntegration: Syncing ${positions.length} positions using enhanced UPSERT...`);
+      console.log(`GPS51DatabaseIntegration: Syncing ${positions.length} positions...`);
 
       let successCount = 0;
       const errors: string[] = [];
 
-      // Process positions using the new upsert_vehicle_position function
+      // Process positions and try to link them to vehicles
       for (const position of positions) {
         try {
+          // First, try to find the vehicle by GPS51 device ID
+          const { data: vehicle, error: vehicleError } = await supabase
+            .from('vehicles')
+            .select('id')
+            .eq('gps51_device_id', position.deviceid)
+            .single();
+
+          // Insert position data
           const { error } = await supabase
             .from('vehicle_positions')
             .insert({
+              vehicle_id: vehicle?.id || null, // Allow null if vehicle not found
               device_id: position.deviceid,
               latitude: parseFloat(position.callat.toString()),
               longitude: parseFloat(position.callon.toString()),
@@ -156,13 +165,16 @@ export class GPS51DatabaseIntegration {
             });
 
           if (error) {
-            console.error(`GPS51DatabaseIntegration: Error upserting position for device ${position.deviceid}:`, error);
+            console.error(`GPS51DatabaseIntegration: Error inserting position for device ${position.deviceid}:`, error);
             errors.push(`Device ${position.deviceid}: ${error.message}`);
           } else {
             successCount++;
+            if (!vehicle && !vehicleError) {
+              console.warn(`GPS51DatabaseIntegration: Position stored for device ${position.deviceid} but no matching vehicle found`);
+            }
           }
         } catch (positionError) {
-          console.error(`GPS51DatabaseIntegration: Exception upserting position for device ${position.deviceid}:`, positionError);
+          console.error(`GPS51DatabaseIntegration: Exception processing position for device ${position.deviceid}:`, positionError);
           errors.push(`Device ${position.deviceid}: ${positionError instanceof Error ? positionError.message : 'Unknown error'}`);
         }
       }
@@ -185,25 +197,41 @@ export class GPS51DatabaseIntegration {
    */
   private async createSyncJob(deviceCount: number): Promise<string | null> {
     try {
+      console.log('GPS51DatabaseIntegration: Creating sync job record...');
+      
+      const jobData = {
+        job_type: 'database_sync',
+        status: 'running',
+        started_at: new Date().toISOString(),
+        vehicles_processed: 0,
+        positions_processed: 0,
+        positions_stored: 0,
+        success: false,
+        priority: 2,
+        error_message: null,
+        sync_parameters: {
+          device_count: deviceCount,
+          started_by: 'live_data_service'
+        }
+      };
+
+      console.log('GPS51DatabaseIntegration: Inserting job data:', jobData);
+
       const { data, error } = await supabase
         .from('gps51_sync_jobs')
-        .insert({
-          job_type: 'database_sync',
-          started_at: new Date().toISOString(),
-          vehicles_processed: 0,
-          positions_processed: 0
-        })
-        .select()
+        .insert(jobData)
+        .select('id')
         .single();
 
       if (error) {
-        console.warn('GPS51DatabaseIntegration: Failed to create sync job record:', error);
+        console.error('GPS51DatabaseIntegration: Failed to create sync job record:', error);
         return null;
       }
 
-      return data?.id || null;
+      console.log('GPS51DatabaseIntegration: Created sync job:', data.id);
+      return data.id;
     } catch (error) {
-      console.warn('GPS51DatabaseIntegration: Error creating sync job:', error);
+      console.error('GPS51DatabaseIntegration: Error creating sync job:', error);
       return null;
     }
   }
@@ -219,23 +247,33 @@ export class GPS51DatabaseIntegration {
     executionTime: number
   ): Promise<void> {
     try {
+      const updateData = {
+        status: success ? 'completed' : 'failed',
+        success,
+        vehicles_processed: vehiclesProcessed,
+        positions_processed: 0, // Required field
+        positions_stored: positionsStored,
+        execution_time_ms: executionTime,
+        execution_time_seconds: Math.round(executionTime / 1000),
+        error_message: success ? null : 'Sync completed with errors',
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      console.log('GPS51DatabaseIntegration: Updating sync job:', jobId, updateData);
+
       const { error } = await supabase
         .from('gps51_sync_jobs')
-        .update({
-          completed_at: new Date().toISOString(),
-          success,
-          vehicles_processed: vehiclesProcessed,
-          positions_stored: positionsStored,
-          execution_time_seconds: Math.round(executionTime / 1000),
-          error_message: success ? null : 'Sync completed with errors'
-        })
+        .update(updateData)
         .eq('id', jobId);
 
       if (error) {
-        console.warn('GPS51DatabaseIntegration: Failed to update sync job:', error);
+        console.error('GPS51DatabaseIntegration: Failed to update sync job:', error);
+      } else {
+        console.log('GPS51DatabaseIntegration: Successfully updated sync job:', jobId);
       }
     } catch (error) {
-      console.warn('GPS51DatabaseIntegration: Error updating sync job:', error);
+      console.error('GPS51DatabaseIntegration: Error updating sync job:', error);
     }
   }
 
