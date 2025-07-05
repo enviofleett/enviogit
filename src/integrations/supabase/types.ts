@@ -74,6 +74,7 @@ export type Database = {
           last_escalated_at: string | null
           location: Json | null
           message: string
+          organization_id: string | null
           resolved_at: string | null
           resolved_by: string | null
           severity: string
@@ -95,6 +96,7 @@ export type Database = {
           last_escalated_at?: string | null
           location?: Json | null
           message: string
+          organization_id?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
           severity: string
@@ -116,6 +118,7 @@ export type Database = {
           last_escalated_at?: string | null
           location?: Json | null
           message?: string
+          organization_id?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
           severity?: string
@@ -130,6 +133,13 @@ export type Database = {
             columns: ["config_id"]
             isOneToOne: false
             referencedRelation: "alert_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "alerts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -839,6 +849,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          organization_id: string | null
           radius: number | null
           schedules: Json | null
           tags: string[] | null
@@ -858,6 +869,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          organization_id?: string | null
           radius?: number | null
           schedules?: Json | null
           tags?: string[] | null
@@ -877,13 +889,22 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          organization_id?: string | null
           radius?: number | null
           schedules?: Json | null
           tags?: string[] | null
           type?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "geofences_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       gps51_sync_jobs: {
         Row: {
@@ -1376,6 +1397,30 @@ export type Database = {
           },
         ]
       }
+      organizations: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          subscription_tier: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          subscription_tier?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          subscription_tier?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       payment_integrations: {
         Row: {
           connected_by: string | null
@@ -1730,6 +1775,7 @@ export type Database = {
           avatar_url: string | null
           id: string
           name: string | null
+          organization_id: string | null
           role: Database["public"]["Enums"]["user_role"]
           status: Database["public"]["Enums"]["user_status"]
         }
@@ -1737,6 +1783,7 @@ export type Database = {
           avatar_url?: string | null
           id: string
           name?: string | null
+          organization_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           status?: Database["public"]["Enums"]["user_status"]
         }
@@ -1744,10 +1791,19 @@ export type Database = {
           avatar_url?: string | null
           id?: string
           name?: string | null
+          organization_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           status?: Database["public"]["Enums"]["user_status"]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       promotion_usage: {
         Row: {
@@ -1902,6 +1958,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      rls_audit_logs: {
+        Row: {
+          action: string
+          created_at: string | null
+          details: Json | null
+          id: string
+          organization_id: string | null
+          policy_name: string | null
+          table_name: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          organization_id?: string | null
+          policy_name?: string | null
+          table_name: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          organization_id?: string | null
+          policy_name?: string | null
+          table_name?: string
+          user_id?: string | null
+        }
+        Relationships: []
       }
       shared_tracks: {
         Row: {
@@ -2858,6 +2947,7 @@ export type Database = {
           ignition_status: boolean
           latitude: number
           longitude: number
+          organization_id: string | null
           recorded_at: string
           speed: number
           timestamp: string
@@ -2876,6 +2966,7 @@ export type Database = {
           ignition_status?: boolean
           latitude: number
           longitude: number
+          organization_id?: string | null
           recorded_at?: string
           speed?: number
           timestamp: string
@@ -2894,12 +2985,20 @@ export type Database = {
           ignition_status?: boolean
           latitude?: number
           longitude?: number
+          organization_id?: string | null
           recorded_at?: string
           speed?: number
           timestamp?: string
           vehicle_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "vehicle_positions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "vehicle_positions_vehicle_id_fkey"
             columns: ["vehicle_id"]
@@ -2925,6 +3024,7 @@ export type Database = {
           license_plate: string
           model: string | null
           notes: string | null
+          organization_id: string | null
           status: Database["public"]["Enums"]["vehicle_status"]
           type: Database["public"]["Enums"]["vehicle_type"]
           updated_at: string
@@ -2937,6 +3037,7 @@ export type Database = {
           license_plate: string
           model?: string | null
           notes?: string | null
+          organization_id?: string | null
           status?: Database["public"]["Enums"]["vehicle_status"]
           type: Database["public"]["Enums"]["vehicle_type"]
           updated_at?: string
@@ -2949,11 +3050,20 @@ export type Database = {
           license_plate?: string
           model?: string | null
           notes?: string | null
+          organization_id?: string | null
           status?: Database["public"]["Enums"]["vehicle_status"]
           type?: Database["public"]["Enums"]["vehicle_type"]
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "vehicles_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       video_records: {
         Row: {
@@ -3072,6 +3182,10 @@ export type Database = {
       get_dashboard_data: {
         Args: Record<PropertyKey, never>
         Returns: Json
+      }
+      get_user_organization_id: {
+        Args: Record<PropertyKey, never>
+        Returns: string
       }
       get_user_role: {
         Args: { user_id_to_check: string }
