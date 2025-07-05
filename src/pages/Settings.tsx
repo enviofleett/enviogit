@@ -5,8 +5,9 @@ import { EmailConfigurationPanel } from '@/components/settings/EmailConfiguratio
 import { MobileUserManagementPanel } from '@/components/settings/MobileUserManagementPanel';
 import { SubscriptionManagementPanel } from '@/components/settings/SubscriptionManagementPanel';
 import { ProductionDashboard } from '@/components/monitoring/ProductionDashboard';
+import { ProductionReadinessDashboard } from '@/components/monitoring/ProductionReadinessDashboard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings as SettingsIcon, Mail, Smartphone, Package, Activity } from 'lucide-react';
+import { Settings as SettingsIcon, Mail, Smartphone, Package, Activity, Shield } from 'lucide-react';
 
 const Settings = () => {
   return (
@@ -16,11 +17,15 @@ const Settings = () => {
         <p className="text-muted-foreground">Configure your fleet management system</p>
       </div>
       
-      <Tabs defaultValue="mobile" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+      <Tabs defaultValue="monitoring" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="monitoring" className="flex items-center gap-2">
             <Activity className="h-4 w-4" />
             Production Monitor
+          </TabsTrigger>
+          <TabsTrigger value="readiness" className="flex items-center gap-2">
+            <Shield className="h-4 w-4" />
+            Production Readiness
           </TabsTrigger>
           <TabsTrigger value="mobile" className="flex items-center gap-2">
             <Smartphone className="h-4 w-4" />
@@ -42,6 +47,10 @@ const Settings = () => {
         
         <TabsContent value="monitoring">
           <ProductionDashboard />
+        </TabsContent>
+        
+        <TabsContent value="readiness">
+          <ProductionReadinessDashboard />
         </TabsContent>
         
         <TabsContent value="mobile">
