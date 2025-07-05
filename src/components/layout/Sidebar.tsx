@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useEffect, useState } from 'react';
+import { SystemStatusIndicator } from '../SystemStatusIndicator';
 
 const navigation = [
   { name: 'Fleet Overview', href: '/', icon: Monitor },
@@ -52,6 +53,9 @@ const Sidebar = () => {
             </div>
             <h1 className="text-xl font-bold text-white">envio</h1>
           </div>
+        </div>
+        <div className="px-4 mt-4">
+          <SystemStatusIndicator />
         </div>
         <div className="mt-8 flex-grow flex flex-col">
           <nav className="flex-1 px-2 space-y-1">
