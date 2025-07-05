@@ -139,19 +139,21 @@ export class GPS51DatabaseIntegration {
       // Process positions using the new upsert_vehicle_position function
       for (const position of positions) {
         try {
-          const { error } = await supabase.rpc('upsert_vehicle_position', {
-            p_gps51_device_id: position.deviceid,
-            p_latitude: parseFloat(position.callat.toString()),
-            p_longitude: parseFloat(position.callon.toString()),
-            p_timestamp: position.updatetime,
-            p_speed: position.speed || 0,
-            p_heading: position.course || 0,
-            p_altitude: 0, // GPS51 doesn't provide altitude
-            p_ignition_status: position.moving === 1,
-            p_fuel_level: position.fuel || null,
-            p_battery_level: position.voltage || null,
-            p_address: position.strstatus || null
-          });
+          const { error } = await supabase
+            .from('vehicle_positions')
+            .insert({
+              device_id: position.deviceid,
+              latitude: parseFloat(position.callat.toString()),
+              longitude: parseFloat(position.callon.toString()),
+              timestamp: new Date(position.updatetime).toISOString(),
+              speed: position.speed || 0,
+              heading: position.course || 0,
+              altitude: 0,
+              ignition_status: position.moving === 1,
+              fuel_level: position.fuel || null,
+              battery_level: position.voltage || null,
+              address: position.strstatus || null
+            });
 
           if (error) {
             console.error(`GPS51DatabaseIntegration: Error upserting position for device ${position.deviceid}:`, error);
@@ -186,10 +188,10 @@ export class GPS51DatabaseIntegration {
       const { data, error } = await supabase
         .from('gps51_sync_jobs')
         .insert({
-          priority: 1,
+          job_type: 'database_sync',
           started_at: new Date().toISOString(),
           vehicles_processed: 0,
-          positions_stored: 0
+          positions_processed: 0
         })
         .select()
         .single();

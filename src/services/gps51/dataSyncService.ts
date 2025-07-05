@@ -87,6 +87,7 @@ export class GPS51DataSyncService {
           if (vehicle) {
             const positionData = {
               vehicle_id: vehicle.id,
+              device_id: position.deviceid,
               latitude: position.callat,
               longitude: position.callon,
               speed: position.speed,
@@ -97,8 +98,7 @@ export class GPS51DataSyncService {
               fuel_level: position.voltagepercent,
               engine_temperature: position.temp1,
               battery_level: position.voltage,
-              address: position.strstatus,
-              recorded_at: new Date().toISOString()
+              address: position.strstatus
             };
 
             console.log(`GPS51DataSyncService: Storing position for vehicle ${vehicle.id}:`, {

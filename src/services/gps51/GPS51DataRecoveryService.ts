@@ -450,20 +450,22 @@ export class GPS51DataRecoveryService {
    */
   private async saveFixedData(deviceId: string, fixedData: GPS51Position): Promise<void> {
     try {
-      // Use the enhanced UPSERT function we created in the migration
-      const { error } = await supabase.rpc('upsert_vehicle_position', {
-        p_gps51_device_id: deviceId,
-        p_latitude: fixedData.callat,
-        p_longitude: fixedData.callon,
-        p_timestamp: fixedData.updatetime,
-        p_speed: fixedData.speed || 0,
-        p_heading: fixedData.course || 0,
-        p_altitude: fixedData.altitude || 0,
-        p_ignition_status: fixedData.moving === 1,
-        p_fuel_level: fixedData.fuel || null,
-        p_battery_level: fixedData.voltage || null,
-        p_address: fixedData.strstatus || null
-      });
+      // Store positions directly without RPC call
+      const { error } = await supabase
+        .from('vehicle_positions')
+        .insert({
+          device_id: deviceId,
+          latitude: fixedData.callat,
+          longitude: fixedData.callon,
+          timestamp: new Date(fixedData.updatetime).toISOString(),
+          speed: fixedData.speed || 0,
+          heading: fixedData.course || 0,
+          altitude: 0,
+          ignition_status: fixedData.moving === 1,
+          fuel_level: fixedData.fuel || null,
+          battery_level: fixedData.voltage || null,
+          address: fixedData.strstatus || null
+        });
 
       if (error) {
         throw new Error(`Database upsert failed: ${error.message}`);

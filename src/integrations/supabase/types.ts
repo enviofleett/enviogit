@@ -281,6 +281,8 @@ export type Database = {
           id: string
           job_type: string
           positions_processed: number | null
+          positions_stored: number | null
+          priority: number | null
           results: Json | null
           started_at: string | null
           status: string
@@ -298,6 +300,8 @@ export type Database = {
           id?: string
           job_type: string
           positions_processed?: number | null
+          positions_stored?: number | null
+          priority?: number | null
           results?: Json | null
           started_at?: string | null
           status?: string
@@ -315,6 +319,8 @@ export type Database = {
           id?: string
           job_type?: string
           positions_processed?: number | null
+          positions_stored?: number | null
+          priority?: number | null
           results?: Json | null
           started_at?: string | null
           status?: string

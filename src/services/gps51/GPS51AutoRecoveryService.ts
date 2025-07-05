@@ -173,15 +173,13 @@ export class GPS51AutoRecoveryService {
   ): Promise<void> {
     try {
       const { error: logError } = await supabase
-        .from('audit_logs')
+        .from('activity_logs')
         .insert({
-          action: 'auto_recovery',
-          category: 'GPS51',
-          entity_type: 'auto_recovery',
-          message: success 
+          activity_type: 'auto_recovery',
+          description: success 
             ? `Auto recovery completed: ${devicesProcessed} devices processed, ${positionsRecovered} positions recovered`
             : `Auto recovery failed: ${error}`,
-          new_values: {
+          metadata: {
             success,
             devices_processed: devicesProcessed,
             positions_recovered: positionsRecovered,

@@ -83,10 +83,25 @@ export class GeofencingService {
   }
 
   /**
-   * Clear all mock data (for testing)
+   * Load geofences from database
    */
-  clearMockData(): void {
-    this.mockService.clearMockData();
+  async loadGeofences(): Promise<Geofence[]> {
+    return await this.mockService.getAllGeofences();
+  }
+
+  /**
+   * Get a single geofence by ID
+   */
+  async getGeofence(id: string): Promise<Geofence | null> {
+    const geofences = await this.mockService.getAllGeofences();
+    return geofences.find(g => g.id === id) || null;
+  }
+
+  /**
+   * Get all geofences (alias for loadGeofences)
+   */
+  async getGeofences(): Promise<Geofence[]> {
+    return await this.loadGeofences();
   }
 }
 

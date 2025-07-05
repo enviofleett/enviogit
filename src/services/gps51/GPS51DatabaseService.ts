@@ -55,7 +55,7 @@ export class GPS51DatabaseService {
       const { data: syncJob, error: syncJobError } = await supabase
         .from('gps51_sync_jobs')
         .insert({
-          priority: 1,
+          job_type: 'gps51_sync',
           started_at: new Date().toISOString()
         })
         .select('id')
@@ -218,6 +218,7 @@ export class GPS51DatabaseService {
       .filter(pos => deviceToVehicleMap.has(pos.deviceid))
       .map(pos => ({
         vehicle_id: deviceToVehicleMap.get(pos.deviceid)!,
+        device_id: pos.deviceid,
         latitude: parseFloat(pos.callat.toString()),
         longitude: parseFloat(pos.callon.toString()),
         speed: pos.speed || 0,
@@ -228,8 +229,7 @@ export class GPS51DatabaseService {
         fuel_level: pos.fuel || null,
         engine_temperature: pos.temp1 || null,
         battery_level: pos.voltage || null,
-        address: pos.strstatus || null,
-        recorded_at: new Date().toISOString()
+        address: pos.strstatus || null
       }));
 
     if (positionData.length === 0) {
