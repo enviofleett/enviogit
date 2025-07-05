@@ -141,16 +141,15 @@ export const useGPS51RealTimeSync = (enableSync: boolean = true) => {
             .from('vehicle_positions')
             .insert({
               vehicle_id: vehicle.id,
+              device_id: position.deviceId,
               latitude: position.latitude,
               longitude: position.longitude,
               speed: position.speed,
               heading: position.course,
               timestamp: position.timestamp.toISOString(),
-              ignition_status: position.ignitionStatus,
               fuel_level: position.fuel,
               engine_temperature: position.temperature,
-              address: position.address,
-              recorded_at: new Date().toISOString()
+              address: position.address
             });
         }
       } catch (error) {

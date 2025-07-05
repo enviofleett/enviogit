@@ -277,12 +277,14 @@ export type Database = {
           created_at: string
           error_message: string | null
           execution_time_ms: number | null
+          execution_time_seconds: number | null
           id: string
           job_type: string
           positions_processed: number | null
           results: Json | null
           started_at: string | null
           status: string
+          success: boolean | null
           sync_parameters: Json | null
           updated_at: string
           vehicles_processed: number | null
@@ -292,12 +294,14 @@ export type Database = {
           created_at?: string
           error_message?: string | null
           execution_time_ms?: number | null
+          execution_time_seconds?: number | null
           id?: string
           job_type: string
           positions_processed?: number | null
           results?: Json | null
           started_at?: string | null
           status?: string
+          success?: boolean | null
           sync_parameters?: Json | null
           updated_at?: string
           vehicles_processed?: number | null
@@ -307,12 +311,14 @@ export type Database = {
           created_at?: string
           error_message?: string | null
           execution_time_ms?: number | null
+          execution_time_seconds?: number | null
           id?: string
           job_type?: string
           positions_processed?: number | null
           results?: Json | null
           started_at?: string | null
           status?: string
+          success?: boolean | null
           sync_parameters?: Json | null
           updated_at?: string
           vehicles_processed?: number | null
@@ -488,9 +494,11 @@ export type Database = {
           created_at: string
           device_id: string
           engine_hours: number | null
+          engine_temperature: number | null
           fuel_level: number | null
           heading: number | null
           id: string
+          ignition_status: boolean | null
           latitude: number
           longitude: number
           odometer: number | null
@@ -512,9 +520,11 @@ export type Database = {
           created_at?: string
           device_id: string
           engine_hours?: number | null
+          engine_temperature?: number | null
           fuel_level?: number | null
           heading?: number | null
           id?: string
+          ignition_status?: boolean | null
           latitude: number
           longitude: number
           odometer?: number | null
@@ -536,9 +546,11 @@ export type Database = {
           created_at?: string
           device_id?: string
           engine_hours?: number | null
+          engine_temperature?: number | null
           fuel_level?: number | null
           heading?: number | null
           id?: string
+          ignition_status?: boolean | null
           latitude?: number
           longitude?: number
           odometer?: number | null

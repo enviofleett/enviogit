@@ -23,8 +23,8 @@ export interface VehicleData {
   brand: string;
   model: string;
   license_plate: string;
-  status: 'inactive' | 'available' | 'assigned' | 'maintenance';
-  type: 'bike' | 'sedan' | 'truck' | 'van' | 'motorcycle' | 'other';
+  status: string;
+  type: string;
   created_at: string;
   updated_at: string;
   notes: string;

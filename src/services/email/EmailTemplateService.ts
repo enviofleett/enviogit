@@ -7,7 +7,7 @@ export interface EmailTemplate {
   subject_template: string;
   body_template: string;
   template_type: string;
-  gps51_data_fields: Record<string, any>;
+  gps51_data_fields: Record<string, any> | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -50,10 +50,14 @@ export class EmailTemplateService {
       }
 
       // Update cache
-      this.templateCache.set(templateName, template);
+      const processedTemplate = {
+        ...template,
+        gps51_data_fields: template.gps51_data_fields as Record<string, any> || {}
+      };
+      this.templateCache.set(processedTemplate.name, processedTemplate);
       this.lastCacheUpdate = Date.now();
 
-      return template;
+      return processedTemplate;
 
     } catch (error) {
       console.error('EmailTemplateService: Error getting template:', templateName, error);
@@ -76,7 +80,10 @@ export class EmailTemplateService {
         throw error;
       }
 
-      return templates || [];
+      return (templates || []).map(template => ({
+        ...template,
+        gps51_data_fields: template.gps51_data_fields as Record<string, any> || {}
+      }));
 
     } catch (error) {
       console.error('EmailTemplateService: Error getting all templates:', error);
@@ -132,9 +139,13 @@ export class EmailTemplateService {
       }
 
       // Update cache
-      this.templateCache.set(template.name, template);
+      const processedTemplate = {
+        ...template,
+        gps51_data_fields: template.gps51_data_fields as Record<string, any> || {}
+      };
+      this.templateCache.set(processedTemplate.name, processedTemplate);
 
-      return template;
+      return processedTemplate;
 
     } catch (error) {
       console.error('EmailTemplateService: Error creating template:', error);
@@ -159,9 +170,13 @@ export class EmailTemplateService {
       }
 
       // Update cache
-      this.templateCache.set(template.name, template);
+      const processedTemplate = {
+        ...template,
+        gps51_data_fields: template.gps51_data_fields as Record<string, any> || {}
+      };
+      this.templateCache.set(processedTemplate.name, processedTemplate);
 
-      return template;
+      return processedTemplate;
 
     } catch (error) {
       console.error('EmailTemplateService: Error updating template:', error);
