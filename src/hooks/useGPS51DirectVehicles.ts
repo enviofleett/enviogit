@@ -1,11 +1,17 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { gps51DirectManager } from '../services/gps51/direct';
-import type { 
-  GPS51Device, 
-  VehicleQueryResult, 
-  VehicleStats 
-} from '../services/gps51/direct';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useGPS51UnifiedData } from './useGPS51UnifiedData';
+import type { GPS51Device } from '../services/gps51/GPS51Types';
 import { useToast } from './use-toast';
+
+// Legacy support for vehicle stats
+export interface VehicleStats {
+  total: number;
+  online: number;
+  offline: number;
+  recentlyActive: number;
+  byType: Record<string, number>;
+  byStatus: Record<string, number>;
+}
 
 export interface UseGPS51DirectVehiclesState {
   vehicles: GPS51Device[];
@@ -42,202 +48,153 @@ export interface UseGPS51DirectVehiclesReturn {
   isReady: boolean;
 }
 
+/**
+ * PHASE 1 EMERGENCY FIX: GPS51 Direct Vehicles Hook
+ * Now uses the unified polling coordinator to prevent API throttling
+ */
 export function useGPS51DirectVehicles(
   options: UseGPS51DirectVehiclesOptions = {}
 ): UseGPS51DirectVehiclesReturn {
   const { toast } = useToast();
   const {
     autoRefresh = true,
-    refreshInterval = 300000, // 5 minutes
+    refreshInterval = 300000, // 5 minutes - NOT USED, controlled by unified coordinator
     enableCaching = true,
     onVehiclesUpdated,
     onError
   } = options;
 
-  const [state, setState] = useState<UseGPS51DirectVehiclesState>({
-    vehicles: [],
-    isLoading: false,
-    isRefreshing: false,
-    error: null,
-    lastUpdated: null,
-    stats: null,
-    fromCache: false
+  // PHASE 1 FIX: Use unified data hook instead of individual polling
+  const { state: unifiedState, actions: unifiedActions } = useGPS51UnifiedData({
+    enabled: autoRefresh,
+    priority: 'normal',
+    onDataUpdated: (data) => {
+      if (data.vehicles && onVehiclesUpdated) {
+        onVehiclesUpdated(data.vehicles);
+      }
+    },
+    onError
   });
 
-  const refreshTimer = useRef<NodeJS.Timeout | null>(null);
-  const isMounted = useRef(true);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      isMounted.current = false;
-      if (refreshTimer.current) {
-        clearInterval(refreshTimer.current);
-      }
-    };
-  }, []);
-
-  // Process vehicle query result
-  const processVehicleResult = useCallback((result: VehicleQueryResult) => {
-    const stats = gps51DirectManager.vehicles.getVehicleStats(result.devices);
-    
-    setState(prev => ({
-      ...prev,
-      vehicles: result.devices,
-      stats,
-      lastUpdated: result.lastUpdated,
-      fromCache: result.fromCache,
-      error: null
-    }));
-
-    // Trigger callback if provided
-    if (onVehiclesUpdated) {
-      onVehiclesUpdated(result.devices);
+  // Calculate vehicle statistics
+  const vehicleStats = useMemo((): VehicleStats | null => {
+    if (!unifiedState.vehicles || unifiedState.vehicles.length === 0) {
+      return null;
     }
 
-    return result;
-  }, [onVehiclesUpdated]);
+    const vehicles = unifiedState.vehicles;
+    const now = Date.now();
+    const thirtyMinutesAgo = now - (30 * 60 * 1000);
+    const fourHoursAgo = now - (4 * 60 * 60 * 1000);
 
-  // Main refresh function
+    const stats: VehicleStats = {
+      total: vehicles.length,
+      online: 0,
+      offline: 0,
+      recentlyActive: 0,
+      byType: {},
+      byStatus: {}
+    };
+
+    vehicles.forEach(device => {
+      // Activity analysis
+      const lastActiveTime = device.lastactivetime || 0;
+      const isOnline = lastActiveTime > fourHoursAgo;
+      const isRecentlyActive = lastActiveTime > thirtyMinutesAgo;
+
+      if (isOnline) {
+        stats.online++;
+      } else {
+        stats.offline++;
+      }
+
+      if (isRecentlyActive) {
+        stats.recentlyActive++;
+      }
+
+      // Type statistics
+      const type = device.devicetype || 'Unknown';
+      stats.byType[type] = (stats.byType[type] || 0) + 1;
+
+      // Status statistics  
+      const status = device.strstatus || 'Unknown';
+      stats.byStatus[status] = (stats.byStatus[status] || 0) + 1;
+    });
+
+    return stats;
+  }, [unifiedState.vehicles]);
+
+  // Map unified state to legacy vehicle state format
+  const vehicleState: UseGPS51DirectVehiclesState = useMemo(() => ({
+    vehicles: unifiedState.vehicles,
+    isLoading: unifiedState.isLoading,
+    isRefreshing: false, // Unified coordinator doesn't distinguish between loading/refreshing
+    error: unifiedState.error,
+    lastUpdated: unifiedState.lastVehicleUpdate,
+    stats: vehicleStats,
+    fromCache: true // Data comes from unified coordinator cache
+  }), [unifiedState, vehicleStats]);
+
+  // Manual refresh - delegates to unified coordinator
   const refresh = useCallback(async (forceRefresh = false): Promise<void> => {
-    if (!gps51DirectManager.auth.isAuthenticated()) {
-      const error = 'Not authenticated. Please login first.';
-      setState(prev => ({ ...prev, error }));
-      if (onError) onError(error);
-      return;
-    }
-
-    // Determine if this is initial load or refresh
-    const isInitialLoad = state.vehicles.length === 0 && !state.lastUpdated;
+    console.log('useGPS51DirectVehicles: Manual refresh requested (delegating to unified coordinator)');
     
-    setState(prev => ({
-      ...prev,
-      isLoading: isInitialLoad,
-      isRefreshing: !isInitialLoad,
-      error: null
-    }));
-
     try {
-      console.log('useGPS51DirectVehicles: Fetching vehicle list...', {
-        forceRefresh,
-        enableCaching,
-        isInitialLoad
-      });
-
-      const result = await gps51DirectManager.vehicles.getVehicleList(forceRefresh);
+      await unifiedActions.refresh('vehicles');
       
-      if (!isMounted.current) return;
-
-      processVehicleResult(result);
-
-      if (!result.fromCache) {
-        toast({
-          title: "Vehicles Updated",
-          description: `${result.totalCount} vehicles loaded`,
-        });
-      }
-
-      console.log('useGPS51DirectVehicles: Vehicle list updated:', {
-        count: result.totalCount,
-        fromCache: result.fromCache
-      });
-
-    } catch (error) {
-      if (!isMounted.current) return;
-
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch vehicles';
-      console.error('useGPS51DirectVehicles: Error fetching vehicles:', errorMessage);
-
-      setState(prev => ({
-        ...prev,
-        error: errorMessage
-      }));
-
-      if (onError) {
-        onError(errorMessage);
-      }
-
       toast({
-        title: "Error Loading Vehicles",
+        title: "Vehicles Refreshed",
+        description: `Vehicle data updated successfully`,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Refresh failed';
+      console.error('useGPS51DirectVehicles: Refresh failed:', errorMessage);
+      
+      toast({
+        title: "Refresh Failed",
         description: errorMessage,
         variant: "destructive",
       });
-    } finally {
-      if (isMounted.current) {
-        setState(prev => ({
-          ...prev,
-          isLoading: false,
-          isRefreshing: false
-        }));
-      }
+      
+      throw error;
     }
-  }, [state.vehicles.length, state.lastUpdated, enableCaching, onError, toast, processVehicleResult]);
+  }, [unifiedActions, toast]);
 
-  // Auto-refresh setup
-  useEffect(() => {
-    if (autoRefresh && gps51DirectManager.auth.isAuthenticated()) {
-      // Initial load
-      refresh();
-
-      // Set up periodic refresh
-      if (refreshInterval > 0) {
-        refreshTimer.current = setInterval(() => {
-          if (gps51DirectManager.auth.isAuthenticated()) {
-            refresh();
-          }
-        }, refreshInterval);
-      }
-    }
-
-    return () => {
-      if (refreshTimer.current) {
-        clearInterval(refreshTimer.current);
-        refreshTimer.current = null;
-      }
-    };
-  }, [autoRefresh, refreshInterval, refresh]);
-
-  // Search vehicles
+  // Search vehicles in current cached data
   const searchVehicles = useCallback(async (query: string): Promise<GPS51Device[]> => {
-    try {
-      console.log('useGPS51DirectVehicles: Searching vehicles:', query);
-      
-      const results = await gps51DirectManager.vehicles.searchVehicles(query);
-      
-      console.log('useGPS51DirectVehicles: Search results:', results.length);
-      return results;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Search failed';
-      console.error('useGPS51DirectVehicles: Search error:', errorMessage);
-      
-      toast({
-        title: "Search Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-      
-      return [];
-    }
-  }, [toast]);
+    console.log('useGPS51DirectVehicles: Searching vehicles:', query);
+    
+    const lowercaseQuery = query.toLowerCase();
+    const results = unifiedState.vehicles.filter(device =>
+      device.devicename.toLowerCase().includes(lowercaseQuery) ||
+      device.deviceid.toLowerCase().includes(lowercaseQuery) ||
+      device.devicetype.toLowerCase().includes(lowercaseQuery) ||
+      (device.simnum && device.simnum.toLowerCase().includes(lowercaseQuery))
+    );
+    
+    console.log('useGPS51DirectVehicles: Search results:', results.length);
+    return results;
+  }, [unifiedState.vehicles]);
 
-  // Get vehicle by ID
+  // Get vehicle by ID from cached data
   const getVehicleById = useCallback((deviceId: string): GPS51Device | null => {
-    return state.vehicles.find(vehicle => vehicle.deviceid === deviceId) || null;
-  }, [state.vehicles]);
+    return unifiedActions.getVehicleById(deviceId);
+  }, [unifiedActions]);
 
-  // Clear cache
+  // Clear cache - delegates to unified coordinator  
   const clearCache = useCallback(() => {
-    gps51DirectManager.vehicles.clearCache();
+    console.log('useGPS51DirectVehicles: Cache clear requested (handled by unified coordinator)');
+    
     toast({
-      title: "Cache Cleared",
-      description: "Vehicle cache has been cleared",
+      title: "Cache Clear Requested",
+      description: "Vehicle cache is managed by the unified coordinator",
     });
   }, [toast]);
 
   // Clear error
   const clearError = useCallback(() => {
-    setState(prev => ({ ...prev, error: null }));
-  }, []);
+    unifiedActions.clearError();
+  }, [unifiedActions]);
 
   const actions: UseGPS51DirectVehiclesActions = {
     refresh,
@@ -247,12 +204,12 @@ export function useGPS51DirectVehicles(
     clearError
   };
 
-  const hasVehicles = state.vehicles.length > 0;
-  const isEmpty = !state.isLoading && state.vehicles.length === 0;
-  const isReady = hasVehicles && !state.isLoading && !state.error;
+  const hasVehicles = vehicleState.vehicles.length > 0;
+  const isEmpty = !vehicleState.isLoading && vehicleState.vehicles.length === 0;
+  const isReady = hasVehicles && !vehicleState.isLoading && !vehicleState.error;
 
   return {
-    state,
+    state: vehicleState,
     actions,
     hasVehicles,
     isEmpty,
