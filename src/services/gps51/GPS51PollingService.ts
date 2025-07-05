@@ -12,7 +12,7 @@ export class GPS51PollingService {
 
   constructor(options: PollingOptions = {}) {
     this.options = {
-      pollingInterval: 90000, // EMERGENCY: 90 seconds instead of 30
+      pollingInterval: 30000, // 30 seconds default
       maxRetries: 3,
       enableIntelligentPolling: true,
       ...options

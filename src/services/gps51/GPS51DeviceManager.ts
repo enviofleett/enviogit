@@ -1,5 +1,5 @@
 import { GPS51Client, gps51Client } from './GPS51Client';
-import { GPS51Device, GPS51Position } from './GPS51Types';
+import { GPS51Device } from './types';
 
 export interface DeviceMetadata {
   deviceId: string;

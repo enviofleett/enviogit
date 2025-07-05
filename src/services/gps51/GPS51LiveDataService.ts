@@ -1,6 +1,6 @@
 
 import { GPS51Client, gps51Client } from './GPS51Client';
-import { GPS51Device, GPS51Position } from './GPS51Types';
+import { GPS51Device, GPS51Position } from './types';
 import { GPS51DataFetcher } from './GPS51DataFetcher';
 import { GPS51StateManager, LiveDataState } from './GPS51StateManager';
 import { GPS51PollingService, PollingOptions } from './GPS51PollingService';

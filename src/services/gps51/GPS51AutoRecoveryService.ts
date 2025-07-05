@@ -127,13 +127,35 @@ export class GPS51AutoRecoveryService {
   }
 
   /**
-   * Get count of recent sync job failures - STUB IMPLEMENTATION
+   * Get count of recent sync job failures
    */
   private async getRecentSyncJobFailures(): Promise<number> {
     try {
-      console.log('GPS51AutoRecoveryService: Sync job monitoring temporarily disabled - database schema pending');
-      // Return 0 to prevent auto-recovery from triggering
-      return 0;
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      
+      const { data, error } = await supabase
+        .from('gps51_sync_jobs')
+        .select('success')
+        .gte('started_at', oneHourAgo)
+        .order('started_at', { ascending: false })
+        .limit(10);
+
+      if (error) {
+        console.error('Failed to query recent sync jobs:', error);
+        return 0;
+      }
+
+      // Count consecutive failures from the most recent jobs
+      let consecutiveFailures = 0;
+      for (const job of data || []) {
+        if (job.success === false) {
+          consecutiveFailures++;
+        } else {
+          break; // Stop at first successful job
+        }
+      }
+
+      return consecutiveFailures;
     } catch (error) {
       console.error('Error checking recent sync job failures:', error);
       return 0;
@@ -141,7 +163,7 @@ export class GPS51AutoRecoveryService {
   }
 
   /**
-   * Log recovery attempt to audit trail - STUB IMPLEMENTATION
+   * Log recovery attempt to audit trail
    */
   private async logRecoveryAttempt(
     success: boolean, 
@@ -150,8 +172,27 @@ export class GPS51AutoRecoveryService {
     error?: string
   ): Promise<void> {
     try {
-      console.log('GPS51AutoRecoveryService: Recovery logging temporarily disabled - database schema pending');
-      console.log(`Recovery attempt: ${success ? 'SUCCESS' : 'FAILED'}, devices: ${devicesProcessed}, positions: ${positionsRecovered}${error ? `, error: ${error}` : ''}`);
+      const { error: logError } = await supabase
+        .from('audit_logs')
+        .insert({
+          action: 'auto_recovery',
+          category: 'GPS51',
+          entity_type: 'auto_recovery',
+          message: success 
+            ? `Auto recovery completed: ${devicesProcessed} devices processed, ${positionsRecovered} positions recovered`
+            : `Auto recovery failed: ${error}`,
+          new_values: {
+            success,
+            devices_processed: devicesProcessed,
+            positions_recovered: positionsRecovered,
+            error_message: error,
+            timestamp: new Date().toISOString()
+          }
+        });
+
+      if (logError) {
+        console.error('Failed to log recovery attempt:', logError);
+      }
     } catch (logError) {
       console.error('Error logging recovery attempt:', logError);
     }

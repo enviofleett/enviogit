@@ -1,14 +1,14 @@
 import { supabase } from '@/integrations/supabase/client';
-import { GPS51Device, GPS51Position } from './GPS51Types';
+import { GPS51Device, GPS51Position } from './types';
 import { EnhancedLiveDataState } from './GPS51EnhancedStateManager';
 
 export interface DatabaseSyncResult {
   success: boolean;
   vehiclesProcessed: number;
   positionsStored: number;
+  syncJobId?: string;
   executionTime: number;
   error?: string;
-  jobId?: string;
 }
 
 export class GPS51DatabaseIntegration {
@@ -26,10 +26,7 @@ export class GPS51DatabaseIntegration {
    */
   async syncToDatabase(data: EnhancedLiveDataState): Promise<DatabaseSyncResult> {
     const startTime = Date.now();
-    let vehiclesProcessed = 0;
-    let positionsStored = 0;
-    let jobId: string | null = null;
-
+    
     try {
       console.log('GPS51DatabaseIntegration: Starting database sync...', {
         devices: data.devices.length,
@@ -37,88 +34,81 @@ export class GPS51DatabaseIntegration {
         lastUpdate: data.lastUpdate
       });
 
-      // Create sync job record
-      jobId = await this.createSyncJob();
+      // Start a sync job record
+      const syncJobId = await this.createSyncJob(data.devices.length);
 
-      // Sync vehicles first
+      let vehiclesProcessed = 0;
+      let positionsStored = 0;
+
+      // Process vehicles
       if (data.devices.length > 0) {
-        vehiclesProcessed = await this.syncVehiclesToDatabase(data.devices);
-        console.log(`GPS51DatabaseIntegration: Synced ${vehiclesProcessed} vehicles`);
+        vehiclesProcessed = await this.syncVehicles(data.devices);
       }
 
-      // Sync positions (currently disabled pending schema)
+      // Process positions
       if (data.positions.length > 0) {
-        positionsStored = await this.syncPositionsToDatabase(data.positions);
-        console.log(`GPS51DatabaseIntegration: Synced ${positionsStored} positions`);
+        positionsStored = await this.syncPositions(data.positions);
       }
 
       const executionTime = Date.now() - startTime;
 
-      // Complete sync job
-      if (jobId) {
-        await this.completeSyncJob(jobId, true, vehiclesProcessed, positionsStored, executionTime);
+      // Complete the sync job
+      if (syncJobId) {
+        await this.completeSyncJob(syncJobId, true, vehiclesProcessed, positionsStored, executionTime);
       }
 
       console.log('GPS51DatabaseIntegration: Database sync completed successfully', {
         vehiclesProcessed,
         positionsStored,
-        executionTime,
-        jobId
+        executionTime: `${executionTime}ms`,
+        syncJobId
       });
 
       return {
         success: true,
         vehiclesProcessed,
         positionsStored,
-        executionTime,
-        jobId: jobId || undefined
+        syncJobId,
+        executionTime
       };
 
     } catch (error) {
       const executionTime = Date.now() - startTime;
       console.error('GPS51DatabaseIntegration: Database sync failed:', error);
 
-      // Mark sync job as failed
-      if (jobId) {
-        await this.completeSyncJob(jobId, false, vehiclesProcessed, positionsStored, executionTime);
-      }
-
       return {
         success: false,
-        vehiclesProcessed,
-        positionsStored,
+        vehiclesProcessed: 0,
+        positionsStored: 0,
         executionTime,
-        error: error instanceof Error ? error.message : 'Unknown database sync error',
-        jobId: jobId || undefined
+        error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
   }
 
   /**
-   * Sync vehicles to database
+   * Sync vehicle data to database
    */
-  private async syncVehiclesToDatabase(devices: GPS51Device[]): Promise<number> {
+  private async syncVehicles(devices: GPS51Device[]): Promise<number> {
     try {
       console.log(`GPS51DatabaseIntegration: Syncing ${devices.length} vehicles to database...`);
 
-      // Transform GPS51 devices to database format
       const vehicleData = devices.map(device => ({
-        id: device.deviceid,
-        make: device.devicename || 'Unknown',
-        model: device.devicetype || 'GPS Tracker',
-        plate: device.deviceid, // Use device ID as plate number for now
-        status: device.lastactivetime && (Date.now() - device.lastactivetime < 30 * 60 * 1000) ? 'active' : 'inactive',
-        year: new Date().getFullYear(), // Default to current year
-        subscriber_id: null, // Will be handled by RLS policies
-        updated_at: new Date().toISOString()
+        license_plate: device.devicename || device.deviceid,
+        brand: 'GPS51',
+        model: device.devicetype || 'Unknown',
+        type: 'van' as const, // Using 'van' as it's a valid enum value
+        status: 'available' as const,
+        gps51_device_id: device.deviceid,
+        notes: `Last active: ${device.lastactivetime ? new Date(device.lastactivetime).toISOString() : 'Unknown'}`
       }));
 
-      // Upsert vehicles (insert or update)
+      // Upsert vehicles with proper conflict resolution
       const { data, error } = await supabase
         .from('vehicles')
-        .upsert(vehicleData, { 
-          onConflict: 'id',
-          ignoreDuplicates: false 
+        .upsert(vehicleData, {
+          onConflict: 'license_plate',
+          ignoreDuplicates: false
         })
         .select();
 
@@ -137,15 +127,51 @@ export class GPS51DatabaseIntegration {
   }
 
   /**
-   * Sync positions to database (currently stubbed)
+   * Sync position data to database using enhanced UPSERT function
    */
-  private async syncPositionsToDatabase(positions: GPS51Position[]): Promise<number> {
+  private async syncPositions(positions: GPS51Position[]): Promise<number> {
     try {
-      console.log('GPS51DatabaseIntegration: Position sync temporarily disabled - database schema pending');
-      console.log(`GPS51DatabaseIntegration: Would sync ${positions.length} positions`);
-      
-      // TODO: Implement position syncing when database schema is ready
-      return 0;
+      console.log(`GPS51DatabaseIntegration: Syncing ${positions.length} positions using enhanced UPSERT...`);
+
+      let successCount = 0;
+      const errors: string[] = [];
+
+      // Process positions using the new upsert_vehicle_position function
+      for (const position of positions) {
+        try {
+          const { error } = await supabase.rpc('upsert_vehicle_position', {
+            p_gps51_device_id: position.deviceid,
+            p_latitude: parseFloat(position.callat.toString()),
+            p_longitude: parseFloat(position.callon.toString()),
+            p_timestamp: position.updatetime,
+            p_speed: position.speed || 0,
+            p_heading: position.course || 0,
+            p_altitude: 0, // GPS51 doesn't provide altitude
+            p_ignition_status: position.moving === 1,
+            p_fuel_level: position.fuel || null,
+            p_battery_level: position.voltage || null,
+            p_address: position.strstatus || null
+          });
+
+          if (error) {
+            console.error(`GPS51DatabaseIntegration: Error upserting position for device ${position.deviceid}:`, error);
+            errors.push(`Device ${position.deviceid}: ${error.message}`);
+          } else {
+            successCount++;
+          }
+        } catch (positionError) {
+          console.error(`GPS51DatabaseIntegration: Exception upserting position for device ${position.deviceid}:`, positionError);
+          errors.push(`Device ${position.deviceid}: ${positionError instanceof Error ? positionError.message : 'Unknown error'}`);
+        }
+      }
+
+      if (errors.length > 0) {
+        console.warn(`GPS51DatabaseIntegration: ${errors.length} position sync errors:`, errors.slice(0, 5));
+      }
+
+      console.log(`GPS51DatabaseIntegration: Successfully synced ${successCount}/${positions.length} positions`);
+      return successCount;
+
     } catch (error) {
       console.error('GPS51DatabaseIntegration: Failed to sync positions:', error);
       throw error;
@@ -153,12 +179,27 @@ export class GPS51DatabaseIntegration {
   }
 
   /**
-   * Create sync job record for tracking
+   * Create a sync job record
    */
-  private async createSyncJob(): Promise<string | null> {
+  private async createSyncJob(deviceCount: number): Promise<string | null> {
     try {
-      console.log('GPS51DatabaseIntegration: Sync job tracking temporarily disabled - database schema pending');
-      return `stub-job-${Date.now()}`; // Return fake job ID
+      const { data, error } = await supabase
+        .from('gps51_sync_jobs')
+        .insert({
+          priority: 1,
+          started_at: new Date().toISOString(),
+          vehicles_processed: 0,
+          positions_stored: 0
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.warn('GPS51DatabaseIntegration: Failed to create sync job record:', error);
+        return null;
+      }
+
+      return data?.id || null;
     } catch (error) {
       console.warn('GPS51DatabaseIntegration: Error creating sync job:', error);
       return null;
@@ -166,7 +207,7 @@ export class GPS51DatabaseIntegration {
   }
 
   /**
-   * Complete sync job record
+   * Complete a sync job record
    */
   private async completeSyncJob(
     jobId: string, 
@@ -176,80 +217,93 @@ export class GPS51DatabaseIntegration {
     executionTime: number
   ): Promise<void> {
     try {
-      console.log('GPS51DatabaseIntegration: Sync job completion tracking temporarily disabled - database schema pending');
-      console.log(`Sync job ${jobId} completed: ${success ? 'SUCCESS' : 'FAILED'}, vehicles: ${vehiclesProcessed}, positions: ${positionsStored}, time: ${Math.round(executionTime / 1000)}s`);
+      const { error } = await supabase
+        .from('gps51_sync_jobs')
+        .update({
+          completed_at: new Date().toISOString(),
+          success,
+          vehicles_processed: vehiclesProcessed,
+          positions_stored: positionsStored,
+          execution_time_seconds: Math.round(executionTime / 1000),
+          error_message: success ? null : 'Sync completed with errors'
+        })
+        .eq('id', jobId);
+
+      if (error) {
+        console.warn('GPS51DatabaseIntegration: Failed to update sync job:', error);
+      }
     } catch (error) {
       console.warn('GPS51DatabaseIntegration: Error updating sync job:', error);
     }
   }
 
   /**
-   * Test database connection
-   */
-  async testDatabaseConnection(): Promise<{ success: boolean; error?: string }> {
-    try {
-      console.log('GPS51DatabaseIntegration: Testing database connection...');
-      
-      // Simple test query
-      const { data, error } = await supabase
-        .from('vehicles')
-        .select('count(*)', { count: 'exact', head: true });
-
-      if (error) {
-        console.error('GPS51DatabaseIntegration: Database connection test failed:', error);
-        return { success: false, error: error.message };
-      }
-
-      console.log('GPS51DatabaseIntegration: Database connection test successful');
-      return { success: true };
-    } catch (error) {
-      console.error('GPS51DatabaseIntegration: Database connection test error:', error);
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Database connection test failed' 
-      };
-    }
-  }
-
-  /**
-   * Get sync job statistics
+   * Get recent sync job statistics
    */
   async getSyncJobStats(): Promise<{
-    totalJobs: number;
-    successfulJobs: number;
-    failedJobs: number;
+    recentJobs: number;
     successRate: number;
-    lastSync: Date | null;
+    avgExecutionTime: number;
+    totalVehiclesProcessed: number;
+    totalPositionsStored: number;
   }> {
     try {
-      console.log('GPS51DatabaseIntegration: Sync job statistics temporarily disabled - database schema pending');
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+      const { data, error } = await supabase
+        .from('gps51_sync_jobs')
+        .select('*')
+        .gte('started_at', twentyFourHoursAgo)
+        .order('started_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      const jobs = data || [];
+      const successfulJobs = jobs.filter(job => job.success);
+      const totalJobs = jobs.length;
+
       return {
-        totalJobs: 100,
-        successfulJobs: 95,
-        failedJobs: 5,
-        successRate: 95.0,
-        lastSync: new Date()
+        recentJobs: totalJobs,
+        successRate: totalJobs > 0 ? (successfulJobs.length / totalJobs) * 100 : 0,
+        avgExecutionTime: totalJobs > 0 ? 
+          jobs.reduce((sum, job) => sum + (job.execution_time_seconds || 0), 0) / totalJobs : 0,
+        totalVehiclesProcessed: jobs.reduce((sum, job) => sum + (job.vehicles_processed || 0), 0),
+        totalPositionsStored: jobs.reduce((sum, job) => sum + (job.positions_stored || 0), 0)
       };
+
     } catch (error) {
       console.error('GPS51DatabaseIntegration: Failed to get sync job stats:', error);
       return {
-        totalJobs: 0,
-        successfulJobs: 0,
-        failedJobs: 0,
+        recentJobs: 0,
         successRate: 0,
-        lastSync: null
+        avgExecutionTime: 0,
+        totalVehiclesProcessed: 0,
+        totalPositionsStored: 0
       };
     }
   }
 
   /**
-   * Clear old sync data for maintenance
+   * Test database connectivity
    */
-  async cleanupOldSyncData(daysToKeep = 30): Promise<void> {
+  async testDatabaseConnection(): Promise<{ success: boolean; error?: string }> {
     try {
-      console.log(`GPS51DatabaseIntegration: Cleanup temporarily disabled - would remove data older than ${daysToKeep} days`);
+      const { data, error } = await supabase
+        .from('vehicles')
+        .select('count', { count: 'exact', head: true });
+
+      if (error) {
+        throw error;
+      }
+
+      return { success: true };
     } catch (error) {
-      console.error('GPS51DatabaseIntegration: Cleanup failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown database error'
+      };
     }
   }
 }

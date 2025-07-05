@@ -20,9 +20,9 @@ export const GPS51CronJobManager = () => {
     try {
       console.log('Fetching cron job status...');
       
-      // Mock cron job status since RPC function doesn't exist yet
-      const cronData = null;
-      const cronError = "RPC function not available";
+      // Get cron job status from the new function
+      const { data: cronData, error: cronError } = await supabase
+        .rpc('get_cron_jobs_status');
 
       if (cronError) {
         console.error('Error fetching cron jobs:', cronError);
@@ -67,9 +67,12 @@ export const GPS51CronJobManager = () => {
         }
       }
 
-      // Mock sync job logs since table doesn't exist yet
-      const logsData = null;
-      const logsError = null;
+      // Get sync job logs
+      const { data: logsData, error: logsError } = await supabase
+        .from('gps51_sync_jobs')
+        .select('*')
+        .order('started_at', { ascending: false })
+        .limit(20);
 
       if (logsError) {
         console.error('Error fetching sync logs:', logsError);

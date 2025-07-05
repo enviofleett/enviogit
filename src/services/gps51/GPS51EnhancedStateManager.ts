@@ -1,4 +1,4 @@
-import { GPS51Device, GPS51Position } from './GPS51Types';
+import { GPS51Device, GPS51Position } from './types';
 
 export interface EnhancedLiveDataState {
   lastQueryPositionTime: number;

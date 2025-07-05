@@ -50,31 +50,18 @@ export const useGPS51EnhancedSync = (enableSync: boolean = true, options?: Enhan
   const updateStatus = useCallback((data: EnhancedLiveDataState) => {
     const serviceStatus = serviceRef.current.getEnhancedServiceStatus();
     
-    // Calculate device activity counts from the state data
-    const activeDevices = data.positions.filter(pos => 
-      pos.updatetime && (Date.now() - new Date(pos.updatetime).getTime() < 5 * 60 * 1000) && pos.moving === 1
-    ).length;
-    
-    const idleDevices = data.positions.filter(pos => 
-      pos.updatetime && 
-      (Date.now() - new Date(pos.updatetime).getTime() < 30 * 60 * 1000) &&
-      (Date.now() - new Date(pos.updatetime).getTime() >= 5 * 60 * 1000)
-    ).length;
-    
-    const inactiveDevices = data.devices.length - activeDevices - idleDevices;
-    
     setStatus({
       isActive: serviceStatus.polling.isActive,
       isConnected: true,
       lastUpdate: data.lastUpdate,
-      activeDevices,
-      idleDevices,
-      inactiveDevices,
-      totalDevices: data.devices.length,
+      activeDevices: serviceStatus.devices.active,
+      idleDevices: serviceStatus.devices.idle,
+      inactiveDevices: serviceStatus.devices.inactive,
+      totalDevices: serviceStatus.devices.total,
       error: null,
       performance: {
-        successRate: serviceStatus.sync.successRate,
-        averageResponseTime: serviceStatus.sync.averageResponseTime,
+        successRate: serviceStatus.polling.successRate,
+        averageResponseTime: serviceStatus.polling.averageResponseTime,
         currentPollingInterval: serviceStatus.polling.currentInterval,
         circuitState: serviceStatus.polling.circuitState
       }

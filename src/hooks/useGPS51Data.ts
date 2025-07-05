@@ -43,12 +43,17 @@ export const useGPS51Data = () => {
       setLoading(true);
       setError(null);
 
-      console.log('Fetching vehicles from current schema...');
+      console.log('Fetching vehicles with LEFT JOIN...');
 
-      // Fetch vehicles using current schema
+      // Fetch ALL vehicles with their latest positions using LEFT JOIN
       const { data: vehiclesRaw, error: vehiclesError } = await supabase
         .from('vehicles')
-        .select('*')
+        .select(`
+          *,
+          vehicle_positions!left(
+            vehicle_id, latitude, longitude, speed, timestamp, address, ignition_status, heading, fuel_level, engine_temperature
+          )
+        `)
         .order('updated_at', { ascending: false });
 
       if (vehiclesError) {
@@ -60,30 +65,63 @@ export const useGPS51Data = () => {
 
       if (vehiclesRaw) {
         const transformedVehicles: VehicleData[] = vehiclesRaw.map(vehicle => {
-          // Map current schema to expected interface
-          const status = ['inactive', 'available', 'assigned', 'maintenance'].includes(vehicle.status) 
-            ? vehicle.status as 'inactive' | 'available' | 'assigned' | 'maintenance'
-            : 'inactive';
+          console.log(`Processing vehicle: ${vehicle.license_plate}, positions:`, vehicle.vehicle_positions);
+          
+          // Handle both array and single position data, get the most recent
+          let latestPositionRaw = null;
+          if (Array.isArray(vehicle.vehicle_positions) && vehicle.vehicle_positions.length > 0) {
+            // Sort by timestamp to get the latest
+            latestPositionRaw = vehicle.vehicle_positions.sort((a, b) => 
+              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+            )[0];
+          } else if (vehicle.vehicle_positions && !Array.isArray(vehicle.vehicle_positions)) {
+            latestPositionRaw = vehicle.vehicle_positions;
+          }
+
+          let latestPosition: VehiclePosition | null = null;
+          if (latestPositionRaw) {
+            latestPosition = {
+              vehicle_id: vehicle.id,
+              latitude: Number(latestPositionRaw.latitude),
+              longitude: Number(latestPositionRaw.longitude),
+              speed: Number(latestPositionRaw.speed || 0),
+              timestamp: latestPositionRaw.timestamp,
+              status: latestPositionRaw.address || 'Unknown location',
+              isMoving: latestPositionRaw.ignition_status || false,
+              ignition_status: latestPositionRaw.ignition_status || false,
+              heading: latestPositionRaw.heading ? Number(latestPositionRaw.heading) : undefined,
+              fuel_level: latestPositionRaw.fuel_level ? Number(latestPositionRaw.fuel_level) : undefined,
+              engine_temperature: latestPositionRaw.engine_temperature ? Number(latestPositionRaw.engine_temperature) : undefined,
+            };
+          }
 
           return {
             id: vehicle.id,
-            brand: vehicle.make || 'Unknown',
+            brand: vehicle.brand || 'Unknown',
             model: vehicle.model || 'Unknown',
-            license_plate: vehicle.plate || '',
-            status,
-            type: 'sedan' as const, // Default type since not in current schema
+            license_plate: vehicle.license_plate,
+            status: vehicle.status,
+            type: vehicle.type,
             created_at: vehicle.created_at,
             updated_at: vehicle.updated_at,
-            notes: '',
-            gps51_device_id: undefined,
-            latest_position: null, // No positions table yet
+            notes: vehicle.notes || '',
+            gps51_device_id: vehicle.gps51_device_id,
+            latest_position: latestPosition,
           };
         });
 
         console.log('Transformed vehicles:', transformedVehicles.length, 'total');
+        console.log('Vehicles with positions:', transformedVehicles.filter(v => v.latest_position).length);
 
         setVehicles(transformedVehicles);
-        setVehiclePositions([]); // Empty until positions table exists
+        
+        // Extract all positions for the separate positions array
+        const allPositions: VehiclePosition[] = transformedVehicles
+          .filter(v => v.latest_position !== null)
+          .map(v => v.latest_position as VehiclePosition);
+        
+        setVehiclePositions(allPositions);
+        console.log('Vehicle positions extracted:', allPositions.length);
       }
     } catch (err) {
       console.error('Error fetching vehicle data:', err);

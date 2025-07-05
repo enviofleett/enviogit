@@ -450,9 +450,20 @@ export class GPS51DataRecoveryService {
    */
   private async saveFixedData(deviceId: string, fixedData: GPS51Position): Promise<void> {
     try {
-      // Use enhanced UPSERT function - temporarily disabled  
-      console.log('GPS51DataRecoveryService: Position upsert temporarily disabled - database schema pending');
-      const error = null; // Simulate success
+      // Use the enhanced UPSERT function we created in the migration
+      const { error } = await supabase.rpc('upsert_vehicle_position', {
+        p_gps51_device_id: deviceId,
+        p_latitude: fixedData.callat,
+        p_longitude: fixedData.callon,
+        p_timestamp: fixedData.updatetime,
+        p_speed: fixedData.speed || 0,
+        p_heading: fixedData.course || 0,
+        p_altitude: fixedData.altitude || 0,
+        p_ignition_status: fixedData.moving === 1,
+        p_fuel_level: fixedData.fuel || null,
+        p_battery_level: fixedData.voltage || null,
+        p_address: fixedData.strstatus || null
+      });
 
       if (error) {
         throw new Error(`Database upsert failed: ${error.message}`);

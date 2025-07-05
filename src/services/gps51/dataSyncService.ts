@@ -34,10 +34,13 @@ export class GPS51DataSyncService {
       for (const device of devices) {
         try {
           const vehicleData = {
-            plate: device.devicename,
-            make: 'GPS51',
+            license_plate: device.devicename,
+            gps51_device_id: device.deviceid,
+            brand: 'GPS51',
             model: `Device ${device.devicetype}`,
-            status: (device.isfree === 1 ? 'active' : 'inactive') as 'active',
+            type: GPS51DeviceTypeMapper.mapDeviceTypeToVehicleType(device.devicetype),
+            status: (device.isfree === 1 ? 'available' : 'assigned') as 'available' | 'inactive' | 'maintenance' | 'assigned',
+            notes: `Device ID: ${device.deviceid}, SIM: ${device.simnum}`,
             updated_at: new Date().toISOString()
           };
 
@@ -46,7 +49,7 @@ export class GPS51DataSyncService {
           const { data: vehicleResult, error } = await supabase
             .from('vehicles')
             .upsert(vehicleData, {
-              onConflict: 'plate'
+              onConflict: 'license_plate'
             })
             .select('id')
             .single();
@@ -69,11 +72,11 @@ export class GPS51DataSyncService {
         try {
           console.log(`GPS51DataSyncService: Processing position for GPS51 device: ${position.deviceid}`);
 
-          // Find vehicle by plate name instead of GPS51 device ID
+          // Find vehicle by GPS51 device ID instead of license plate
           const { data: vehicle, error: vehicleQueryError } = await supabase
             .from('vehicles')
             .select('id')
-            .eq('plate', position.deviceid)
+            .eq('gps51_device_id', position.deviceid)
             .single();
 
           if (vehicleQueryError) {
@@ -82,7 +85,23 @@ export class GPS51DataSyncService {
           }
 
           if (vehicle) {
-            console.log(`GPS51DataSyncService: Would store position for vehicle ${vehicle.id}:`, {
+            const positionData = {
+              vehicle_id: vehicle.id,
+              latitude: position.callat,
+              longitude: position.callon,
+              speed: position.speed,
+              heading: position.course,
+              altitude: position.altitude,
+              timestamp: new Date(position.updatetime).toISOString(),
+              ignition_status: position.moving === 1,
+              fuel_level: position.voltagepercent,
+              engine_temperature: position.temp1,
+              battery_level: position.voltage,
+              address: position.strstatus,
+              recorded_at: new Date().toISOString()
+            };
+
+            console.log(`GPS51DataSyncService: Storing position for vehicle ${vehicle.id}:`, {
               deviceId: position.deviceid,
               lat: position.callat,
               lon: position.callon,
@@ -90,9 +109,9 @@ export class GPS51DataSyncService {
               moving: position.moving
             });
 
-            // Position storage temporarily disabled - vehicle_positions table doesn't exist yet
-            console.log('GPS51DataSyncService: Position storage temporarily disabled - database schema pending');
-            const error = null;
+            const { error } = await supabase
+              .from('vehicle_positions')
+              .insert(positionData);
 
             if (!error) {
               positionsStored++;

@@ -1,50 +1,54 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ProductionReadyDashboard } from '@/components/dashboard/ProductionReadyDashboard';
+import GPS51LiveDataDashboard from '@/components/dashboard/GPS51LiveDataDashboard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Activity, Wifi, Users, MapPin, Settings, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
+import { Activity, Wifi, Users, MapPin } from 'lucide-react';
+import { gps51StartupService } from '@/services/gps51/GPS51StartupService';
 
 const Index = () => {
   const [systemStatus, setSystemStatus] = useState({
     isInitialized: false,
     isLiveDataActive: false,
     vehicleCount: 0,
-    lastUpdate: null as Date | null,
-    hasError: false,
-    connectionHealth: 'unknown' as 'good' | 'degraded' | 'poor' | 'unknown',
-    productionReady: false
+    lastUpdate: null as Date | null
   });
 
   useEffect(() => {
-    // Listen for GPS51 system events
-    const handleGPS51Ready = () => {
-      console.log('Index: GPS51 system ready event received');
-      setSystemStatus(prev => ({
-        ...prev,
-        isInitialized: true,
-        hasError: false
-      }));
+    const initializeSystem = async () => {
+      console.log('Index: Initializing GPS51 system...');
+      
+      // Initialize authentication and start services
+      const initialized = await gps51StartupService.initializeAuthentication();
+      console.log('Index: System initialization result:', initialized);
+      
+      if (initialized) {
+        checkSystemStatus();
+      }
     };
 
-    const handleGPS51NotReady = (event: CustomEvent) => {
-      console.log('Index: GPS51 system not ready:', event.detail);
-      setSystemStatus(prev => ({
-        ...prev,
-        isInitialized: false,
-        hasError: false
-      }));
+    const checkSystemStatus = () => {
+      const isInitialized = gps51StartupService.isSystemInitialized();
+      const liveDataManager = gps51StartupService.getLiveDataManager();
+      const serviceStatus = liveDataManager.getStatus();
+      const currentState = liveDataManager.getCurrentState();
+      
+      console.log('Index: System status check:', {
+        isInitialized,
+        isActive: serviceStatus.isActive,
+        deviceCount: currentState.devices.length,
+        lastUpdate: currentState.lastUpdate
+      });
+      
+      setSystemStatus({
+        isInitialized,
+        isLiveDataActive: serviceStatus.isActive,
+        vehicleCount: currentState.devices.length,
+        lastUpdate: currentState.lastUpdate
+      });
     };
 
-    const handleGPS51Error = (event: CustomEvent) => {
-      console.log('Index: GPS51 system error:', event.detail);
-      setSystemStatus(prev => ({
-        ...prev,
-        isInitialized: false,
-        hasError: true
-      }));
-    };
+    // Initialize system
+    initializeSystem();
 
     // Listen for live data updates
     const handleLiveDataUpdate = (event: CustomEvent) => {
@@ -60,78 +64,28 @@ const Index = () => {
         vehicleCount: data.devices?.length || 0,
         lastUpdate: data.lastUpdate || new Date(),
         isLiveDataActive: true,
-        isInitialized: true,
-        hasError: false
+        isInitialized: true
       }));
     };
 
-    // Add event listeners
-    window.addEventListener('gps51-system-ready', handleGPS51Ready);
-    window.addEventListener('gps51-system-not-ready', handleGPS51NotReady as EventListener);
-    window.addEventListener('gps51-system-error', handleGPS51Error as EventListener);
     window.addEventListener('gps51-live-data-update', handleLiveDataUpdate as EventListener);
 
-    // Set initial timeout to show page even if GPS51 fails
-    const initTimeout = setTimeout(() => {
-      console.log('Index: Initialization timeout - showing page');
-      setSystemStatus(prev => ({
-        ...prev,
-        isInitialized: false,
-        hasError: false
-      }));
-    }, 5000);
+    // Check status every 30 seconds
+    const interval = setInterval(checkSystemStatus, 30000);
 
     return () => {
-      clearTimeout(initTimeout);
-      window.removeEventListener('gps51-system-ready', handleGPS51Ready);
-      window.removeEventListener('gps51-system-not-ready', handleGPS51NotReady as EventListener);
-      window.removeEventListener('gps51-system-error', handleGPS51Error as EventListener);
+      clearInterval(interval);
       window.removeEventListener('gps51-live-data-update', handleLiveDataUpdate as EventListener);
     };
   }, []);
 
   const getStatusBadge = () => {
-    if (systemStatus.hasError) {
-      return (
-        <Badge variant="destructive" className="flex items-center gap-1">
-          <XCircle className="w-3 h-3" />
-          System Error
-        </Badge>
-      );
-    } else if (systemStatus.isInitialized && systemStatus.isLiveDataActive) {
-      return (
-        <Badge className="bg-green-100 text-green-800 flex items-center gap-1">
-          <CheckCircle className="w-3 h-3" />
-          Production Ready
-        </Badge>
-      );
+    if (systemStatus.isInitialized && systemStatus.isLiveDataActive) {
+      return <Badge className="bg-green-100 text-green-800">Live & Active</Badge>;
     } else if (systemStatus.isInitialized) {
-      return (
-        <Badge className="bg-blue-100 text-blue-800 flex items-center gap-1">
-          <Activity className="w-3 h-3" />
-          Connected
-        </Badge>
-      );
+      return <Badge className="bg-blue-100 text-blue-800">Connected</Badge>;
     } else {
-      return (
-        <Badge variant="secondary" className="flex items-center gap-1">
-          <Settings className="w-3 h-3" />
-          Ready to Configure
-        </Badge>
-      );
-    }
-  };
-
-  const getConnectionHealthBadge = () => {
-    switch (systemStatus.connectionHealth) {
-      case 'good':
-        return <Badge className="bg-green-100 text-green-800">Excellent</Badge>;
-      case 'degraded':
-        return <Badge className="bg-yellow-100 text-yellow-800">Degraded</Badge>;
-      case 'poor':
-        return <Badge variant="destructive">Poor</Badge>;
-      default:
-        return <Badge variant="outline">Unknown</Badge>;
+      return <Badge variant="secondary">Initializing</Badge>;
     }
   };
 
@@ -172,13 +126,10 @@ const Index = () => {
             <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
               <Wifi className="h-8 w-8 text-green-600" />
               <div>
-                <p className="text-sm text-slate-600">Connection Health</p>
-                <div className="flex items-center gap-2">
-                  <p className="text-lg font-bold">
-                    {systemStatus.connectionHealth.charAt(0).toUpperCase() + systemStatus.connectionHealth.slice(1)}
-                  </p>
-                  {getConnectionHealthBadge()}
-                </div>
+                <p className="text-sm text-slate-600">Connection</p>
+                <p className="text-lg font-bold">
+                  {systemStatus.isInitialized ? 'Connected' : 'Connecting...'}
+                </p>
               </div>
             </div>
             
@@ -187,7 +138,7 @@ const Index = () => {
               <div>
                 <p className="text-sm text-slate-600">Live Data</p>
                 <p className="text-lg font-bold">
-                  {systemStatus.isLiveDataActive ? 'Active' : 'Inactive'}
+                  {systemStatus.isLiveDataActive ? 'Active' : 'Starting...'}
                 </p>
               </div>
             </div>
@@ -203,41 +154,15 @@ const Index = () => {
         </CardContent>
       </Card>
 
-      {/* Production Ready Dashboard or Configuration Prompt */}
+      {/* Live Data Dashboard */}
       {systemStatus.isInitialized ? (
-        <ProductionReadyDashboard />
+        <GPS51LiveDataDashboard />
       ) : (
         <Card>
           <CardContent className="p-6">
-            <div className="text-center space-y-4">
-              <div className="flex items-center justify-center mb-4">
-                <Settings className="h-12 w-12 text-gray-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-600">GPS51 System Ready for Configuration</h3>
-              <p className="text-gray-500 max-w-md mx-auto">
-                Your GPS51 fleet management system is ready to be configured. 
-                Set up your GPS51 API credentials to start tracking vehicles in real-time.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3 mt-4">
-                <Link 
-                  to="/settings" 
-                  className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  <Settings className="w-4 h-4 mr-2" />
-                  Configure GPS51
-                </Link>
-                <Link 
-                  to="/tracking" 
-                  className="inline-flex items-center justify-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  <MapPin className="w-4 h-4 mr-2" />
-                  View Tracking
-                </Link>
-              </div>
-              <div className="mt-4 text-xs text-gray-400 space-y-1">
-                <p><strong>System Status:</strong> Production Ready • Error Boundaries: Active • Fallbacks: Enabled</p>
-                <p><strong>Features:</strong> Circuit Breaker Pattern • Adaptive Polling • Database Integration • Real-time Updates</p>
-              </div>
+            <div className="flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <span className="ml-2">Initializing GPS51 system...</span>
             </div>
           </CardContent>
         </Card>

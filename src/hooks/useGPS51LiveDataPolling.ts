@@ -1,80 +1,78 @@
-import { useCallback, useRef } from 'react';
 
-interface LiveDataOptions {
+import { useEffect, useCallback, useRef } from 'react';
+import { GPS51LiveDataService, LiveDataState, gps51LiveDataService } from '@/services/gps51/GPS51LiveDataService';
+
+export interface LiveDataPollingOptions {
   enabled?: boolean;
   pollingInterval?: number;
-  maxRetries?: number;
   autoStart?: boolean;
 }
 
-interface LiveDataState {
-  devices: any[];
-  positions: any[];
-  lastUpdate: Date | null;
-}
-
 export const useGPS51LiveDataPolling = (
-  options: LiveDataOptions,
-  updateLiveData: (data: LiveDataState) => void,
-  setErrorState: (error: string | null) => void,
-  setLoadingState: (loading: boolean) => void
+  options: LiveDataPollingOptions,
+  onDataUpdate: (data: LiveDataState) => void,
+  onError: (error: string) => void,
+  setLoading: (loading: boolean) => void
 ) => {
-  const pollingInterval = useRef<NodeJS.Timeout | null>(null);
-  const isPolling = useRef(false);
+  const {
+    enabled = true,
+    pollingInterval = 30000,
+    autoStart = true
+  } = options;
 
-  // Mock service for now - this would connect to actual GPS51 service
-  const service = {
-    getDeviceById: (deviceId: string) => null,
-    getPositionByDeviceId: (deviceId: string) => null
-  };
+  const serviceRef = useRef<GPS51LiveDataService>(gps51LiveDataService);
 
+  // Handle live data updates
+  const handleLiveDataUpdate = useCallback((data: LiveDataState) => {
+    onDataUpdate(data);
+  }, [onDataUpdate]);
+
+  // Manual refresh
   const refresh = useCallback(async () => {
-    try {
-      setLoadingState(true);
-      
-      // Mock data for now - this would fetch from actual GPS51 API
-      const mockData: LiveDataState = {
-        devices: [],
-        positions: [],
-        lastUpdate: new Date()
-      };
-      
-      updateLiveData(mockData);
-      setErrorState(null);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch data';
-      setErrorState(errorMessage);
-    } finally {
-      setLoadingState(false);
-    }
-  }, [updateLiveData, setErrorState, setLoadingState]);
+    if (!enabled) return;
 
+    try {
+      setLoading(true);
+      onError(null);
+      
+      const data = await serviceRef.current.fetchLiveData();
+      handleLiveDataUpdate(data);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      onError(errorMessage);
+      console.error('useGPS51LiveDataPolling: Manual refresh failed:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [enabled, handleLiveDataUpdate, onError, setLoading]);
+
+  // Start/stop polling
   const startPolling = useCallback(() => {
-    if (isPolling.current) return;
+    if (!enabled) return;
     
-    isPolling.current = true;
-    const interval = options.pollingInterval || 30000;
-    
-    pollingInterval.current = setInterval(() => {
-      refresh();
-    }, interval);
-    
-    // Initial fetch
-    refresh();
-  }, [refresh, options.pollingInterval]);
+    serviceRef.current.updatePollingInterval(pollingInterval);
+    serviceRef.current.startPolling(handleLiveDataUpdate);
+  }, [enabled, pollingInterval, handleLiveDataUpdate]);
 
   const stopPolling = useCallback(() => {
-    if (pollingInterval.current) {
-      clearInterval(pollingInterval.current);
-      pollingInterval.current = null;
-    }
-    isPolling.current = false;
+    serviceRef.current.stopPolling();
   }, []);
+
+  // Effect for managing polling lifecycle
+  useEffect(() => {
+    if (enabled && autoStart) {
+      startPolling();
+    }
+
+    return () => {
+      stopPolling();
+    };
+  }, [enabled, autoStart, startPolling, stopPolling]);
 
   return {
     refresh,
     startPolling,
     stopPolling,
-    service
+    service: serviceRef.current
   };
 };

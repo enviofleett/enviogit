@@ -50,7 +50,7 @@ export const GPS51RealTimeTestPanel = () => {
       addLog('🔍 Running detailed time analysis...');
       
       const dataFetcher = new GPS51DataFetcher(gps51Client);
-        const devices = await dataFetcher.fetchDevices();
+      const devices = await dataFetcher.fetchUserDevices();
       
       const now = GPS51TimeManager.getCurrentUtcTimestamp();
       const thirtyMinutesAgo = now - (30 * 60 * 1000);
@@ -106,7 +106,7 @@ export const GPS51RealTimeTestPanel = () => {
 
       // Test device list first
       addLog('📋 Fetching device list...');
-      const devices = await dataFetcher.fetchDevices();
+      const devices = await dataFetcher.fetchUserDevices();
       addLog(`📱 Found ${devices.length} total devices`);
 
       if (devices.length === 0) {

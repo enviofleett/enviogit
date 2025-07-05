@@ -1,6 +1,6 @@
 import { GPS51Client } from './GPS51Client';
 import { GPS51TimeManager } from './GPS51TimeManager';
-import { GPS51Device, GPS51Position } from './GPS51Types';
+import { GPS51Device, GPS51Position } from './types';
 import { GPS51TimestampUtils } from './GPS51TimestampUtils';
 
 /**

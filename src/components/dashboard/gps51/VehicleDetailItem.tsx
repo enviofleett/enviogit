@@ -14,17 +14,7 @@ import {
   Clock,
   Gauge
 } from 'lucide-react';
-interface VehicleWithEnhancedData {
-  device: any;
-  position?: any;
-  isOnline: boolean;
-  isMoving: boolean;
-  lastSeen: Date | null;
-  hasAlarms: boolean;
-  fuelLevel?: number;
-  temperature?: number;
-  batteryLevel?: number;
-}
+import { VehicleWithEnhancedData } from '@/hooks/useGPS51VehicleData';
 
 interface VehicleDetailItemProps {
   vehicleData: VehicleWithEnhancedData;
