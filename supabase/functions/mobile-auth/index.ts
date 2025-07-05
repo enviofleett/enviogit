@@ -1,10 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { withSecurity, PRODUCTION_SECURITY_CONFIG } from "../_shared/security.ts";
 
 interface MobileAuthRequest {
   email: string;
@@ -16,10 +12,7 @@ interface MobileAuthRequest {
   };
 }
 
-const handler = async (req: Request): Promise<Response> => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+const secureHandler = async (req: Request): Promise<Response> => {
 
   try {
     const { email, password, deviceInfo }: MobileAuthRequest = await req.json();
@@ -140,7 +133,7 @@ const handler = async (req: Request): Promise<Response> => {
       vehicles: vehicles || []
     }), {
       status: 200,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
+      headers: { "Content-Type": "application/json" },
     });
 
   } catch (error: any) {
@@ -151,9 +144,15 @@ const handler = async (req: Request): Promise<Response> => {
       success: false
     }), {
       status: 401,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
+      headers: { "Content-Type": "application/json" },
     });
   }
 };
+
+// Apply production security middleware
+const handler = withSecurity(secureHandler, {
+  rateLimit: PRODUCTION_SECURITY_CONFIG.rateLimits.auth,
+  requireSignature: false // Optional for auth endpoint
+});
 
 serve(handler);

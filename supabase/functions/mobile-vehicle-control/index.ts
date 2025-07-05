@@ -1,10 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { withSecurity, PRODUCTION_SECURITY_CONFIG } from "../_shared/security.ts";
 
 interface VehicleControlRequest {
   userId: string;
@@ -13,10 +9,7 @@ interface VehicleControlRequest {
   gps51Token: string;
 }
 
-const handler = async (req: Request): Promise<Response> => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+const secureHandler = async (req: Request): Promise<Response> => {
 
   try {
     const { userId, vehicleId, action, gps51Token }: VehicleControlRequest = await req.json();
@@ -64,7 +57,7 @@ const handler = async (req: Request): Promise<Response> => {
         upgradeRequired: accessResponse?.upgradeRequired || false
       }), {
         status: 403,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
+        headers: { "Content-Type": "application/json" },
       });
     }
 
@@ -90,7 +83,7 @@ const handler = async (req: Request): Promise<Response> => {
       commandResponse: accessResponse.data
     }), {
       status: 200,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
+      headers: { "Content-Type": "application/json" },
     });
 
   } catch (error: any) {
@@ -101,9 +94,16 @@ const handler = async (req: Request): Promise<Response> => {
       success: false
     }), {
       status: 500,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
+      headers: { "Content-Type": "application/json" },
     });
   }
 };
+
+// Apply production security middleware with strict controls for vehicle commands
+const handler = withSecurity(secureHandler, {
+  rateLimit: PRODUCTION_SECURITY_CONFIG.rateLimits.control,
+  requireSignature: true,
+  secretKey: Deno.env.get("MOBILE_API_SECRET") || "fallback-secret-key"
+});
 
 serve(handler);
