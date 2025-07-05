@@ -37,10 +37,10 @@ export class GPS51EnhancedSyncService {
 
   private constructor(options: EnhancedSyncOptions = {}) {
     this.options = {
-      // Adaptive polling defaults
-      basePollingInterval: 30000,
-      minPollingInterval: 5000,
-      maxPollingInterval: 120000,
+      // EMERGENCY THROTTLING RELIEF: Increased intervals
+      basePollingInterval: 90000,  // 90 seconds instead of 30
+      minPollingInterval: 60000,   // 60 seconds minimum instead of 5
+      maxPollingInterval: 300000,  // 5 minutes maximum
       maxRetries: 3,
       enableAdaptivePolling: true,
       enableCircuitBreaker: true,

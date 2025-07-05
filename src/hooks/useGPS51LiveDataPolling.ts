@@ -16,7 +16,7 @@ export const useGPS51LiveDataPolling = (
 ) => {
   const {
     enabled = true,
-    pollingInterval = 30000,
+    pollingInterval = 90000, // EMERGENCY: 90 seconds instead of 30
     autoStart = true
   } = options;
 

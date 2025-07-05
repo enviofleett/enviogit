@@ -5,6 +5,7 @@ import { EdgeFunctionInsights } from '@/components/developers/EdgeFunctionInsigh
 import { ApiCallMonitor } from '@/components/developers/ApiCallMonitor';
 import { DatabaseActivityMirror } from '@/components/developers/DatabaseActivityMirror';
 import { DataFlowVisualization } from '@/components/developers/DataFlowVisualization';
+import { GPS51ThrottlingMonitor } from '@/components/developers/GPS51ThrottlingMonitor';
 import { Shield } from 'lucide-react';
 
 const DevelopersPage = () => {
@@ -25,14 +26,19 @@ const DevelopersPage = () => {
           </div>
         </div>
 
-        <Tabs defaultValue="logs" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+        <Tabs defaultValue="throttling" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-6">
+            <TabsTrigger value="throttling">GPS51 Protection</TabsTrigger>
             <TabsTrigger value="logs">Application Logs</TabsTrigger>
             <TabsTrigger value="functions">Edge Functions</TabsTrigger>
             <TabsTrigger value="api">API Monitor</TabsTrigger>
             <TabsTrigger value="database">Database Activity</TabsTrigger>
             <TabsTrigger value="flow">Data Flow</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="throttling">
+            <GPS51ThrottlingMonitor />
+          </TabsContent>
 
           <TabsContent value="logs">
             <ApplicationLogsPanel />

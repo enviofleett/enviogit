@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { GPS51ApiResponse } from './GPS51Types';
+import { gps51CentralizedRequestManager } from './GPS51CentralizedRequestManager';
 
 export interface GPS51ProxyRequestData {
   action: string;
@@ -26,80 +27,10 @@ export class GPS51ProxyClient {
     method: 'GET' | 'POST' = 'POST',
     apiUrl: string = 'https://api.gps51.com/openapi'
   ): Promise<GPS51ApiResponse> {
-    const maxRetries = 3;
-    let lastError: Error;
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`GPS51ProxyClient: Making request via Supabase Edge Function (attempt ${attempt}/${maxRetries}):`, {
-          action,
-          hasToken: !!token,
-          tokenLength: token?.length,
-          params,
-          method,
-          apiUrl
-        });
-
-        const requestData: GPS51ProxyRequestData = {
-          action,
-          token: action === 'login' ? undefined : token, // Don't send token for login
-          params,
-          method,
-          apiUrl
-        };
-
-        const { data, error } = await supabase.functions.invoke('gps51-proxy', {
-          body: requestData
-        });
-
-        if (error) {
-          console.error('GPS51ProxyClient: Supabase function error:', error);
-          throw new Error(`Proxy request failed: ${error.message}`);
-        }
-
-        if (!data) {
-          throw new Error('No data received from proxy');
-        }
-
-        console.log('GPS51ProxyClient: Received response:', {
-          status: data.status,
-          message: data.message,
-          hasData: !!data.data,
-          hasRecords: !!data.records,
-          hasToken: !!data.token,
-          proxyMetadata: data.proxy_metadata
-        });
-
-        // Validate response
-        if (data.proxy_error) {
-          throw new Error(`Proxy error: ${data.error || 'Unknown proxy error'}`);
-        }
-
-        // Enhanced response validation for GPS51
-        if (action === 'login') {
-          if (data.status === 0) {
-            // Success status but check for actual content
-            if (!data.token && !data.user && !data.data) {
-              console.warn('GPS51ProxyClient: Success status but empty response detected');
-              data.message = data.message || 'Authentication succeeded but received empty response. This may indicate GPS51 API parameter issues.';
-            }
-          }
-        }
-
-        return data;
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error('Unknown error');
-        console.error(`GPS51ProxyClient: Request failed (attempt ${attempt}/${maxRetries}):`, lastError);
-        
-        if (attempt < maxRetries) {
-          const delay = Math.pow(2, attempt - 1) * 1000; // Exponential backoff
-          console.log(`GPS51ProxyClient: Retrying in ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-      }
-    }
-
-    throw new Error(`Proxy client error after ${maxRetries} attempts: ${lastError.message}`);
+    // PHASE 1 FIX: Route through centralized request manager
+    console.log('GPS51ProxyClient: Routing request through centralized manager');
+    return gps51CentralizedRequestManager.makeRequest(action, params, method, token, 'normal');
+    // REMOVED: All retry logic now handled by centralized manager
   }
 
   async testConnection(apiUrl?: string): Promise<{

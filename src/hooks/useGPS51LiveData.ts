@@ -49,7 +49,7 @@ export interface FleetMetrics {
 export const useGPS51LiveData = (options: LiveDataOptions = {}) => {
   const { 
     enabled = true, 
-    refreshInterval = 30000, 
+    refreshInterval = 90000, // EMERGENCY: 90 seconds instead of 30 
     maxRetries = 3,
     enableWebSocket = true,
     enableIntelligentFiltering = true

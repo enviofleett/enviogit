@@ -28,9 +28,9 @@ export class GPS51AdaptivePollingService {
 
   constructor(options: AdaptivePollingOptions = {}) {
     this.options = {
-      basePollingInterval: 30000, // 30 seconds
-      minPollingInterval: 5000,   // 5 seconds minimum
-      maxPollingInterval: 120000, // 2 minutes maximum
+      basePollingInterval: 90000,  // EMERGENCY: 90 seconds instead of 30
+      minPollingInterval: 60000,  // EMERGENCY: 60 seconds minimum instead of 5
+      maxPollingInterval: 300000, // EMERGENCY: 5 minutes maximum
       maxRetries: 3,
       enableAdaptivePolling: true,
       enableCircuitBreaker: true,
