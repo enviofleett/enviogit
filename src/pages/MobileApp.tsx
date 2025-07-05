@@ -5,7 +5,10 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useGracefulDegradation } from '@/hooks/useGracefulDegradation';
+import { useMobileErrorRecovery } from '@/hooks/useMobileErrorRecovery';
 import { MobileAuthGuard } from '@/components/mobile/MobileAuthGuard';
+import { ErrorBoundary } from '@/components/error/ErrorBoundary';
 import { 
   Smartphone, 
   Car, 
@@ -18,7 +21,11 @@ import {
   Lock, 
   Unlock,
   RefreshCw,
-  LogOut
+  LogOut,
+  AlertTriangle,
+  CheckCircle,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 
 interface MobileAppState {
@@ -38,6 +45,12 @@ export default function MobileApp() {
     isLoading: false
   });
   const { toast } = useToast();
+  const degradation = useGracefulDegradation('Fleet Mobile');
+  const errorRecovery = useMobileErrorRecovery({
+    maxRetries: 3,
+    autoRetry: true,
+    criticalErrors: ['Authentication', 'GPS51', 'Network']
+  });
 
   const [authState, setAuthState] = useState<{
     user: any;
@@ -90,16 +103,43 @@ export default function MobileApp() {
     setState(prev => ({ ...prev, isLoading: true }));
     
     try {
-      const { data, error } = await supabase.functions.invoke('mobile-dashboard-data', {
-        body: {
-          userId: authState.user?.id,
-          gps51Token: authState.gps51Token,
-          includePositions: true,
-          includeAlerts: true
-        }
-      });
+      // Use graceful degradation for dashboard data
+      const data = await degradation.executeWithDegradation(
+        async () => {
+          const { data, error } = await supabase.functions.invoke('mobile-dashboard-data', {
+            body: {
+              userId: authState.user?.id,
+              gps51Token: authState.gps51Token,
+              includePositions: true,
+              includeAlerts: true
+            }
+          });
 
-      if (error) throw error;
+          if (error) throw error;
+          return data;
+        },
+        {
+          feature: 'dashboard',
+          cacheKey: 'dashboard_data',
+          useRetry: true,
+          circuitBreaker: 'gps51',
+          fallback: async () => {
+            // Return cached or minimal dashboard data
+            const cached = degradation.getCachedData('dashboard_data');
+            if (cached) {
+              return cached.data;
+            }
+            
+            return {
+              data: {
+                vehicles: [],
+                summary: { totalVehicles: 0, activeVehicles: 0, inactiveVehicles: 0 },
+                subscription: null
+              }
+            };
+          }
+        }
+      );
 
       setState(prev => ({
         ...prev,
@@ -112,11 +152,7 @@ export default function MobileApp() {
 
       toast({ title: "Dashboard Loaded", description: "✅ Mobile dashboard data loaded successfully" });
     } catch (error: any) {
-      toast({ 
-        title: "Load Error", 
-        description: error.message, 
-        variant: "destructive" 
-      });
+      await errorRecovery.handleError(error, 'Dashboard Load');
       setState(prev => ({ ...prev, isLoading: false }));
     }
   };
@@ -215,7 +251,14 @@ export default function MobileApp() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 to-secondary/10">
+    <ErrorBoundary
+      level="page"
+      context="Mobile Fleet App"
+      onError={(error, errorInfo) => {
+        console.error('Mobile App Error Boundary:', error, errorInfo);
+      }}
+    >
+      <div className="min-h-screen bg-gradient-to-br from-primary/5 to-secondary/10">
       {/* Mobile Header */}
       <div className="sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
         <div className="container mx-auto px-4 py-3">
@@ -408,6 +451,7 @@ export default function MobileApp() {
           </CardContent>
         </Card>
       </div>
-    </div>
+      </div>
+    </ErrorBoundary>
   );
 }
