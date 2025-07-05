@@ -50,6 +50,45 @@ export type Database = {
           },
         ]
       }
+      api_calls_monitor: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          endpoint: string
+          error_message: string | null
+          id: string
+          method: string
+          request_payload: Json | null
+          response_body: Json | null
+          response_status: number
+          timestamp: string
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          endpoint: string
+          error_message?: string | null
+          id?: string
+          method?: string
+          request_payload?: Json | null
+          response_body?: Json | null
+          response_status: number
+          timestamp?: string
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          endpoint?: string
+          error_message?: string | null
+          id?: string
+          method?: string
+          request_payload?: Json | null
+          response_body?: Json | null
+          response_status?: number
+          timestamp?: string
+        }
+        Relationships: []
+      }
       models: {
         Row: {
           created_at: string | null
