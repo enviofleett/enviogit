@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import Sidebar from "./components/layout/Sidebar";
 import Index from "./pages/Index";
 import Settings from "./pages/Settings";
+import MobileApp from "./pages/MobileApp";
 import NotFound from "./pages/NotFound";
 import { gps51StartupService } from "./services/gps51/GPS51StartupService";
 
@@ -58,6 +59,7 @@ const App = () => {
               <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/tracking" element={<Index />} />
+                <Route path="/mobile" element={<MobileApp />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
