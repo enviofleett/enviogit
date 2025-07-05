@@ -152,10 +152,8 @@ class MaptilerService {
    */
   async logUsage(feature: string): Promise<void> {
     try {
-      await supabase.from('map_api_usage').insert({
-        feature_used: feature,
-        count: 1
-      });
+      console.log('MaptilerService: Usage logging temporarily disabled - database schema pending');
+      // Temporarily disabled until map_api_usage table is created
     } catch (error) {
       console.warn('Failed to log map API usage:', error);
     }

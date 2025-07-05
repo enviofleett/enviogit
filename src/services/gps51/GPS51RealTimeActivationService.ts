@@ -42,8 +42,8 @@ export class GPS51RealTimeActivationService {
       // 2. Get total vehicle count from database
       const { data: vehicles, error: vehiclesError } = await supabase
         .from('vehicles')
-        .select('id, license_plate, gps51_device_id')
-        .not('gps51_device_id', 'is', null);
+        .select('id, plate')
+        .not('plate', 'is', null);
 
       if (vehiclesError) {
         throw new Error(`Failed to fetch vehicles: ${vehiclesError.message}`);
