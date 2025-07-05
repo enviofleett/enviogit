@@ -4,8 +4,9 @@ import { GPS51Settings } from '@/components/settings/GPS51Settings';
 import { EmailConfigurationPanel } from '@/components/settings/EmailConfigurationPanel';
 import { MobileUserManagementPanel } from '@/components/settings/MobileUserManagementPanel';
 import { SubscriptionManagementPanel } from '@/components/settings/SubscriptionManagementPanel';
+import { ProductionDashboard } from '@/components/monitoring/ProductionDashboard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings as SettingsIcon, Mail, Smartphone, Package } from 'lucide-react';
+import { Settings as SettingsIcon, Mail, Smartphone, Package, Activity } from 'lucide-react';
 
 const Settings = () => {
   return (
@@ -16,7 +17,11 @@ const Settings = () => {
       </div>
       
       <Tabs defaultValue="mobile" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="monitoring" className="flex items-center gap-2">
+            <Activity className="h-4 w-4" />
+            Production Monitor
+          </TabsTrigger>
           <TabsTrigger value="mobile" className="flex items-center gap-2">
             <Smartphone className="h-4 w-4" />
             Mobile System
@@ -34,6 +39,10 @@ const Settings = () => {
             Email Configuration
           </TabsTrigger>
         </TabsList>
+        
+        <TabsContent value="monitoring">
+          <ProductionDashboard />
+        </TabsContent>
         
         <TabsContent value="mobile">
           <MobileUserManagementPanel />
