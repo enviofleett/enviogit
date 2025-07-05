@@ -35,36 +35,21 @@ export const GPS51DebugPanel = () => {
   const fetchDebugStats = async () => {
     setLoading(true);
     try {
-      // Get vehicle statistics
+      // Get vehicle statistics using current schema
       const { data: vehicles, error: vehiclesError } = await supabase
         .from('vehicles')
-        .select('id, gps51_device_id');
+        .select('id');
 
       if (vehiclesError) throw vehiclesError;
 
-      // Get position statistics
-      const { data: positions, error: positionsError } = await supabase
-        .from('vehicle_positions')
-        .select('vehicle_id, timestamp')
-        .order('timestamp', { ascending: false });
-
-      if (positionsError) throw positionsError;
-
-      // Get vehicles with positions
-      const { data: vehiclesWithPositions, error: vwpError } = await supabase
-        .from('vehicles')
-        .select('id')
-        .in('id', [...new Set(positions?.map(p => p.vehicle_id) || [])]);
-
-      if (vwpError) throw vwpError;
-
+      // Mock debug stats since position tables don't exist yet
       const debugStats: DebugStats = {
         totalVehicles: vehicles?.length || 0,
-        vehiclesWithGPS51Id: vehicles?.filter(v => v.gps51_device_id).length || 0,
-        vehiclesWithPositions: vehiclesWithPositions?.length || 0,
-        totalPositions: positions?.length || 0,
-        latestPositionTime: positions?.[0]?.timestamp || null,
-        oldestPositionTime: positions?.[positions.length - 1]?.timestamp || null
+        vehiclesWithGPS51Id: 0, // No gps51_device_id column yet
+        vehiclesWithPositions: 0, // No vehicle_positions table yet
+        totalPositions: 0, // No vehicle_positions table yet
+        latestPositionTime: null,
+        oldestPositionTime: null
       };
 
       setStats(debugStats);

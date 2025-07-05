@@ -40,53 +40,30 @@ export const GPS51BatchSyncPanel = () => {
     try {
       console.log('Fetching batch sync statistics...');
 
-      // Get vehicles categorized by priority
+      // Get vehicles using current schema
       const { data: vehicles, error: vehiclesError } = await supabase
         .from('vehicles')
-        .select(`
-          id, 
-          status, 
-          gps51_device_id,
-          updated_at,
-          vehicle_positions!left(
-            timestamp, 
-            ignition_status, 
-            speed
-          )
-        `)
+        .select('id, status, updated_at')
         .order('updated_at', { ascending: false });
 
       if (vehiclesError) throw vehiclesError;
 
-      const now = new Date();
-      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-      const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
+      // Mock priority distribution since position data isn't available yet
       let priority1Count = 0; // Active/Moving vehicles
       let priority2Count = 0; // Assigned vehicles  
       let priority3Count = 0; // Available vehicles
       let priority4Count = 0; // Inactive vehicles
 
       vehicles?.forEach(vehicle => {
-        const latestPosition = Array.isArray(vehicle.vehicle_positions) 
-          ? vehicle.vehicle_positions.sort((a, b) => 
-              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-            )[0]
-          : vehicle.vehicle_positions;
-
-        const lastPositionTime = latestPosition ? new Date(latestPosition.timestamp) : null;
-        const isRecentlyActive = lastPositionTime && lastPositionTime > oneHourAgo;
-        const isMoving = latestPosition?.ignition_status || (latestPosition?.speed || 0) > 0;
-        const hasRecentPosition = lastPositionTime && lastPositionTime > oneDayAgo;
-
-        if (isRecentlyActive && isMoving) {
-          priority1Count++; // Active/Moving
-        } else if (vehicle.status === 'assigned' && hasRecentPosition) {
-          priority2Count++; // Assigned with recent activity
-        } else if (vehicle.status === 'available' && hasRecentPosition) {
-          priority3Count++; // Available with recent activity
+        // Categorize based on status only for now
+        if (vehicle.status === 'active') {
+          priority1Count++;
+        } else if (vehicle.status === 'assigned') {
+          priority2Count++;
+        } else if (vehicle.status === 'available') {
+          priority3Count++;
         } else {
-          priority4Count++; // Inactive or no recent data
+          priority4Count++;
         }
       });
 
@@ -96,7 +73,7 @@ export const GPS51BatchSyncPanel = () => {
         priority3Count,
         priority4Count,
         totalVehicles: vehicles?.length || 0,
-        lastBatchSync: null, // Will be implemented with actual batch sync
+        lastBatchSync: null,
         syncInProgress: false
       };
 
