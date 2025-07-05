@@ -1,16 +1,17 @@
-
 import { useState, useCallback } from 'react';
-import { LiveDataState } from '@/services/gps51/GPS51LiveDataService';
-import { GPS51Device, GPS51Position } from '@/services/gps51/types';
+
+export interface LiveDataState {
+  devices: any[];
+  positions: any[];
+  lastUpdate: Date | null;
+}
 
 export const useGPS51LiveDataState = () => {
   const [liveData, setLiveData] = useState<LiveDataState>({
-    lastQueryPositionTime: 0,
     devices: [],
     positions: [],
-    lastUpdate: new Date()
+    lastUpdate: null
   });
-  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,6 +26,7 @@ export const useGPS51LiveDataState = () => {
 
   const setErrorState = useCallback((errorMessage: string | null) => {
     setError(errorMessage);
+    setLoading(false);
   }, []);
 
   return {

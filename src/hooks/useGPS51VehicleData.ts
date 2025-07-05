@@ -1,39 +1,24 @@
-
 import { useMemo } from 'react';
-import { LiveDataState } from '@/services/gps51/GPS51LiveDataService';
-import { GPS51Device, GPS51Position } from '@/services/gps51/types';
 
-export interface VehicleWithEnhancedData {
-  device: GPS51Device;
-  position?: GPS51Position;
-  isOnline: boolean;
-  isMoving: boolean;
-  hasAlarms: boolean;
-  fuelLevel?: number;
-  temperature?: number;
-  batteryLevel?: number;
-  lastSeen: Date | null;
+interface LiveDataState {
+  devices: any[];
+  positions: any[];
+  lastUpdate: Date | null;
 }
 
-export const useGPS51VehicleData = (liveData: LiveDataState): VehicleWithEnhancedData[] => {
+export const useGPS51VehicleData = (liveData: LiveDataState) => {
   return useMemo(() => {
-    const now = Date.now();
-    const fiveMinutesAgo = now - (5 * 60 * 1000);
+    if (!liveData || !liveData.devices) {
+      return [];
+    }
 
-    return liveData.devices.map(device => {
-      const position = liveData.positions.find(p => p.deviceid === device.deviceid);
-      
-      return {
-        device,
-        position,
-        isOnline: position ? position.updatetime > fiveMinutesAgo : false,
-        isMoving: position ? position.moving === 1 : false,
-        hasAlarms: position ? (position.alarm || 0) > 0 : false,
-        fuelLevel: position?.totaloil,
-        temperature: position?.temp1,
-        batteryLevel: position?.voltagepercent,
-        lastSeen: position ? new Date(position.updatetime) : null
-      };
-    });
+    return liveData.devices.map(device => ({
+      id: device.deviceid || device.id,
+      name: device.devicename || device.name || 'Unknown Vehicle',
+      status: device.strstatus || 'unknown',
+      lastUpdate: device.lastactivetime ? new Date(device.lastactivetime) : null,
+      latitude: device.latitude,
+      longitude: device.longitude
+    }));
   }, [liveData]);
 };
