@@ -17,6 +17,15 @@ interface EmailRequest {
   template?: string;
   data?: any;
   html?: string;
+  provider?: 'resend' | 'smtp';
+}
+
+interface SMTPConfig {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  secure: boolean;
 }
 
 const getEmailTemplate = (template: string, data: any): string => {
@@ -136,6 +145,80 @@ const getEmailTemplate = (template: string, data: any): string => {
   }
 };
 
+const sendViaSMTP = async (emailRequest: EmailRequest, smtpConfig: SMTPConfig): Promise<any> => {
+  // Import SMTP library (using a lightweight SMTP client)
+  const SMTPClient = (await import("https://deno.land/x/smtp@v0.7.0/mod.ts")).SmtpClient;
+  
+  const client = new SMTPClient();
+  
+  try {
+    await client.connectTLS({
+      hostname: smtpConfig.host,
+      port: smtpConfig.port,
+      username: smtpConfig.username,
+      password: smtpConfig.password,
+    });
+
+    const emailHtml = emailRequest.html || 
+      (emailRequest.template ? getEmailTemplate(emailRequest.template, emailRequest.data || {}) : 
+       `<p>${emailRequest.data?.message || 'Fleet Management System Notification'}</p>`);
+
+    await client.send({
+      from: emailRequest.from || `Fleet Management <${smtpConfig.username}>`,
+      to: Array.isArray(emailRequest.to) ? emailRequest.to : [emailRequest.to],
+      subject: emailRequest.subject,
+      content: emailHtml,
+      html: emailHtml,
+    });
+
+    await client.close();
+    
+    return { success: true, provider: 'smtp' };
+  } catch (error) {
+    await client.close();
+    throw error;
+  }
+};
+
+const getEmailConfiguration = async (): Promise<{ provider: string; smtp?: SMTPConfig }> => {
+  const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+  const supabaseClient = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+  );
+
+  const { data, error } = await supabaseClient
+    .from('email_configurations')
+    .select('*')
+    .eq('is_active', true)
+    .eq('is_primary', true)
+    .single();
+
+  if (error || !data) {
+    return { provider: 'resend' }; // Default fallback
+  }
+
+  const config = data.configuration as any;
+  
+  if (config.provider === 'smtp' && config.smtp) {
+    // In production, retrieve the encrypted password from secure storage
+    const smtpPassword = Deno.env.get("SMTP_PASSWORD") || "";
+    
+    return {
+      provider: 'smtp',
+      smtp: {
+        host: config.smtp.host,
+        port: parseInt(config.smtp.port),
+        username: config.smtp.username,
+        password: smtpPassword,
+        secure: config.smtp.secure
+      }
+    };
+  }
+
+  return { provider: 'resend' };
+};
+
 const handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -143,15 +226,20 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { to, subject, from, replyTo, template, data, html }: EmailRequest = await req.json();
+    const { to, subject, from, replyTo, template, data, html, provider }: EmailRequest = await req.json();
 
     // Validate required fields
     if (!to || !subject) {
       throw new Error("Missing required fields: 'to' and 'subject' are required");
     }
 
-    // Generate HTML content
+    // Get email configuration
+    const emailConfig = await getEmailConfiguration();
+    const useProvider = provider || emailConfig.provider;
+
+    let emailResponse;
     let emailHtml = html;
+    
     if (!emailHtml && template) {
       emailHtml = getEmailTemplate(template, data || {});
     }
@@ -160,14 +248,23 @@ const handler = async (req: Request): Promise<Response> => {
       emailHtml = `<p>${data?.message || 'Fleet Management System Notification'}</p>`;
     }
 
-    // Send email using Resend
-    const emailResponse = await resend.emails.send({
-      from: from || "Fleet Management <fleet@yourdomain.com>",
-      to: Array.isArray(to) ? to : [to],
-      subject,
-      replyTo: replyTo,
-      html: emailHtml,
-    });
+    if (useProvider === 'smtp' && emailConfig.smtp) {
+      // Send via SMTP
+      console.log("Sending email via SMTP:", emailConfig.smtp.host);
+      emailResponse = await sendViaSMTP({
+        to, subject, from, replyTo, template, data, html: emailHtml
+      }, emailConfig.smtp);
+    } else {
+      // Send via Resend (default)
+      console.log("Sending email via Resend");
+      emailResponse = await resend.emails.send({
+        from: from || "Fleet Management <fleet@yourdomain.com>",
+        to: Array.isArray(to) ? to : [to],
+        subject,
+        replyTo: replyTo,
+        html: emailHtml,
+      });
+    }
 
     console.log("Email sent successfully:", emailResponse);
 
@@ -185,7 +282,7 @@ const handler = async (req: Request): Promise<Response> => {
         subject,
         content: emailHtml,
         delivery_status: 'sent',
-        provider_used: 'resend',
+        provider_used: useProvider,
         provider_response: emailResponse,
         sent_at: new Date().toISOString()
       });
@@ -217,7 +314,7 @@ const handler = async (req: Request): Promise<Response> => {
           subject: body.subject || 'unknown',
           delivery_status: 'failed',
           error_message: error.message,
-          provider_used: 'resend'
+          provider_used: body.provider || 'resend'
         });
     } catch (logError) {
       console.error("Failed to log email error:", logError);
