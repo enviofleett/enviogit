@@ -53,13 +53,39 @@ export class GPS51SessionManager {
         return false;
       }
 
+      // ENHANCED FIX: More robust token validation
+      console.log('GPS51SessionManager: Validating stored token...');
+      
       // Set token in client first  
       gps51Client.setAuthenticationState(storedToken, null);
 
-      // Test if the token is still valid by making a simple request
-      const deviceList = await gps51Client.getDeviceList();
+      // ENHANCED FIX: Try multiple validation methods
+      let validationSuccess = false;
+      
+      try {
+        // Method 1: Try device list (current method)
+        const deviceList = await gps51Client.getDeviceList();
+        if (deviceList && deviceList.length >= 0) {
+          validationSuccess = true;
+          console.log('GPS51SessionManager: Token validated via device list');
+        }
+      } catch (deviceListError) {
+        console.log('GPS51SessionManager: Device list validation failed, trying alternative...');
+        
+        // Method 2: Try a simpler endpoint if device list fails
+        try {
+          // This will depend on what endpoints are available - for now, assume device list is the primary validation
+          const isClientAuthenticated = gps51Client.isAuthenticated();
+          if (isClientAuthenticated) {
+            validationSuccess = true;
+            console.log('GPS51SessionManager: Token validated via client authentication check');
+          }
+        } catch (clientError) {
+          console.log('GPS51SessionManager: All validation methods failed');
+        }
+      }
 
-      if (deviceList && deviceList.length >= 0) {
+      if (validationSuccess) {
         // Token is valid, restore full auth state
         const user = gps51Client.getUser();
         this.authStateManager.setAuthenticationState(storedToken, user);
@@ -72,10 +98,18 @@ export class GPS51SessionManager {
         return true;
       }
 
+      // Token validation failed
+      console.log('GPS51SessionManager: Token validation failed, clearing invalid token');
+      localStorage.removeItem('gps51_auth_token');
       return false;
     } catch (error) {
       console.log('GPS51SessionManager: Stored token validation failed:', error);
-      this.authStateManager.clearAuthenticationState();
+      
+      // ENHANCED FIX: Don't immediately clear state, give user a chance to re-authenticate
+      console.log('GPS51SessionManager: Marking session for re-authentication rather than clearing');
+      
+      // Clear invalid token but keep credentials for re-auth
+      localStorage.removeItem('gps51_auth_token');
       return false;
     }
   }

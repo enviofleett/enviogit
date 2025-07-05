@@ -63,6 +63,41 @@ export const GPS51UnifiedCredentialsPanel = () => {
     };
 
     loadCredentialsAndStatus();
+
+    // CRITICAL FIX: Listen for real-time authentication and health updates
+    const handleAuthSuccess = (event: CustomEvent) => {
+      console.log('GPS51UnifiedCredentialsPanel: Authentication success event received');
+      const status = gps51UnifiedAuthService.getAuthenticationStatus();
+      setAuthStatus(status);
+      
+      // Clear any previous test results to avoid confusion
+      setAuthResult(null);
+      setConnectionResult(null);
+    };
+
+    const handleHealthUpdate = (event: CustomEvent) => {
+      console.log('GPS51UnifiedCredentialsPanel: Connection health update event received');
+      const status = gps51UnifiedAuthService.getAuthenticationStatus();
+      setAuthStatus(status);
+    };
+
+    const handleAuthLogout = () => {
+      console.log('GPS51UnifiedCredentialsPanel: Authentication logout event received');
+      setAuthStatus(null);
+      setAuthResult(null);
+      setConnectionResult(null);
+    };
+
+    // Add event listeners for real-time updates
+    window.addEventListener('gps51-authentication-success', handleAuthSuccess as EventListener);
+    window.addEventListener('gps51-connection-health-update', handleHealthUpdate as EventListener);
+    window.addEventListener('gps51-authentication-logout', handleAuthLogout);
+
+    return () => {
+      window.removeEventListener('gps51-authentication-success', handleAuthSuccess as EventListener);
+      window.removeEventListener('gps51-connection-health-update', handleHealthUpdate as EventListener);
+      window.removeEventListener('gps51-authentication-logout', handleAuthLogout);
+    };
   }, []);
 
   const testConnection = async () => {
@@ -79,6 +114,8 @@ export const GPS51UnifiedCredentialsPanel = () => {
     setConnectionResult(null);
     
     try {
+      // CRITICAL FIX: Pass current authentication state to connection tester
+      const authStatus = gps51UnifiedAuthService.getAuthenticationStatus();
       const result = await gps51UnifiedAuthService.testConnection(credentials.apiUrl);
       setConnectionResult(result);
       
@@ -88,11 +125,21 @@ export const GPS51UnifiedCredentialsPanel = () => {
           description: `GPS51 API is reachable (${result.responseTime}ms)`,
         });
       } else {
-        toast({
-          title: "Connection Test Failed",
-          description: result.error || 'Unknown error',
-          variant: "destructive",
-        });
+        // CRITICAL FIX: Don't show CORS errors as failures
+        const isCorsError = result.error?.includes('CORS');
+        if (isCorsError) {
+          toast({
+            title: "Connection Test Info",
+            description: "Direct connection blocked by CORS (expected in browsers). Proxy connection will be used.",
+            variant: "default",
+          });
+        } else {
+          toast({
+            title: "Connection Test Failed",
+            description: result.error || 'Unknown error',
+            variant: "destructive",
+          });
+        }
       }
     } catch (error) {
       console.error('Connection test failed:', error);
@@ -147,13 +194,18 @@ export const GPS51UnifiedCredentialsPanel = () => {
       setAuthResult(result);
       
       if (result.success) {
-        // Update auth status after successful authentication
-        const status = gps51UnifiedAuthService.getAuthenticationStatus();
-        setAuthStatus(status);
+        // CRITICAL FIX: Force immediate status refresh and health update
+        setTimeout(() => {
+          const status = gps51UnifiedAuthService.getAuthenticationStatus();
+          setAuthStatus(status);
+          
+          // Clear previous connection test results to avoid confusion
+          setConnectionResult(null);
+        }, 100);
         
         toast({
           title: "Authentication Successful",
-          description: "GPS51 credentials saved and authentication succeeded",
+          description: "GPS51 credentials saved and authentication succeeded. Connection health updated.",
         });
       } else {
         toast({
@@ -326,8 +378,8 @@ export const GPS51UnifiedCredentialsPanel = () => {
                   )}
                 </div>
                 {connectionResult.error && (
-                  <div className="text-sm text-destructive">
-                    Error: {connectionResult.error}
+                  <div className={`text-sm ${connectionResult.error.includes('CORS') ? 'text-muted-foreground' : 'text-destructive'}`}>
+                    {connectionResult.error.includes('CORS') ? 'Info: ' : 'Error: '}{connectionResult.error}
                   </div>
                 )}
                 {connectionResult.healthStatus && (
@@ -335,6 +387,11 @@ export const GPS51UnifiedCredentialsPanel = () => {
                     <div className="font-medium">Connection Health:</div>
                     <div>Overall Status: {connectionResult.healthStatus.overallHealth}</div>
                     <div>Recommended Strategy: {connectionResult.healthStatus.recommendedStrategy}</div>
+                    {connectionResult.healthStatus.authenticationState && (
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {connectionResult.healthStatus.authenticationState.impact}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

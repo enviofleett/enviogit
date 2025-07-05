@@ -36,6 +36,9 @@ export class GPS51AuthStateManager {
       hasUser: !!user,
       clientAuthenticated: this.client.isAuthenticated()
     });
+
+    // CRITICAL FIX: Dispatch connection health update after authentication
+    this.dispatchConnectionHealthUpdate();
   }
 
   /**
@@ -134,5 +137,18 @@ export class GPS51AuthStateManager {
    */
   dispatchLogoutEvent(): void {
     window.dispatchEvent(new CustomEvent('gps51-authentication-logout'));
+  }
+
+  /**
+   * Dispatch connection health update event
+   */
+  dispatchConnectionHealthUpdate(): void {
+    window.dispatchEvent(new CustomEvent('gps51-connection-health-update', {
+      detail: {
+        isAuthenticated: this.isAuthenticated,
+        hasToken: !!this.currentToken,
+        timestamp: Date.now()
+      }
+    }));
   }
 }

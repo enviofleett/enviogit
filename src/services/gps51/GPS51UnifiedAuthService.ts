@@ -104,7 +104,14 @@ export class GPS51UnifiedAuthService {
     error?: string;
     healthStatus?: any;
   }> {
-    return await this.connectionTester.testConnection(apiUrl);
+    // CRITICAL FIX: Pass current authentication state to connection tester
+    const authStatus = this.getAuthenticationStatus();
+    const authenticationState = {
+      isAuthenticated: authStatus.isAuthenticated,
+      hasToken: authStatus.hasToken
+    };
+    
+    return await this.connectionTester.testConnection(apiUrl, authenticationState);
   }
 
   /**
