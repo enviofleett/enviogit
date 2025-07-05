@@ -271,6 +271,54 @@ export type Database = {
         }
         Relationships: []
       }
+      gps51_sync_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          execution_time_ms: number | null
+          id: string
+          job_type: string
+          positions_processed: number | null
+          results: Json | null
+          started_at: string | null
+          status: string
+          sync_parameters: Json | null
+          updated_at: string
+          vehicles_processed: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          execution_time_ms?: number | null
+          id?: string
+          job_type: string
+          positions_processed?: number | null
+          results?: Json | null
+          started_at?: string | null
+          status?: string
+          sync_parameters?: Json | null
+          updated_at?: string
+          vehicles_processed?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          execution_time_ms?: number | null
+          id?: string
+          job_type?: string
+          positions_processed?: number | null
+          results?: Json | null
+          started_at?: string | null
+          status?: string
+          sync_parameters?: Json | null
+          updated_at?: string
+          vehicles_processed?: number | null
+        }
+        Relationships: []
+      }
       models: {
         Row: {
           created_at: string | null
@@ -429,37 +477,135 @@ export type Database = {
           },
         ]
       }
+      vehicle_positions: {
+        Row: {
+          accuracy: number | null
+          address: string | null
+          altitude: number | null
+          battery_level: number | null
+          city: string | null
+          country: string | null
+          created_at: string
+          device_id: string
+          engine_hours: number | null
+          fuel_level: number | null
+          heading: number | null
+          id: string
+          latitude: number
+          longitude: number
+          odometer: number | null
+          raw_data: Json | null
+          speed: number | null
+          status: string | null
+          temperature: number | null
+          timestamp: string
+          updated_at: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          accuracy?: number | null
+          address?: string | null
+          altitude?: number | null
+          battery_level?: number | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          device_id: string
+          engine_hours?: number | null
+          fuel_level?: number | null
+          heading?: number | null
+          id?: string
+          latitude: number
+          longitude: number
+          odometer?: number | null
+          raw_data?: Json | null
+          speed?: number | null
+          status?: string | null
+          temperature?: number | null
+          timestamp: string
+          updated_at?: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          accuracy?: number | null
+          address?: string | null
+          altitude?: number | null
+          battery_level?: number | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          device_id?: string
+          engine_hours?: number | null
+          fuel_level?: number | null
+          heading?: number | null
+          id?: string
+          latitude?: number
+          longitude?: number
+          odometer?: number | null
+          raw_data?: Json | null
+          speed?: number | null
+          status?: string | null
+          temperature?: number | null
+          timestamp?: string
+          updated_at?: string
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_positions_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vehicles: {
         Row: {
+          brand: string | null
           created_at: string | null
+          gps51_device_id: string | null
           id: string
+          license_plate: string | null
           make: string | null
           model: string | null
+          notes: string | null
           plate: string | null
           status: string | null
           subscriber_id: string | null
+          type: string | null
           updated_at: string | null
           year: number | null
         }
         Insert: {
+          brand?: string | null
           created_at?: string | null
+          gps51_device_id?: string | null
           id?: string
+          license_plate?: string | null
           make?: string | null
           model?: string | null
+          notes?: string | null
           plate?: string | null
           status?: string | null
           subscriber_id?: string | null
+          type?: string | null
           updated_at?: string | null
           year?: number | null
         }
         Update: {
+          brand?: string | null
           created_at?: string | null
+          gps51_device_id?: string | null
           id?: string
+          license_plate?: string | null
           make?: string | null
           model?: string | null
+          notes?: string | null
           plate?: string | null
           status?: string | null
           subscriber_id?: string | null
+          type?: string | null
           updated_at?: string | null
           year?: number | null
         }
