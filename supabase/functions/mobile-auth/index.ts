@@ -1,0 +1,159 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+interface MobileAuthRequest {
+  email: string;
+  password: string;
+  deviceInfo?: {
+    platform: string;
+    deviceId: string;
+    appVersion: string;
+  };
+}
+
+const handler = async (req: Request): Promise<Response> => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { email, password, deviceInfo }: MobileAuthRequest = await req.json();
+
+    // Validate required fields
+    if (!email || !password) {
+      throw new Error("Email and password are required");
+    }
+
+    // Initialize Supabase client
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
+
+    // Hash password for GPS51 (MD5)
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('MD5', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashedPassword = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+    console.log('Mobile Auth: Attempting GPS51 login:', {
+      email,
+      hashedPasswordLength: hashedPassword.length,
+      deviceInfo
+    });
+
+    // Authenticate with GPS51 via proxy
+    const { data: proxyResponse, error: proxyError } = await supabaseClient.functions.invoke('gps51-proxy', {
+      body: {
+        action: 'login',
+        params: {
+          username: email,
+          password: hashedPassword,
+          from: deviceInfo?.platform === 'ios' ? 'IPHONE' : 'ANDROID',
+          type: 'USER'
+        },
+        method: 'POST'
+      }
+    });
+
+    if (proxyError) {
+      console.error('GPS51 authentication failed:', proxyError);
+      throw new Error(`Authentication failed: ${proxyError.message}`);
+    }
+
+    // Check GPS51 response
+    if (proxyResponse.status !== 0) {
+      console.error('GPS51 authentication unsuccessful:', proxyResponse);
+      throw new Error(`Authentication failed: ${proxyResponse.message || 'Invalid credentials'}`);
+    }
+
+    if (!proxyResponse.token) {
+      throw new Error('No authentication token received from GPS51');
+    }
+
+    console.log('GPS51 authentication successful:', {
+      username: email,
+      hasToken: !!proxyResponse.token,
+      hasUser: !!proxyResponse.user
+    });
+
+    // Get user profile from Supabase
+    const { data: userProfile, error: profileError } = await supabaseClient
+      .from('profiles')
+      .select(`
+        *,
+        user_subscriptions (
+          *,
+          subscription_packages (*)
+        )
+      `)
+      .eq('email', email)
+      .single();
+
+    if (profileError) {
+      console.error('User profile not found:', profileError);
+      throw new Error('User profile not found. Please register first.');
+    }
+
+    // Get user's vehicles
+    const { data: vehicles } = await supabaseClient
+      .from('vehicles')
+      .select('*')
+      .eq('subscriber_id', userProfile.id);
+
+    // Log authentication activity
+    await supabaseClient
+      .from('activity_logs')
+      .insert({
+        user_id: userProfile.id,
+        activity_type: 'mobile_login',
+        description: 'User logged in via mobile app',
+        device_info: deviceInfo ? JSON.stringify(deviceInfo) : null,
+        metadata: {
+          gps51_login: true,
+          platform: deviceInfo?.platform || 'unknown'
+        }
+      });
+
+    return new Response(JSON.stringify({
+      success: true,
+      message: "Authentication successful",
+      auth: {
+        gps51Token: proxyResponse.token,
+        gps51User: proxyResponse.user,
+        sessionExpiry: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
+      },
+      user: {
+        id: userProfile.id,
+        name: userProfile.name,
+        email: userProfile.email,
+        phone: userProfile.phone_number,
+        city: userProfile.city
+      },
+      subscription: userProfile.user_subscriptions?.[0] || null,
+      vehicles: vehicles || []
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+
+  } catch (error: any) {
+    console.error("Mobile authentication error:", error);
+    
+    return new Response(JSON.stringify({ 
+      error: error.message,
+      success: false
+    }), {
+      status: 401,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+  }
+};
+
+serve(handler);

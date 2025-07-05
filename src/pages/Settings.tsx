@@ -2,8 +2,9 @@
 import React from 'react';
 import { GPS51Settings } from '@/components/settings/GPS51Settings';
 import { EmailConfigurationPanel } from '@/components/settings/EmailConfigurationPanel';
+import { MobileUserManagementPanel } from '@/components/settings/MobileUserManagementPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings as SettingsIcon, Mail } from 'lucide-react';
+import { Settings as SettingsIcon, Mail, Smartphone } from 'lucide-react';
 
 const Settings = () => {
   return (
@@ -13,8 +14,12 @@ const Settings = () => {
         <p className="text-muted-foreground">Configure your fleet management system</p>
       </div>
       
-      <Tabs defaultValue="gps51" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
+      <Tabs defaultValue="mobile" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="mobile" className="flex items-center gap-2">
+            <Smartphone className="h-4 w-4" />
+            Mobile System
+          </TabsTrigger>
           <TabsTrigger value="gps51" className="flex items-center gap-2">
             <SettingsIcon className="h-4 w-4" />
             GPS51 Configuration
@@ -24,6 +29,10 @@ const Settings = () => {
             Email Configuration
           </TabsTrigger>
         </TabsList>
+        
+        <TabsContent value="mobile">
+          <MobileUserManagementPanel />
+        </TabsContent>
         
         <TabsContent value="gps51">
           <GPS51Settings />

@@ -271,6 +271,33 @@ export type Database = {
         }
         Relationships: []
       }
+      gps51_feature_mapping: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          feature_name: string
+          gps51_action: string
+          id: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          feature_name: string
+          gps51_action: string
+          id?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          feature_name?: string
+          gps51_action?: string
+          id?: string
+        }
+        Relationships: []
+      }
       gps51_sync_jobs: {
         Row: {
           completed_at: string | null
@@ -438,6 +465,45 @@ export type Database = {
         }
         Relationships: []
       }
+      subscription_packages: {
+        Row: {
+          created_at: string
+          description: string | null
+          features: Json | null
+          id: string
+          is_active: boolean | null
+          name: string
+          price_annually: number | null
+          price_quarterly: number | null
+          trial_days: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          price_annually?: number | null
+          price_quarterly?: number | null
+          trial_days?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          price_annually?: number | null
+          price_quarterly?: number | null
+          trial_days?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       trackers: {
         Row: {
           activation_date: string | null
@@ -482,6 +548,57 @@ export type Database = {
           },
           {
             foreignKeyName: "trackers_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_subscriptions: {
+        Row: {
+          created_at: string
+          id: string
+          package_id: string
+          status: string
+          subscription_end_date: string | null
+          trial_end_date: string | null
+          updated_at: string
+          user_id: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          package_id: string
+          status?: string
+          subscription_end_date?: string | null
+          trial_end_date?: string | null
+          updated_at?: string
+          user_id: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          package_id?: string
+          status?: string
+          subscription_end_date?: string | null
+          trial_end_date?: string | null
+          updated_at?: string
+          user_id?: string
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_subscriptions_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_subscriptions_vehicle_id_fkey"
             columns: ["vehicle_id"]
             isOneToOne: false
             referencedRelation: "vehicles"

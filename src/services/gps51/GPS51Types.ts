@@ -99,3 +99,73 @@ export interface GPS51Group {
   shared?: number;
   devices: GPS51Device[];
 }
+
+// User Registration Types
+export interface GPS51UserRegistration {
+  username: string; // email or unique identifier
+  password: string; // will be MD5 hashed
+  usertype: number; // 11 for End User
+  multilogin: number; // 0 or 1
+  creater?: string; // creating user
+  companyname?: string;
+  showname?: string; // display name
+}
+
+// Device Registration Types
+export interface GPS51DeviceRegistration {
+  deviceid: string; // device identifier
+  devicename: string; // display name for device
+  devicetype?: string; // device type
+  groupid?: string; // group assignment
+  creater?: string; // creating user
+}
+
+// Batch Operation Types
+export interface GPS51BatchOperation {
+  deviceids: string[]; // array of device IDs
+  operation: 'ModifyExpiringTime' | 'ModifyDeviceType' | 'DeleteDevice';
+  expiretime?: number; // for ModifyExpiringTime
+  devicetype?: string; // for ModifyDeviceType
+}
+
+// Command Types
+export interface GPS51Command {
+  deviceid: string;
+  cmdtype: 'ENGINE_ON' | 'ENGINE_OFF' | 'IMMOBILIZER_ON' | 'IMMOBILIZER_OFF' | 'LOCATE';
+  content?: string; // additional command parameters
+}
+
+// Enhanced User Profile (for internal database)
+export interface UserProfile {
+  id: string;
+  gps51_username: string; // links to GPS51 user
+  full_name: string;
+  email: string;
+  phone: string;
+  city: string;
+  country: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Subscription Types
+export interface SubscriptionPackage {
+  id: string;
+  name: string;
+  description?: string;
+  price_quarterly?: number;
+  price_annually?: number;
+  trial_days: number;
+  features: string[];
+  is_active: boolean;
+}
+
+export interface UserSubscription {
+  id: string;
+  user_id: string;
+  package_id: string;
+  vehicle_id?: string;
+  status: 'trial' | 'active' | 'expired' | 'cancelled';
+  trial_end_date?: string;
+  subscription_end_date?: string;
+}
