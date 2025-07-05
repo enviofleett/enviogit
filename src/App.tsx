@@ -8,8 +8,6 @@ import { useEffect } from "react";
 import Sidebar from "./components/layout/Sidebar";
 import Index from "./pages/Index";
 import TrackingPage from "./pages/TrackingPage";
-import Settings from "./pages/Settings";
-import DevelopersPage from "./pages/DevelopersPage";
 import NotFound from "./pages/NotFound";
 import { gps51StartupService } from "./services/gps51/GPS51StartupService";
 
@@ -60,8 +58,26 @@ const App = () => {
               <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/tracking" element={<TrackingPage />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/developers" element={<DevelopersPage />} />
+                <Route path="/settings" element={
+                  <div className="p-6">
+                    <div className="text-center">
+                      <h1 className="text-2xl font-bold mb-4">Settings</h1>
+                      <p className="text-muted-foreground">
+                        Settings panel is temporarily unavailable while database migration completes.
+                      </p>
+                    </div>
+                  </div>
+                } />
+                <Route path="/developers" element={
+                  <div className="p-6">
+                    <div className="text-center">
+                      <h1 className="text-2xl font-bold mb-4">Developers Console</h1>
+                      <p className="text-muted-foreground">
+                        Developer tools are temporarily unavailable while database migration completes.
+                      </p>
+                    </div>
+                  </div>
+                } />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </main>

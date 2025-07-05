@@ -54,17 +54,35 @@ export const ApplicationLogsPanel = () => {
 
   const fetchLogs = async () => {
     try {
+      // Since app_logs table doesn't exist, use activity_logs as a fallback
       const { data, error } = await supabase
-        .from('app_logs')
+        .from('activity_logs')
         .select('*')
-        .order('timestamp', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(100);
 
       if (error) throw error;
-      setLogs((data || []) as LogEntry[]);
+      
+      // Transform activity_logs to match LogEntry format
+      const transformedLogs = (data || []).map(log => ({
+        id: log.id,
+        timestamp: log.created_at,
+        level: 'INFO' as const,
+        message: log.activity_type,
+        details: {
+          description: log.description,
+          user_id: log.user_id,
+          metadata: log.metadata
+        },
+        source: 'system'
+      }));
+      
+      setLogs(transformedLogs);
     } catch (error) {
       console.error('Error fetching logs:', error);
       toast.error('Failed to fetch application logs');
+      // Set empty array on error to prevent infinite loading
+      setLogs([]);
     } finally {
       setLoading(false);
     }
