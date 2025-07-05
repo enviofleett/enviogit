@@ -207,21 +207,16 @@ export class GPS51GeofenceIntegration {
           // This would require extending the GeofencingService to check existence
           // For now, we'll assume all remote geofences should be created locally
           
-          const geofenceId = await this.geofencingService.createGeofence({
+          const geofence = await this.geofencingService.createGeofence({
             name: localGeofence.name,
             description: localGeofence.description,
             type: localGeofence.type,
-            isActive: localGeofence.isActive,
-            alertOnEntry: localGeofence.alertOnEntry,
-            alertOnExit: localGeofence.alertOnExit,
-            alertOnViolation: localGeofence.alertOnViolation,
-            centerLat: localGeofence.centerLat,
-            centerLng: localGeofence.centerLng,
-            radius: localGeofence.radius,
             coordinates: localGeofence.coordinates,
-            createdBy: localGeofence.createdBy,
-            tags: localGeofence.tags,
-            schedules: localGeofence.schedules
+            radius: localGeofence.radius,
+            is_active: localGeofence.is_active,
+            alert_on_entry: localGeofence.alert_on_entry,
+            alert_on_exit: localGeofence.alert_on_exit,
+            alert_on_violation: localGeofence.alert_on_violation
           });
 
           result.created++;
@@ -229,7 +224,7 @@ export class GPS51GeofenceIntegration {
           
           console.log('GPS51GeofenceIntegration: Created local geofence from remote:', {
             remoteId: remoteGeofence.id,
-            localId: geofenceId,
+            localId: geofence?.id,
             name: remoteGeofence.name
           });
 
@@ -278,13 +273,13 @@ export class GPS51GeofenceIntegration {
       id: geofence.id,
       name: geofence.name,
       categoryId: 1, // Default category
-      type: geofence.type === 'circular' ? 1 : 3, // 1: Circle, 3: Polygon
+      type: geofence.type === 'circle' ? 1 : 3, // 1: Circle, 3: Polygon
       useAs: 0, // Enter/exit notification
       triggerEvent: 0, // Platform notify
-      lat1: geofence.centerLat || (geofence.coordinates?.[0]?.lat ?? 0),
-      lon1: geofence.centerLng || (geofence.coordinates?.[0]?.lng ?? 0),
+      lat1: geofence.coordinates?.[0]?.[0] ?? 0,
+      lon1: geofence.coordinates?.[0]?.[1] ?? 0,
       radius1: geofence.radius,
-      points: geofence.coordinates?.map(coord => ({ lat: coord.lat, lon: coord.lng }))
+      points: geofence.coordinates?.map(coord => ({ lat: coord[0], lon: coord[1] }))
     };
   }
 
@@ -307,26 +302,21 @@ export class GPS51GeofenceIntegration {
     };
   }
 
-  private convertToLocalFormat(gps51Geofence: GPS51Geofence): Omit<Geofence, 'id' | 'createdAt' | 'updatedAt'> {
+  private convertToLocalFormat(gps51Geofence: GPS51Geofence): Omit<Geofence, 'id' | 'created_at' | 'updated_at'> {
     const isCircular = gps51Geofence.type === 1;
     
     return {
       name: gps51Geofence.name,
       description: `Synced from GPS51 (ID: ${gps51Geofence.id})`,
-      type: isCircular ? 'circular' : 'polygon',
-      isActive: true,
-      alertOnEntry: true,
-      alertOnExit: true,
-      alertOnViolation: false,
-      centerLat: isCircular ? gps51Geofence.lat1 : undefined,
-      centerLng: isCircular ? gps51Geofence.lon1 : undefined,
-      radius: isCircular ? gps51Geofence.radius1 : undefined,
-      coordinates: !isCircular && gps51Geofence.points 
-        ? gps51Geofence.points.map(p => ({ lat: p.lat, lng: p.lon }))
-        : undefined,
-      createdBy: 'system',
-      tags: ['gps51-sync'],
-      schedules: []
+      type: isCircular ? 'circle' : 'polygon',
+      is_active: true,
+      alert_on_entry: true,
+      alert_on_exit: true,
+      alert_on_violation: false,
+      coordinates: isCircular 
+        ? [[gps51Geofence.lat1, gps51Geofence.lon1]]
+        : gps51Geofence.points?.map(p => [p.lat, p.lon]) || [],
+      radius: isCircular ? gps51Geofence.radius1 : undefined
     };
   }
 }

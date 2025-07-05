@@ -1,8 +1,8 @@
 // Geofencing Service - Uses mock implementation until database tables are ready
-import { mockGeofencingService, Geofence, GeofenceViolation } from './MockGeofencingService';
+import { mockGeofencingService, Geofence, GeofenceViolation, GeofenceEvent } from './MockGeofencingService';
 
 // Re-export types for compatibility
-export type { Geofence, GeofenceViolation };
+export type { Geofence, GeofenceViolation, GeofenceEvent };
 
 export class GeofencingService {
   private mockService = mockGeofencingService;
@@ -23,17 +23,19 @@ export class GeofencingService {
     type: 'circle' | 'polygon';
     coordinates: number[][];
     radius?: number;
+    is_active?: boolean;
     alert_on_entry?: boolean;
     alert_on_exit?: boolean;
     alert_on_violation?: boolean;
-  }): Promise<Geofence | null> {
-    return await this.mockService.createGeofence({
+  }): Promise<Geofence> {
+    const result = await this.mockService.createGeofence({
       ...geofenceData,
-      is_active: true,
+      is_active: geofenceData.is_active ?? true,
       alert_on_entry: geofenceData.alert_on_entry ?? true,
       alert_on_exit: geofenceData.alert_on_exit ?? true,
       alert_on_violation: geofenceData.alert_on_violation ?? false
     });
+    return result;
   }
 
   /**

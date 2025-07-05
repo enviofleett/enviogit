@@ -28,6 +28,21 @@ export interface GeofenceViolation {
   };
 }
 
+export interface GeofenceEvent {
+  id: string;
+  type: 'entry' | 'exit' | 'violation';
+  geofenceId: string;
+  vehicleId: string;
+  deviceId: string;
+  timestamp: Date;
+  location: {
+    latitude: number;
+    longitude: number;
+  };
+  speed?: number;
+  metadata?: any;
+}
+
 export class MockGeofencingService {
   private mockGeofences: Geofence[] = [
     {

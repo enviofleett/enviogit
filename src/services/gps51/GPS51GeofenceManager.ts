@@ -42,21 +42,21 @@ export class GPS51GeofenceManager {
   async createGeofence(config: GPS51GeofenceConfig): Promise<string> {
     try {
       // Create local geofence first
-      const geofenceId = await geofencingService.createGeofence({
+      const geofence = await geofencingService.createGeofence({
         name: config.name,
         description: config.description,
-        type: config.type,
-        isActive: true,
-        alertOnEntry: config.alertOnEntry,
-        alertOnExit: config.alertOnExit,
-        alertOnViolation: config.alertOnViolation,
-        centerLat: config.centerLat,
-        centerLng: config.centerLng,
+        type: config.type === 'circular' ? 'circle' : 'polygon',
+        coordinates: config.type === 'circular' && config.centerLat && config.centerLng
+          ? [[config.centerLat, config.centerLng]]
+          : config.coordinates?.map(c => [c.lat, c.lng]) || [],
         radius: config.radius,
-        coordinates: config.coordinates,
-        createdBy: 'system', // This should be from auth context
-        tags: config.tags
+        is_active: true,
+        alert_on_entry: config.alertOnEntry,
+        alert_on_exit: config.alertOnExit,
+        alert_on_violation: config.alertOnViolation
       });
+      
+      const geofenceId = geofence.id;
 
       // Track sync status
       this.geofenceStatuses.set(geofenceId, {
@@ -83,14 +83,11 @@ export class GPS51GeofenceManager {
       await geofencingService.updateGeofence(id, {
         name: updates.name,
         description: updates.description,
-        alertOnEntry: updates.alertOnEntry,
-        alertOnExit: updates.alertOnExit,
-        alertOnViolation: updates.alertOnViolation,
-        centerLat: updates.centerLat,
-        centerLng: updates.centerLng,
+        coordinates: updates.coordinates?.map(c => [c.lat, c.lng]),
         radius: updates.radius,
-        coordinates: updates.coordinates,
-        tags: updates.tags
+        alert_on_entry: updates.alertOnEntry,
+        alert_on_exit: updates.alertOnExit,
+        alert_on_violation: updates.alertOnViolation
       });
 
       // Update sync status
@@ -139,7 +136,7 @@ export class GPS51GeofenceManager {
   // GPS51 Integration
   async syncGeofenceWithGPS51(geofenceId: string): Promise<void> {
     try {
-      const geofence = geofencingService.getGeofence(geofenceId);
+      const geofence = await geofencingService.getGeofence(geofenceId);
       if (!geofence) {
         throw new Error(`Geofence ${geofenceId} not found`);
       }
@@ -195,7 +192,7 @@ export class GPS51GeofenceManager {
     this.syncInProgress = true;
     
     try {
-      const geofences = geofencingService.getGeofences();
+      const geofences = await geofencingService.getGeofences();
       const syncPromises = geofences.map(async (geofence) => {
         const status = this.geofenceStatuses.get(geofence.id);
         if (!status || status.syncStatus === 'pending' || status.syncStatus === 'error') {
@@ -219,15 +216,12 @@ export class GPS51GeofenceManager {
       name: geofence.name,
       description: geofence.description,
       type: geofence.type,
-      active: geofence.isActive,
-      alertEntry: geofence.alertOnEntry,
-      alertExit: geofence.alertOnExit,
-      alertViolation: geofence.alertOnViolation,
-      centerLat: geofence.centerLat,
-      centerLng: geofence.centerLng,
-      radius: geofence.radius,
+      active: geofence.is_active,
+      alertEntry: geofence.alert_on_entry,
+      alertExit: geofence.alert_on_exit,
+      alertViolation: geofence.alert_on_violation,
       coordinates: geofence.coordinates,
-      tags: geofence.tags
+      radius: geofence.radius
     };
   }
 
@@ -279,12 +273,12 @@ export class GPS51GeofenceManager {
     return new Map(this.geofenceStatuses);
   }
 
-  getGeofences(): Geofence[] {
-    return geofencingService.getGeofences();
+  async getGeofences(): Promise<Geofence[]> {
+    return await geofencingService.getGeofences();
   }
 
-  getGeofence(id: string): Geofence | null {
-    return geofencingService.getGeofence(id);
+  async getGeofence(id: string): Promise<Geofence | null> {
+    return await geofencingService.getGeofence(id);
   }
 
   async getGeofenceStats() {
