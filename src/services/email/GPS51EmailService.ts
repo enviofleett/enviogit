@@ -378,8 +378,8 @@ export class GPS51EmailService {
           await this.sendAlertEmail({
             alert: event.data,
             recipients,
-            vehicleData: event.metadata?.vehicleData || {},
-            gps51Data: event.metadata?.gps51Data || {}
+            vehicleData: event.data?.vehicleData || {},
+            gps51Data: event.data?.gps51Data || {}
           });
         }
       } catch (error) {
