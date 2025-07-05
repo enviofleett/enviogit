@@ -15,6 +15,7 @@ import { GPS51ConnectivityDiagnostics } from './GPS51ConnectivityDiagnostics';
 import { GPS51AuthDiagnosticsPanel } from './GPS51AuthDiagnosticsPanel';
 import { GPS51ProductionReadinessPanel } from './GPS51ProductionReadinessPanel';
 import { GPS51EmergencyRecoveryPanel } from './GPS51EmergencyRecoveryPanel';
+import { GPS51EmergencyControlPanel } from './GPS51EmergencyControlPanel';
 import { MaptilerSettingsPanel } from './MaptilerSettingsPanel';
 
 export const GPS51Settings = () => {
@@ -59,7 +60,10 @@ export const GPS51Settings = () => {
         </TabsContent>
 
         <TabsContent value="recovery">
-          <GPS51EmergencyRecoveryPanel />
+          <div className="space-y-6">
+            <GPS51EmergencyControlPanel />
+            <GPS51EmergencyRecoveryPanel />
+          </div>
         </TabsContent>
 
         <TabsContent value="scheduler">
