@@ -12,6 +12,18 @@ interface VehicleRegistrationRequest {
   deviceType?: string;
   gps51Token: string; // GPS51 authentication token
   userId: string; // Supabase user ID
+  // Enhanced vehicle manufacturer details
+  vehicleDetails?: {
+    brand: string;
+    model: string;
+    year: number;
+    engineSize?: string;
+    engineType?: string;
+    fuelType?: string;
+    transmissionType?: string;
+    vinNumber?: string;
+    licensePlate?: string;
+  };
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -20,12 +32,18 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { deviceId, deviceName, deviceType, gps51Token, userId }: VehicleRegistrationRequest = await req.json();
+    const { deviceId, deviceName, deviceType, gps51Token, userId, vehicleDetails }: VehicleRegistrationRequest = await req.json();
 
     // Validate required fields
     if (!deviceId || !deviceName || !gps51Token || !userId) {
       throw new Error("Device ID, device name, GPS51 token, and user ID are required");
     }
+
+    console.log('Enhanced Vehicle Registration:', {
+      deviceId,
+      deviceName,
+      vehicleDetails: vehicleDetails || 'No manufacturer details provided'
+    });
 
     // Initialize Supabase client
     const supabaseClient = createClient(
@@ -82,20 +100,35 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log('GPS51 device added successfully:', proxyResponse);
 
-    // Store vehicle in Supabase
+    // Store vehicle in Supabase with enhanced details
+    const vehicleRecord = {
+      gps51_device_id: deviceId,
+      make: vehicleDetails?.brand || deviceName,
+      model: vehicleDetails?.model || deviceType || 'GPS Tracker',
+      year: vehicleDetails?.year,
+      brand: vehicleDetails?.brand,
+      type: vehicleDetails?.fuelType,
+      license_plate: vehicleDetails?.licensePlate,
+      plate: vehicleDetails?.licensePlate,
+      status: 'active',
+      subscriber_id: userId,
+      notes: JSON.stringify({
+        gps51_device_name: deviceName,
+        registration_source: 'mobile_app',
+        enhanced_registration: !!vehicleDetails,
+        engine_details: vehicleDetails ? {
+          engine_size: vehicleDetails.engineSize,
+          engine_type: vehicleDetails.engineType,
+          fuel_type: vehicleDetails.fuelType,
+          transmission_type: vehicleDetails.transmissionType,
+          vin_number: vehicleDetails.vinNumber
+        } : null
+      })
+    };
+
     const { data: vehicleData, error: vehicleError } = await supabaseClient
       .from('vehicles')
-      .insert({
-        gps51_device_id: deviceId,
-        make: deviceName, // Use device name as make for now
-        model: deviceType || 'GPS Tracker',
-        status: 'active',
-        subscriber_id: userId,
-        notes: JSON.stringify({
-          gps51_device_name: deviceName,
-          registration_source: 'mobile_app'
-        })
-      })
+      .insert(vehicleRecord)
       .select()
       .single();
 
