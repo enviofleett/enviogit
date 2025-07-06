@@ -26,6 +26,31 @@ export class GPS51ProxyClient {
     method: 'GET' | 'POST' = 'POST',
     apiUrl: string = 'https://api.gps51.com/openapi'
   ): Promise<GPS51ApiResponse> {
+    const startTime = Date.now();
+    
+    const logApiCall = async (
+      endpoint: string,
+      requestPayload: any,
+      responseStatus: number,
+      responseBody: any,
+      durationMs: number,
+      errorMessage?: string
+    ) => {
+      try {
+        await supabase.from('api_calls_monitor').insert({
+          endpoint: `GPS51-Proxy-${endpoint}`,
+          method,
+          request_payload: requestPayload,
+          response_status: responseStatus,
+          response_body: responseBody,
+          duration_ms: durationMs,
+          error_message: errorMessage,
+          timestamp: new Date().toISOString()
+        });
+      } catch (logError) {
+        console.warn('Failed to log proxy API call:', logError);
+      }
+    };
     const maxRetries = 3;
     let lastError: Error;
 
@@ -70,6 +95,10 @@ export class GPS51ProxyClient {
           proxyMetadata: data.proxy_metadata
         });
 
+        // Log successful proxy call
+        const duration = Date.now() - startTime;
+        await logApiCall(action, { action, params, method, apiUrl }, data.status || 200, data, duration);
+
         // Validate response
         if (data.proxy_error) {
           throw new Error(`Proxy error: ${data.error || 'Unknown proxy error'}`);
@@ -98,6 +127,10 @@ export class GPS51ProxyClient {
         }
       }
     }
+
+    // Log failed proxy call
+    const duration = Date.now() - startTime;
+    await logApiCall(action, { action, params, method, apiUrl }, 500, null, duration, lastError.message);
 
     throw new Error(`Proxy client error after ${maxRetries} attempts: ${lastError.message}`);
   }

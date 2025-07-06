@@ -2,6 +2,7 @@
 import { GPS51ApiResponse } from './GPS51Types';
 import { GPS51_DEFAULTS } from './GPS51Constants';
 import { GPS51RateLimitError } from './GPS51RateLimitError';
+import { supabase } from '@/integrations/supabase/client';
 
 export class GPS51ApiClient {
   private baseURL: string;
@@ -23,6 +24,32 @@ export class GPS51ApiClient {
     params: Record<string, any> = {}, 
     method: 'GET' | 'POST' = 'POST'
   ): Promise<GPS51ApiResponse> {
+    const startTime = Date.now();
+    const requestId = `${action}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    const logApiCall = async (
+      endpoint: string,
+      requestPayload: any,
+      responseStatus: number,
+      responseBody: any,
+      durationMs: number,
+      errorMessage?: string
+    ) => {
+      try {
+        await supabase.from('api_calls_monitor').insert({
+          endpoint: `GPS51-${endpoint}`,
+          method,
+          request_payload: requestPayload,
+          response_status: responseStatus,
+          response_body: responseBody,
+          duration_ms: durationMs,
+          error_message: errorMessage,
+          timestamp: new Date().toISOString()
+        });
+      } catch (logError) {
+        console.warn('Failed to log API call:', logError);
+      }
+    };
     // Build URL with action and token as query parameters
     const url = new URL(this.baseURL);
     url.searchParams.append('action', action);
@@ -212,6 +239,10 @@ export class GPS51ApiClient {
       this.retryCount = 0;
       this.retryDelay = GPS51_DEFAULTS.RETRY_DELAY;
 
+      // Log successful API call
+      const duration = Date.now() - startTime;
+      await logApiCall(action, params, response.status, data, duration);
+
       return data;
     } catch (error) {
       console.error(`GPS51 API Error (${action}):`, {
@@ -248,6 +279,10 @@ export class GPS51ApiClient {
         await new Promise(resolve => setTimeout(resolve, delay));
         return this.makeRequest(action, token, params, method);
       }
+
+      // Log failed API call
+      const duration = Date.now() - startTime;
+      await logApiCall(action, params, 0, null, duration, error.message);
 
       throw error;
     }

@@ -37,9 +37,20 @@ export function GPS51APIHealthMonitor() {
   const [metrics, setMetrics] = useState<APIHealthMetrics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [currentIP, setCurrentIP] = useState<string>('Detecting...');
+  const [gps51ServerIP, setGPS51ServerIP] = useState<string>('api.gps51.com');
 
   const loadMetrics = async () => {
     try {
+      // Get current client IP
+      try {
+        const ipResponse = await fetch('https://api.ipify.org?format=json');
+        const ipData = await ipResponse.json();
+        setCurrentIP(ipData.ip);
+      } catch {
+        setCurrentIP('Unable to detect');
+      }
+
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
       
       // Get API call statistics from the last hour
@@ -177,6 +188,10 @@ export function GPS51APIHealthMonitor() {
           <p className="text-sm text-muted-foreground">
             Last updated: {lastRefresh.toLocaleTimeString()}
           </p>
+          <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
+            <span>Client IP: <code className="bg-muted px-1 rounded">{currentIP}</code></span>
+            <span>GPS51 Server: <code className="bg-muted px-1 rounded">{gps51ServerIP}</code></span>
+          </div>
         </div>
         <Button 
           onClick={loadMetrics} 
@@ -346,40 +361,66 @@ export function GPS51APIHealthMonitor() {
         </Card>
       </div>
 
-      {/* Protection Recommendations */}
+      {/* Real-Time Connection Status */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5" />
-            IP Protection Status
+            <Wifi className="h-5 w-5" />
+            Real-Time Connection Status
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="flex items-center gap-3">
-              <div className={`w-3 h-3 rounded-full ${metrics.rateLimitHits === 0 ? 'bg-green-500' : 'bg-red-500'}`} />
-              <span className="text-sm">Rate Limiting: {metrics.rateLimitHits === 0 ? 'Clean' : 'Issues Detected'}</span>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-3">
+              <h4 className="font-medium">Network Information</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span>Your IP Address:</span>
+                  <code className="bg-muted px-2 py-1 rounded text-green-600 font-mono">{currentIP}</code>
+                </div>
+                <div className="flex justify-between">
+                  <span>GPS51 Server:</span>
+                  <code className="bg-muted px-2 py-1 rounded text-blue-600 font-mono">{gps51ServerIP}</code>
+                </div>
+                <div className="flex justify-between">
+                  <span>Connection Type:</span>
+                  <span className="text-blue-600">Edge Function Proxy</span>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <div className={`w-3 h-3 rounded-full ${successRate >= 90 ? 'bg-green-500' : 'bg-yellow-500'}`} />
-              <span className="text-sm">Connection Quality: {successRate >= 90 ? 'Good' : 'Poor'}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className={`w-3 h-3 rounded-full ${metrics.ipBanRisk === 'low' ? 'bg-green-500' : metrics.ipBanRisk === 'medium' ? 'bg-yellow-500' : 'bg-red-500'}`} />
-              <span className="text-sm">Ban Risk: {metrics.ipBanRisk}</span>
+            
+            <div className="space-y-3">
+              <h4 className="font-medium">Protection Status</h4>
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded-full ${metrics.rateLimitHits === 0 ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <span className="text-sm">Rate Limiting: {metrics.rateLimitHits === 0 ? 'Clean' : 'Issues Detected'}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded-full ${successRate >= 90 ? 'bg-green-500' : 'bg-yellow-500'}`} />
+                  <span className="text-sm">Connection Quality: {successRate >= 90 ? 'Good' : 'Poor'}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded-full ${metrics.ipBanRisk === 'low' ? 'bg-green-500' : metrics.ipBanRisk === 'medium' ? 'bg-yellow-500' : 'bg-red-500'}`} />
+                  <span className="text-sm">IP Ban Risk: {metrics.ipBanRisk}</span>
+                </div>
+              </div>
             </div>
           </div>
           
           {metrics.ipBanRisk !== 'low' && (
-            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <h4 className="font-medium text-yellow-800 mb-2">Recommended Actions:</h4>
-              <ul className="text-sm text-yellow-700 space-y-1">
-                <li>• Implement request throttling (max 1 request per 2 seconds)</li>
-                <li>• Add exponential backoff for failed requests</li>
-                <li>• Consider using Edge Functions to proxy requests</li>
-                <li>• Monitor for recurring error patterns</li>
-              </ul>
-            </div>
+            <Alert variant="destructive" className="mt-4">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>IP Protection Alert</strong>
+                <div className="mt-2 space-y-1 text-sm">
+                  <p>• Implement request throttling (max 1 request per 2 seconds)</p>
+                  <p>• Add exponential backoff for failed requests</p>
+                  <p>• Consider rotating between multiple API endpoints</p>
+                  <p>• Monitor authentication failure patterns</p>
+                </div>
+              </AlertDescription>
+            </Alert>
           )}
         </CardContent>
       </Card>

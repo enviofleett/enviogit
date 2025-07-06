@@ -1,11 +1,18 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.3';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
+
+// Initialize Supabase client for database logging
+const supabase = createClient(
+  Deno.env.get('SUPABASE_URL') ?? '',
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+);
 
 interface GPS51ProxyRequest {
   action: string;
@@ -17,11 +24,44 @@ interface GPS51ProxyRequest {
 
 serve(async (req) => {
   const startTime = Date.now();
+  const clientIP = req.headers.get('cf-connecting-ip') || 
+                   req.headers.get('x-forwarded-for') || 
+                   req.headers.get('x-real-ip') || 
+                   'unknown';
   
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const logApiCall = async (
+    endpoint: string,
+    requestPayload: any,
+    responseStatus: number,
+    responseBody: any,
+    durationMs: number,
+    errorMessage?: string
+  ) => {
+    try {
+      await supabase.from('api_calls_monitor').insert({
+        endpoint: `GPS51-EdgeFunction-${endpoint}`,
+        method: req.method,
+        request_payload: {
+          ...requestPayload,
+          clientIP,
+          userAgent: req.headers.get('user-agent'),
+          timestamp: new Date().toISOString()
+        },
+        response_status: responseStatus,
+        response_body: responseBody,
+        duration_ms: durationMs,
+        error_message: errorMessage,
+        timestamp: new Date().toISOString()
+      });
+    } catch (logError) {
+      console.warn('Failed to log API call to database:', logError);
+    }
+  };
 
   try {
     console.log('GPS51 Proxy: Incoming request:', {
@@ -303,6 +343,15 @@ serve(async (req) => {
         success: responseData.status === 0 || responseData.status === '0'
       });
 
+      // Log successful API call to database
+      await logApiCall(
+        requestData.action,
+        requestData,
+        response.status,
+        responseData,
+        totalDuration
+      );
+
       return new Response(
         JSON.stringify(responseData),
         {
@@ -320,6 +369,16 @@ serve(async (req) => {
       
       // Handle specific fetch errors with enhanced debugging
       const fetchDuration = Date.now() - startTime;
+      
+      // Log failed API call to database
+      await logApiCall(
+        requestData?.action || 'unknown',
+        requestData || {},
+        502,
+        null,
+        fetchDuration,
+        fetchError.message
+      );
       let errorMessage = 'Request failed';
       let errorCode = 'UNKNOWN_ERROR';
       
@@ -361,6 +420,16 @@ serve(async (req) => {
   } catch (error) {
     const totalDuration = Date.now() - startTime;
     console.error('GPS51 Proxy: Error processing request:', error);
+    
+    // Log proxy processing error
+    await logApiCall(
+      'proxy-error',
+      { method: req.method, hasBody: req.method === 'POST' },
+      500,
+      null,
+      totalDuration,
+      error instanceof Error ? error.message : 'Unknown proxy error'
+    );
     
     return new Response(
       JSON.stringify({
