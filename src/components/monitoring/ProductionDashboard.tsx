@@ -6,6 +6,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { productionMonitoringService, SystemMetrics, Alert as MonitoringAlert } from '@/services/monitoring/ProductionMonitoringService';
 import { getCurrentEnvironment, getEnvironmentConfig } from '@/config/environment';
+import { GPS51APIHealthMonitor } from './GPS51APIHealthMonitor';
+import { MarketplaceRevenueDashboard } from '../marketplace/MarketplaceRevenueDashboard';
 import { 
   Activity, 
   AlertTriangle, 
@@ -221,6 +223,8 @@ export function ProductionDashboard() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
+          <TabsTrigger value="gps51">GPS51 API</TabsTrigger>
+          <TabsTrigger value="marketplace">Revenue</TabsTrigger>
           <TabsTrigger value="alerts">Alerts ({alerts.filter(a => !a.resolved).length})</TabsTrigger>
           <TabsTrigger value="business">Business</TabsTrigger>
         </TabsList>
@@ -339,6 +343,14 @@ export function ProductionDashboard() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="gps51" className="space-y-4">
+          <GPS51APIHealthMonitor />
+        </TabsContent>
+
+        <TabsContent value="marketplace" className="space-y-4">
+          <MarketplaceRevenueDashboard />
         </TabsContent>
 
         <TabsContent value="alerts" className="space-y-4">
