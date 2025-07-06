@@ -489,6 +489,78 @@ export type Database = {
         }
         Relationships: []
       }
+      merchant_payouts: {
+        Row: {
+          amount: number
+          completed_at: string | null
+          created_at: string | null
+          failed_at: string | null
+          failure_reason: string | null
+          id: string
+          initiated_at: string | null
+          merchant_id: string
+          net_amount: number
+          order_id: string
+          paystack_transfer_id: string | null
+          platform_fee: number
+          status: string
+          transaction_id: string
+          transfer_code: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          completed_at?: string | null
+          created_at?: string | null
+          failed_at?: string | null
+          failure_reason?: string | null
+          id?: string
+          initiated_at?: string | null
+          merchant_id: string
+          net_amount: number
+          order_id: string
+          paystack_transfer_id?: string | null
+          platform_fee?: number
+          status?: string
+          transaction_id: string
+          transfer_code?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          completed_at?: string | null
+          created_at?: string | null
+          failed_at?: string | null
+          failure_reason?: string | null
+          id?: string
+          initiated_at?: string | null
+          merchant_id?: string
+          net_amount?: number
+          order_id?: string
+          paystack_transfer_id?: string | null
+          platform_fee?: number
+          status?: string
+          transaction_id?: string
+          transfer_code?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_payouts_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "merchant_payouts_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       models: {
         Row: {
           created_at: string | null
@@ -553,6 +625,90 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      paystack_events: {
+        Row: {
+          created_at: string | null
+          data: Json
+          error_message: string | null
+          event_type: string
+          id: string
+          paystack_event_id: string
+          processed: boolean | null
+          processed_at: string | null
+          reference: string | null
+          retry_count: number | null
+          signature_verified: boolean | null
+        }
+        Insert: {
+          created_at?: string | null
+          data: Json
+          error_message?: string | null
+          event_type: string
+          id?: string
+          paystack_event_id: string
+          processed?: boolean | null
+          processed_at?: string | null
+          reference?: string | null
+          retry_count?: number | null
+          signature_verified?: boolean | null
+        }
+        Update: {
+          created_at?: string | null
+          data?: Json
+          error_message?: string | null
+          event_type?: string
+          id?: string
+          paystack_event_id?: string
+          processed?: boolean | null
+          processed_at?: string | null
+          reference?: string | null
+          retry_count?: number | null
+          signature_verified?: boolean | null
+        }
+        Relationships: []
+      }
+      paystack_plans: {
+        Row: {
+          amount: number
+          created_at: string | null
+          currency: string
+          description: string | null
+          id: string
+          interval: string
+          invoice_limit: number | null
+          is_active: boolean | null
+          name: string
+          paystack_plan_code: string
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          currency?: string
+          description?: string | null
+          id?: string
+          interval: string
+          invoice_limit?: number | null
+          is_active?: boolean | null
+          name: string
+          paystack_plan_code: string
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          currency?: string
+          description?: string | null
+          id?: string
+          interval?: string
+          invoice_limit?: number | null
+          is_active?: boolean | null
+          name?: string
+          paystack_plan_code?: string
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -686,11 +842,90 @@ export type Database = {
           },
         ]
       }
+      transactions: {
+        Row: {
+          amount: number
+          created_at: string | null
+          currency: string
+          customer_email: string
+          customer_name: string | null
+          description: string | null
+          failed_at: string | null
+          id: string
+          metadata: Json | null
+          order_id: string | null
+          payment_method: string | null
+          paystack_reference: string
+          paystack_transaction_id: string | null
+          refunded_at: string | null
+          status: string
+          subscription_id: string | null
+          updated_at: string | null
+          user_id: string
+          verified_at: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          currency?: string
+          customer_email: string
+          customer_name?: string | null
+          description?: string | null
+          failed_at?: string | null
+          id?: string
+          metadata?: Json | null
+          order_id?: string | null
+          payment_method?: string | null
+          paystack_reference: string
+          paystack_transaction_id?: string | null
+          refunded_at?: string | null
+          status?: string
+          subscription_id?: string | null
+          updated_at?: string | null
+          user_id: string
+          verified_at?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          currency?: string
+          customer_email?: string
+          customer_name?: string | null
+          description?: string | null
+          failed_at?: string | null
+          id?: string
+          metadata?: Json | null
+          order_id?: string | null
+          payment_method?: string | null
+          paystack_reference?: string
+          paystack_transaction_id?: string | null
+          refunded_at?: string | null
+          status?: string
+          subscription_id?: string | null
+          updated_at?: string | null
+          user_id?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_subscriptions: {
         Row: {
           created_at: string
           id: string
+          last_payment_date: string | null
+          next_payment_date: string | null
           package_id: string
+          payment_status: string | null
+          paystack_subscription_code: string | null
+          paystack_subscription_id: string | null
           status: string
           subscription_end_date: string | null
           trial_end_date: string | null
@@ -701,7 +936,12 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          last_payment_date?: string | null
+          next_payment_date?: string | null
           package_id: string
+          payment_status?: string | null
+          paystack_subscription_code?: string | null
+          paystack_subscription_id?: string | null
           status?: string
           subscription_end_date?: string | null
           trial_end_date?: string | null
@@ -712,7 +952,12 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          last_payment_date?: string | null
+          next_payment_date?: string | null
           package_id?: string
+          payment_status?: string | null
+          paystack_subscription_code?: string | null
+          paystack_subscription_id?: string | null
           status?: string
           subscription_end_date?: string | null
           trial_end_date?: string | null
