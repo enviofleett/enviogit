@@ -124,13 +124,24 @@ export const SyntheticMonitoringDashboard = () => {
   const runAllTests = async () => {
     setIsRunningTests(true);
     try {
-      // TODO: Create synthetic-test-runner edge function
-      // For now, show a message that the test runner is not yet implemented
-      toast({
-        title: "Test Runner Not Available",
-        description: "The synthetic test runner edge function needs to be implemented",
-        variant: "destructive"
+      const { data, error } = await supabase.functions.invoke('synthetic-test-runner', {
+        body: { 
+          run_type: 'manual',
+          scenarios: 'all',
+          environment: 'test'
+        }
       });
+
+      if (error) throw error;
+
+      toast({
+        title: "Tests Started",
+        description: `Running ${data.results?.totalScenarios || 0} test scenarios`,
+        variant: "default"
+      });
+
+      // Refresh data after a short delay
+      setTimeout(fetchSystemHealth, 2000);
     } catch (error) {
       console.error('Failed to run tests:', error);
       toast({

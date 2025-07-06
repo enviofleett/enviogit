@@ -58,3 +58,12 @@ verify_jwt = false
 
 [functions.gps51-proxy]
 verify_jwt = false
+
+[functions.gps51-rate-limiter]
+verify_jwt = false
+
+[functions.synthetic-test-runner]
+verify_jwt = false
+
+[functions.gps51-health-monitor]
+verify_jwt = false

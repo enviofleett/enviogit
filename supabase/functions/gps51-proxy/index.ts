@@ -71,6 +71,32 @@ serve(async (req) => {
       timestamp: new Date().toISOString()
     });
 
+    // Check rate limiter before proceeding
+    try {
+      const rateLimitCheck = await supabase.functions.invoke('gps51-rate-limiter', {
+        body: { action: 'check_limits' }
+      });
+
+      if (rateLimitCheck.data && !rateLimitCheck.data.shouldAllow) {
+        console.warn('GPS51 Proxy: Request blocked by rate limiter:', rateLimitCheck.data);
+        return new Response(
+          JSON.stringify({
+            error: 'Rate limit exceeded',
+            message: rateLimitCheck.data.message,
+            waitTime: rateLimitCheck.data.waitTime,
+            proxy_error: true,
+            error_code: 'RATE_LIMITED'
+          }),
+          { 
+            status: 429, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+    } catch (rateLimitError) {
+      console.warn('GPS51 Proxy: Rate limiter check failed, proceeding without rate limiting:', rateLimitError);
+    }
+
     if (req.method !== 'POST') {
       return new Response(
         JSON.stringify({ error: 'Only POST requests are supported' }),
@@ -283,6 +309,30 @@ serve(async (req) => {
             responseData.status = parseInt(responseData.status) || 0;
           }
           
+          // CRITICAL: Handle 8902 rate limit error immediately
+          if (responseData.status === 8902) {
+            console.error('GPS51 Proxy: 8902 Rate Limit Error Detected:', {
+              action: requestData.action,
+              message: responseData.message,
+              cause: responseData.cause
+            });
+            
+            // Immediately update rate limiter about 8902 error
+            try {
+              await supabase.functions.invoke('gps51-rate-limiter', {
+                body: {
+                  action: 'record_request',
+                  action_type: requestData.action,
+                  success: false,
+                  responseTime: requestDuration,
+                  status: 8902
+                }
+              });
+            } catch (rateLimitUpdateError) {
+              console.warn('Failed to update rate limiter about 8902 error:', rateLimitUpdateError);
+            }
+          }
+          
           // Add lastquerypositiontime if missing (critical for position queries)
           if (requestData.action === 'lastposition' && !responseData.lastquerypositiontime) {
             responseData.lastquerypositiontime = Date.now();
@@ -352,6 +402,21 @@ serve(async (req) => {
         totalDuration
       );
 
+      // Update rate limiter with successful request
+      try {
+        await supabase.functions.invoke('gps51-rate-limiter', {
+          body: {
+            action: 'record_request',
+            action_type: requestData.action,
+            success: responseData.status === 0 || responseData.status === '0',
+            responseTime: totalDuration,
+            status: responseData.status
+          }
+        });
+      } catch (rateLimitError) {
+        console.warn('GPS51 Proxy: Failed to update rate limiter:', rateLimitError);
+      }
+
       return new Response(
         JSON.stringify(responseData),
         {
@@ -379,6 +444,21 @@ serve(async (req) => {
         fetchDuration,
         fetchError.message
       );
+
+      // Update rate limiter with failed request
+      try {
+        await supabase.functions.invoke('gps51-rate-limiter', {
+          body: {
+            action: 'record_request',
+            action_type: requestData?.action || 'unknown',
+            success: false,
+            responseTime: fetchDuration,
+            status: 502
+          }
+        });
+      } catch (rateLimitError) {
+        console.warn('GPS51 Proxy: Failed to update rate limiter with failure:', rateLimitError);
+      }
       let errorMessage = 'Request failed';
       let errorCode = 'UNKNOWN_ERROR';
       
