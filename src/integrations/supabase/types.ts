@@ -1229,6 +1229,303 @@ export type Database = {
         }
         Relationships: []
       }
+      synthetic_monitoring_alerts: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          alert_type: string
+          created_at: string
+          description: string | null
+          environment: string | null
+          id: string
+          metadata: Json | null
+          notification_sent: boolean
+          resolved_at: string | null
+          resolved_by: string | null
+          scenario_id: string | null
+          severity: string
+          test_run_id: string | null
+          title: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          alert_type: string
+          created_at?: string
+          description?: string | null
+          environment?: string | null
+          id?: string
+          metadata?: Json | null
+          notification_sent?: boolean
+          resolved_at?: string | null
+          resolved_by?: string | null
+          scenario_id?: string | null
+          severity?: string
+          test_run_id?: string | null
+          title: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          alert_type?: string
+          created_at?: string
+          description?: string | null
+          environment?: string | null
+          id?: string
+          metadata?: Json | null
+          notification_sent?: boolean
+          resolved_at?: string | null
+          resolved_by?: string | null
+          scenario_id?: string | null
+          severity?: string
+          test_run_id?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "synthetic_monitoring_alerts_scenario_id_fkey"
+            columns: ["scenario_id"]
+            isOneToOne: false
+            referencedRelation: "synthetic_test_scenarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "synthetic_monitoring_alerts_test_run_id_fkey"
+            columns: ["test_run_id"]
+            isOneToOne: false
+            referencedRelation: "synthetic_test_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      synthetic_test_results: {
+        Row: {
+          api_calls: Json | null
+          completed_at: string | null
+          created_at: string
+          error_details: Json | null
+          error_message: string | null
+          execution_time_ms: number | null
+          id: string
+          performance_metrics: Json | null
+          scenario_id: string
+          screenshots: Json | null
+          started_at: string
+          status: string
+          step_results: Json
+          steps_executed: number
+          steps_failed: number
+          steps_passed: number
+          test_run_id: string
+        }
+        Insert: {
+          api_calls?: Json | null
+          completed_at?: string | null
+          created_at?: string
+          error_details?: Json | null
+          error_message?: string | null
+          execution_time_ms?: number | null
+          id?: string
+          performance_metrics?: Json | null
+          scenario_id: string
+          screenshots?: Json | null
+          started_at: string
+          status: string
+          step_results?: Json
+          steps_executed?: number
+          steps_failed?: number
+          steps_passed?: number
+          test_run_id: string
+        }
+        Update: {
+          api_calls?: Json | null
+          completed_at?: string | null
+          created_at?: string
+          error_details?: Json | null
+          error_message?: string | null
+          execution_time_ms?: number | null
+          id?: string
+          performance_metrics?: Json | null
+          scenario_id?: string
+          screenshots?: Json | null
+          started_at?: string
+          status?: string
+          step_results?: Json
+          steps_executed?: number
+          steps_failed?: number
+          steps_passed?: number
+          test_run_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "synthetic_test_results_scenario_id_fkey"
+            columns: ["scenario_id"]
+            isOneToOne: false
+            referencedRelation: "synthetic_test_scenarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "synthetic_test_results_test_run_id_fkey"
+            columns: ["test_run_id"]
+            isOneToOne: false
+            referencedRelation: "synthetic_test_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      synthetic_test_runs: {
+        Row: {
+          completed_at: string | null
+          configuration: Json | null
+          created_at: string
+          environment: string
+          error_summary: string | null
+          execution_time_ms: number | null
+          failed_scenarios: number
+          id: string
+          passed_scenarios: number
+          run_type: string
+          skipped_scenarios: number
+          started_at: string
+          status: string
+          total_scenarios: number
+          triggered_by: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          configuration?: Json | null
+          created_at?: string
+          environment?: string
+          error_summary?: string | null
+          execution_time_ms?: number | null
+          failed_scenarios?: number
+          id?: string
+          passed_scenarios?: number
+          run_type?: string
+          skipped_scenarios?: number
+          started_at?: string
+          status?: string
+          total_scenarios?: number
+          triggered_by?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          configuration?: Json | null
+          created_at?: string
+          environment?: string
+          error_summary?: string | null
+          execution_time_ms?: number | null
+          failed_scenarios?: number
+          id?: string
+          passed_scenarios?: number
+          run_type?: string
+          skipped_scenarios?: number
+          started_at?: string
+          status?: string
+          total_scenarios?: number
+          triggered_by?: string | null
+        }
+        Relationships: []
+      }
+      synthetic_test_scenarios: {
+        Row: {
+          created_at: string
+          description: string | null
+          environment: string
+          expected_outcomes: Json
+          id: string
+          is_active: boolean
+          name: string
+          priority: number
+          retry_count: number
+          scenario_type: string
+          tags: Json | null
+          test_steps: Json
+          timeout_seconds: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          environment?: string
+          expected_outcomes?: Json
+          id?: string
+          is_active?: boolean
+          name: string
+          priority?: number
+          retry_count?: number
+          scenario_type: string
+          tags?: Json | null
+          test_steps?: Json
+          timeout_seconds?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          environment?: string
+          expected_outcomes?: Json
+          id?: string
+          is_active?: boolean
+          name?: string
+          priority?: number
+          retry_count?: number
+          scenario_type?: string
+          tags?: Json | null
+          test_steps?: Json
+          timeout_seconds?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      test_environments: {
+        Row: {
+          base_url: string
+          created_at: string
+          database_config: Json
+          description: string | null
+          environment_type: string
+          gps51_config: Json
+          health_status: string | null
+          id: string
+          is_active: boolean
+          last_health_check: string | null
+          name: string
+          paystack_config: Json
+          updated_at: string
+        }
+        Insert: {
+          base_url: string
+          created_at?: string
+          database_config?: Json
+          description?: string | null
+          environment_type: string
+          gps51_config?: Json
+          health_status?: string | null
+          id?: string
+          is_active?: boolean
+          last_health_check?: string | null
+          name: string
+          paystack_config?: Json
+          updated_at?: string
+        }
+        Update: {
+          base_url?: string
+          created_at?: string
+          database_config?: Json
+          description?: string | null
+          environment_type?: string
+          gps51_config?: Json
+          health_status?: string | null
+          id?: string
+          is_active?: boolean
+          last_health_check?: string | null
+          name?: string
+          paystack_config?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       trackers: {
         Row: {
           activation_date: string | null

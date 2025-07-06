@@ -9,6 +9,7 @@ import Sidebar from "./components/layout/Sidebar";
 import { AuthGuard } from "./components/auth/AuthGuard";
 import Index from "./pages/Index";
 import Settings from "./pages/Settings";
+import Developer from "./pages/Developer";
 import Marketplace from "./pages/Marketplace";
 import MobileApp from "./pages/MobileApp";
 import Auth from "./pages/Auth";
@@ -67,6 +68,7 @@ const App = () => {
                       <Route path="/" element={<Index />} />
                       <Route path="/tracking" element={<Index />} />
                       <Route path="/marketplace" element={<Marketplace />} />
+                      <Route path="/developer" element={<Developer />} />
                       <Route path="/mobile" element={<MobileApp />} />
                       <Route path="/settings" element={<Settings />} />
                       <Route path="*" element={<NotFound />} />
