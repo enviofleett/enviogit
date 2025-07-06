@@ -1643,7 +1643,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      change_user_role: {
+        Args: {
+          target_user_id: string
+          new_role: string
+          admin_user_id: string
+        }
+        Returns: undefined
+      }
+      promote_user_to_admin: {
+        Args: { user_email: string }
+        Returns: undefined
+      }
+      set_custom_claims: {
+        Args: { user_id: string; claims: Json }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

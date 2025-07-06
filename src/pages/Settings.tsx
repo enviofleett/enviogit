@@ -6,6 +6,7 @@ import { MobileUserManagementPanel } from '@/components/settings/MobileUserManag
 import { SubscriptionManagementPanel } from '@/components/settings/SubscriptionManagementPanel';
 import { APICredentialsPanel } from '@/components/settings/APICredentialsPanel';
 import { PINManagement } from '@/components/settings/PINManagement';
+import { SuperAdminSetup } from '@/components/settings/SuperAdminSetup';
 import { ProductionDashboard } from '@/components/monitoring/ProductionDashboard';
 import { ProductionReadinessDashboard } from '@/components/monitoring/ProductionReadinessDashboard';
 import { MarketplaceAdminPanel } from '@/components/marketplace/MarketplaceAdminPanel';
@@ -73,7 +74,10 @@ const Settings = () => {
         </TabsContent>
         
         <TabsContent value="security">
-          <PINManagement />
+          <div className="space-y-6">
+            <SuperAdminSetup />
+            <PINManagement />
+          </div>
         </TabsContent>
         
         <TabsContent value="mobile">
