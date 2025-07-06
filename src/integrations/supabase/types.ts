@@ -271,6 +271,80 @@ export type Database = {
         }
         Relationships: []
       }
+      fuel_consumption_reports: {
+        Row: {
+          actual_consumption: number | null
+          analysis_data: Json | null
+          average_speed: number | null
+          cost_estimate: number | null
+          created_at: string
+          deviation_percentage: number | null
+          device_id: string
+          efficiency_rating: string | null
+          id: string
+          manufacturer_stated_consumption: number | null
+          report_period_end: string
+          report_period_start: string
+          speed_adjusted_consumption: number | null
+          speed_distribution: Json | null
+          total_distance_km: number | null
+          total_fuel_used_liters: number | null
+          updated_at: string
+          user_id: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          actual_consumption?: number | null
+          analysis_data?: Json | null
+          average_speed?: number | null
+          cost_estimate?: number | null
+          created_at?: string
+          deviation_percentage?: number | null
+          device_id: string
+          efficiency_rating?: string | null
+          id?: string
+          manufacturer_stated_consumption?: number | null
+          report_period_end: string
+          report_period_start: string
+          speed_adjusted_consumption?: number | null
+          speed_distribution?: Json | null
+          total_distance_km?: number | null
+          total_fuel_used_liters?: number | null
+          updated_at?: string
+          user_id: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          actual_consumption?: number | null
+          analysis_data?: Json | null
+          average_speed?: number | null
+          cost_estimate?: number | null
+          created_at?: string
+          deviation_percentage?: number | null
+          device_id?: string
+          efficiency_rating?: string | null
+          id?: string
+          manufacturer_stated_consumption?: number | null
+          report_period_end?: string
+          report_period_start?: string
+          speed_adjusted_consumption?: number | null
+          speed_distribution?: Json | null
+          total_distance_km?: number | null
+          total_fuel_used_liters?: number | null
+          updated_at?: string
+          user_id?: string
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fuel_consumption_reports_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gps51_feature_mapping: {
         Row: {
           category: string | null
@@ -355,6 +429,63 @@ export type Database = {
           sync_parameters?: Json | null
           updated_at?: string
           vehicles_processed?: number | null
+        }
+        Relationships: []
+      }
+      manufacturer_fuel_data: {
+        Row: {
+          brand: string
+          city_consumption: number | null
+          combined_consumption: number | null
+          created_at: string
+          engine_size: string | null
+          engine_type: string | null
+          fuel_type: string
+          highway_consumption: number | null
+          historical_trends: Json | null
+          id: string
+          model: string
+          speed_impact_data: Json | null
+          transmission_type: string | null
+          updated_at: string
+          vehicle_category: string | null
+          year: number
+        }
+        Insert: {
+          brand: string
+          city_consumption?: number | null
+          combined_consumption?: number | null
+          created_at?: string
+          engine_size?: string | null
+          engine_type?: string | null
+          fuel_type?: string
+          highway_consumption?: number | null
+          historical_trends?: Json | null
+          id?: string
+          model: string
+          speed_impact_data?: Json | null
+          transmission_type?: string | null
+          updated_at?: string
+          vehicle_category?: string | null
+          year: number
+        }
+        Update: {
+          brand?: string
+          city_consumption?: number | null
+          combined_consumption?: number | null
+          created_at?: string
+          engine_size?: string | null
+          engine_type?: string | null
+          fuel_type?: string
+          highway_consumption?: number | null
+          historical_trends?: Json | null
+          id?: string
+          model?: string
+          speed_impact_data?: Json | null
+          transmission_type?: string | null
+          updated_at?: string
+          vehicle_category?: string | null
+          year?: number
         }
         Relationships: []
       }
@@ -601,6 +732,57 @@ export type Database = {
             foreignKeyName: "user_subscriptions_vehicle_id_fkey"
             columns: ["vehicle_id"]
             isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_fuel_profiles: {
+        Row: {
+          created_at: string
+          custom_fuel_capacity: number | null
+          efficiency_target: number | null
+          id: string
+          manufacturer_data_id: string | null
+          preferred_fuel_price: number | null
+          updated_at: string
+          user_id: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          custom_fuel_capacity?: number | null
+          efficiency_target?: number | null
+          id?: string
+          manufacturer_data_id?: string | null
+          preferred_fuel_price?: number | null
+          updated_at?: string
+          user_id: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          custom_fuel_capacity?: number | null
+          efficiency_target?: number | null
+          id?: string
+          manufacturer_data_id?: string | null
+          preferred_fuel_price?: number | null
+          updated_at?: string
+          user_id?: string
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_fuel_profiles_manufacturer_data_id_fkey"
+            columns: ["manufacturer_data_id"]
+            isOneToOne: false
+            referencedRelation: "manufacturer_fuel_data"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_fuel_profiles_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: true
             referencedRelation: "vehicles"
             referencedColumns: ["id"]
           },
