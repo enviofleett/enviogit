@@ -1,4 +1,5 @@
 import { GPS51ApiClient } from '@/services/gps51/GPS51ApiClient';
+import { GPS51Client } from '@/services/gps51/GPS51Client';
 
 export interface GPS51FuelData {
   deviceId: string;
@@ -25,10 +26,10 @@ export interface FuelConsumptionPeriod {
 
 export class GPS51FuelConsumptionService {
   private static instance: GPS51FuelConsumptionService;
-  private apiClient: GPS51ApiClient;
+  private gps51Client: GPS51Client;
 
   constructor() {
-    this.apiClient = GPS51ApiClient.getInstance();
+    this.gps51Client = new GPS51Client();
   }
 
   static getInstance(): GPS51FuelConsumptionService {
@@ -40,19 +41,20 @@ export class GPS51FuelConsumptionService {
 
   async getFuelConsumptionData(
     deviceId: string,
-    period: FuelConsumptionPeriod
+    period: FuelConsumptionPeriod,
+    token: string
   ): Promise<GPS51FuelData | null> {
     try {
       const startDate = this.formatDateForAPI(period.start);
       const endDate = this.formatDateForAPI(period.end);
 
-      const response = await this.apiClient.sendCommand('reportmileagedetail', {
+      const response = await this.gps51Client['apiClient'].makeRequest('reportmileagedetail', token, {
         deviceid: deviceId,
         begintime: startDate,
         endtime: endDate
       });
 
-      if (response.result === 0 && response.data) {
+      if (response.status === 0 && response.data) {
         return this.parseGPS51FuelResponse(deviceId, response.data);
       }
 
@@ -66,10 +68,11 @@ export class GPS51FuelConsumptionService {
 
   async getBatchFuelConsumptionData(
     deviceIds: string[],
-    period: FuelConsumptionPeriod
+    period: FuelConsumptionPeriod,
+    token: string
   ): Promise<GPS51FuelData[]> {
     const promises = deviceIds.map(deviceId => 
-      this.getFuelConsumptionData(deviceId, period)
+      this.getFuelConsumptionData(deviceId, period, token)
     );
 
     const results = await Promise.allSettled(promises);
@@ -83,20 +86,21 @@ export class GPS51FuelConsumptionService {
 
   async getDetailedTripFuelData(
     deviceId: string,
-    period: FuelConsumptionPeriod
+    period: FuelConsumptionPeriod,
+    token: string
   ): Promise<GPS51FuelData | null> {
     try {
       // Get detailed trip data with fuel consumption
-      const trackData = await this.apiClient.sendCommand('querytracks', {
+      const trackData = await this.gps51Client['apiClient'].makeRequest('querytracks', token, {
         deviceid: deviceId,
         begintime: this.formatDateForAPI(period.start),
         endtime: this.formatDateForAPI(period.end),
         detail: 1
       });
 
-      const fuelData = await this.getFuelConsumptionData(deviceId, period);
+      const fuelData = await this.getFuelConsumptionData(deviceId, period, token);
       
-      if (trackData.result === 0 && fuelData) {
+      if (trackData.status === 0 && fuelData) {
         // Enhance fuel data with detailed trip information
         fuelData.tripData = this.extractTripFuelData(trackData.data);
         return fuelData;
