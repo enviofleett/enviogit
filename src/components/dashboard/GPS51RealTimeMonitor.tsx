@@ -120,7 +120,7 @@ export const GPS51RealTimeMonitor: React.FC<RealTimeMonitorProps> = ({
               </CardDescription>
             </div>
             <div className="flex items-center space-x-2">
-              <Badge variant={wsConnected ? 'success' : 'destructive'}>
+              <Badge variant={wsConnected ? 'default' : 'destructive'}>
                 {wsConnected ? 'WebSocket Connected' : 'WebSocket Disconnected'}
               </Badge>
               {!isMonitoring ? (
