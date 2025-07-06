@@ -22,9 +22,13 @@ import {
   Plus,
   Edit,
   Trash2,
-  Eye
+  Eye,
+  Percent,
+  UserPlus
 } from 'lucide-react';
 import type { Merchant, ServiceCategory, MarketplaceOffering, MarketplaceOrder } from '@/types/marketplace';
+import { CommissionManagement } from './CommissionManagement';
+import { AdminMerchantCreation } from './AdminMerchantCreation';
 
 export const MarketplaceAdminPanel: React.FC = () => {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
@@ -195,14 +199,22 @@ export const MarketplaceAdminPanel: React.FC = () => {
       </div>
 
       <Tabs defaultValue="merchants" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="merchants" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             Merchants
           </TabsTrigger>
+          <TabsTrigger value="create-merchant" className="flex items-center gap-2">
+            <UserPlus className="h-4 w-4" />
+            Add Merchant
+          </TabsTrigger>
           <TabsTrigger value="categories" className="flex items-center gap-2">
             <Store className="h-4 w-4" />
             Categories
+          </TabsTrigger>
+          <TabsTrigger value="commission" className="flex items-center gap-2">
+            <Percent className="h-4 w-4" />
+            Commission
           </TabsTrigger>
           <TabsTrigger value="offerings" className="flex items-center gap-2">
             <Package className="h-4 w-4" />
@@ -278,6 +290,10 @@ export const MarketplaceAdminPanel: React.FC = () => {
           </Card>
         </TabsContent>
 
+        <TabsContent value="create-merchant">
+          <AdminMerchantCreation />
+        </TabsContent>
+
         <TabsContent value="categories">
           <Card>
             <CardHeader>
@@ -320,14 +336,23 @@ export const MarketplaceAdminPanel: React.FC = () => {
                         <span className="text-sm text-muted-foreground ml-2">- {category.description}</span>
                       )}
                     </div>
-                    <Badge variant={category.is_active ? 'default' : 'secondary'}>
-                      {category.is_active ? 'Active' : 'Inactive'}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">
+                        {category.commission_percentage}% commission
+                      </span>
+                      <Badge variant={category.is_active ? 'default' : 'secondary'}>
+                        {category.is_active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
                   </div>
                 ))}
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="commission">
+          <CommissionManagement />
         </TabsContent>
 
         <TabsContent value="offerings">

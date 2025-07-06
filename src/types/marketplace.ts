@@ -4,6 +4,7 @@ export interface ServiceCategory {
   description?: string;
   icon_url?: string;
   is_active: boolean;
+  commission_percentage: number;
   created_at: string;
   updated_at: string;
 }
@@ -71,6 +72,7 @@ export interface MarketplaceOrder {
   currency: string;
   platform_fee: number;
   merchant_amount: number;
+  applied_commission_rate: number;
   status: 'pending_payment' | 'paid_pending_validation' | 'service_validated' | 'completed' | 'cancelled' | 'refunded';
   payment_date?: string;
   validation_date?: string;
@@ -113,6 +115,15 @@ export interface UserPin {
   user_id: string;
   pin_hash: string;
   salt: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MarketplaceConfiguration {
+  id: string;
+  setting_key: string;
+  setting_value: any;
+  description?: string;
   created_at: string;
   updated_at: string;
 }

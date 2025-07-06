@@ -489,6 +489,33 @@ export type Database = {
         }
         Relationships: []
       }
+      marketplace_configuration: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          setting_key: string
+          setting_value: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          setting_key: string
+          setting_value?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          setting_key?: string
+          setting_value?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       marketplace_offerings: {
         Row: {
           banner_images: Json | null
@@ -564,6 +591,7 @@ export type Database = {
       marketplace_orders: {
         Row: {
           amount: number
+          applied_commission_rate: number | null
           completion_date: string | null
           created_at: string
           currency: string
@@ -585,6 +613,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          applied_commission_rate?: number | null
           completion_date?: string | null
           created_at?: string
           currency?: string
@@ -606,6 +635,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          applied_commission_rate?: number | null
           completion_date?: string | null
           created_at?: string
           currency?: string
@@ -1071,6 +1101,7 @@ export type Database = {
       }
       service_categories: {
         Row: {
+          commission_percentage: number | null
           created_at: string
           description: string | null
           icon_url: string | null
@@ -1080,6 +1111,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          commission_percentage?: number | null
           created_at?: string
           description?: string | null
           icon_url?: string | null
@@ -1089,6 +1121,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          commission_percentage?: number | null
           created_at?: string
           description?: string | null
           icon_url?: string | null
