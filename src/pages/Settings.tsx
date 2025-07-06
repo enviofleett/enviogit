@@ -4,10 +4,11 @@ import { GPS51Settings } from '@/components/settings/GPS51Settings';
 import { EmailConfigurationPanel } from '@/components/settings/EmailConfigurationPanel';
 import { MobileUserManagementPanel } from '@/components/settings/MobileUserManagementPanel';
 import { SubscriptionManagementPanel } from '@/components/settings/SubscriptionManagementPanel';
+import { APICredentialsPanel } from '@/components/settings/APICredentialsPanel';
 import { ProductionDashboard } from '@/components/monitoring/ProductionDashboard';
 import { ProductionReadinessDashboard } from '@/components/monitoring/ProductionReadinessDashboard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings as SettingsIcon, Mail, Smartphone, Package, Activity, Shield } from 'lucide-react';
+import { Settings as SettingsIcon, Mail, Smartphone, Package, Activity, Shield, Key } from 'lucide-react';
 
 const Settings = () => {
   return (
@@ -18,30 +19,34 @@ const Settings = () => {
       </div>
       
       <Tabs defaultValue="monitoring" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="monitoring" className="flex items-center gap-2">
             <Activity className="h-4 w-4" />
-            Production Monitor
+            Monitor
           </TabsTrigger>
           <TabsTrigger value="readiness" className="flex items-center gap-2">
             <Shield className="h-4 w-4" />
-            Production Readiness
+            Readiness
           </TabsTrigger>
           <TabsTrigger value="mobile" className="flex items-center gap-2">
             <Smartphone className="h-4 w-4" />
-            Mobile System
+            Mobile
           </TabsTrigger>
           <TabsTrigger value="subscriptions" className="flex items-center gap-2">
             <Package className="h-4 w-4" />
             Subscriptions
           </TabsTrigger>
+          <TabsTrigger value="credentials" className="flex items-center gap-2">
+            <Key className="h-4 w-4" />
+            API Keys
+          </TabsTrigger>
           <TabsTrigger value="gps51" className="flex items-center gap-2">
             <SettingsIcon className="h-4 w-4" />
-            GPS51 Configuration
+            GPS51
           </TabsTrigger>
           <TabsTrigger value="email" className="flex items-center gap-2">
             <Mail className="h-4 w-4" />
-            Email Configuration
+            Email
           </TabsTrigger>
         </TabsList>
         
@@ -59,6 +64,10 @@ const Settings = () => {
         
         <TabsContent value="subscriptions">
           <SubscriptionManagementPanel />
+        </TabsContent>
+        
+        <TabsContent value="credentials">
+          <APICredentialsPanel />
         </TabsContent>
         
         <TabsContent value="gps51">
