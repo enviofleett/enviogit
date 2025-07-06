@@ -5,12 +5,14 @@ import {
   Monitor, 
   MapPin, 
   Settings, 
-  Zap
+  Zap,
+  Store
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Fleet Overview', href: '/', icon: Monitor },
   { name: 'Live Tracking', href: '/tracking', icon: MapPin },
+  { name: 'Marketplace', href: '/marketplace', icon: Store },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 

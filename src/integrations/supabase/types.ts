@@ -489,6 +489,269 @@ export type Database = {
         }
         Relationships: []
       }
+      marketplace_offerings: {
+        Row: {
+          banner_images: Json | null
+          category_id: string
+          created_at: string
+          currency: string
+          description: string | null
+          id: string
+          is_active: boolean
+          is_favorite: boolean
+          is_subscription: boolean
+          merchant_id: string
+          name: string
+          price: number
+          pricing_model: string
+          service_locations: Json | null
+          subscription_interval: string | null
+          updated_at: string
+        }
+        Insert: {
+          banner_images?: Json | null
+          category_id: string
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_favorite?: boolean
+          is_subscription?: boolean
+          merchant_id: string
+          name: string
+          price: number
+          pricing_model: string
+          service_locations?: Json | null
+          subscription_interval?: string | null
+          updated_at?: string
+        }
+        Update: {
+          banner_images?: Json | null
+          category_id?: string
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_favorite?: boolean
+          is_subscription?: boolean
+          merchant_id?: string
+          name?: string
+          price?: number
+          pricing_model?: string
+          service_locations?: Json | null
+          subscription_interval?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_offerings_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "service_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketplace_offerings_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketplace_orders: {
+        Row: {
+          amount: number
+          completion_date: string | null
+          created_at: string
+          currency: string
+          customer_contact_info: Json | null
+          customer_id: string
+          id: string
+          merchant_amount: number
+          merchant_id: string
+          offering_id: string
+          payment_date: string | null
+          paystack_reference: string | null
+          platform_fee: number
+          service_details: Json | null
+          status: string
+          transaction_id: string
+          updated_at: string
+          validation_date: string | null
+          vehicle_device_id: string
+        }
+        Insert: {
+          amount: number
+          completion_date?: string | null
+          created_at?: string
+          currency?: string
+          customer_contact_info?: Json | null
+          customer_id: string
+          id?: string
+          merchant_amount: number
+          merchant_id: string
+          offering_id: string
+          payment_date?: string | null
+          paystack_reference?: string | null
+          platform_fee?: number
+          service_details?: Json | null
+          status?: string
+          transaction_id: string
+          updated_at?: string
+          validation_date?: string | null
+          vehicle_device_id: string
+        }
+        Update: {
+          amount?: number
+          completion_date?: string | null
+          created_at?: string
+          currency?: string
+          customer_contact_info?: Json | null
+          customer_id?: string
+          id?: string
+          merchant_amount?: number
+          merchant_id?: string
+          offering_id?: string
+          payment_date?: string | null
+          paystack_reference?: string | null
+          platform_fee?: number
+          service_details?: Json | null
+          status?: string
+          transaction_id?: string
+          updated_at?: string
+          validation_date?: string | null
+          vehicle_device_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_orders_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketplace_orders_offering_id_fkey"
+            columns: ["offering_id"]
+            isOneToOne: false
+            referencedRelation: "marketplace_offerings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketplace_payouts: {
+        Row: {
+          amount: number
+          completed_at: string | null
+          created_at: string
+          currency: string
+          failure_reason: string | null
+          id: string
+          initiated_at: string | null
+          merchant_id: string
+          order_id: string
+          paystack_transfer_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          completed_at?: string | null
+          created_at?: string
+          currency?: string
+          failure_reason?: string | null
+          id?: string
+          initiated_at?: string | null
+          merchant_id: string
+          order_id: string
+          paystack_transfer_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          completed_at?: string | null
+          created_at?: string
+          currency?: string
+          failure_reason?: string | null
+          id?: string
+          initiated_at?: string | null
+          merchant_id?: string
+          order_id?: string
+          paystack_transfer_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_payouts_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketplace_payouts_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "marketplace_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_business_locations: {
+        Row: {
+          address: string
+          city: string
+          country: string
+          created_at: string
+          id: string
+          is_primary: boolean
+          latitude: number | null
+          location_name: string
+          longitude: number | null
+          merchant_id: string
+          updated_at: string
+        }
+        Insert: {
+          address: string
+          city: string
+          country: string
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          latitude?: number | null
+          location_name: string
+          longitude?: number | null
+          merchant_id: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          city?: string
+          country?: string
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          latitude?: number | null
+          location_name?: string
+          longitude?: number | null
+          merchant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_business_locations_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       merchant_payouts: {
         Row: {
           amount: number
@@ -560,6 +823,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      merchants: {
+        Row: {
+          approval_date: string | null
+          approved_by: string | null
+          bank_account_details: Json | null
+          business_description: string | null
+          business_email: string
+          business_name: string
+          business_phone: string | null
+          city: string | null
+          country: string | null
+          created_at: string
+          id: string
+          social_media: Json | null
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          approval_date?: string | null
+          approved_by?: string | null
+          bank_account_details?: Json | null
+          business_description?: string | null
+          business_email: string
+          business_name: string
+          business_phone?: string | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          id?: string
+          social_media?: Json | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          approval_date?: string | null
+          approved_by?: string | null
+          bank_account_details?: Json | null
+          business_description?: string | null
+          business_email?: string
+          business_name?: string
+          business_phone?: string | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          id?: string
+          social_media?: Json | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
       }
       models: {
         Row: {
@@ -752,6 +1069,94 @@ export type Database = {
         }
         Relationships: []
       }
+      service_categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          icon_url: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          icon_url?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          icon_url?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      service_reviews: {
+        Row: {
+          created_at: string
+          customer_id: string
+          id: string
+          merchant_id: string
+          offering_id: string
+          order_id: string
+          rating: number
+          review_text: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          id?: string
+          merchant_id: string
+          offering_id: string
+          order_id: string
+          rating: number
+          review_text?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          id?: string
+          merchant_id?: string
+          offering_id?: string
+          order_id?: string
+          rating?: number
+          review_text?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_reviews_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_reviews_offering_id_fkey"
+            columns: ["offering_id"]
+            isOneToOne: false
+            referencedRelation: "marketplace_offerings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_reviews_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "marketplace_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subscription_packages: {
         Row: {
           created_at: string
@@ -915,6 +1320,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_pins: {
+        Row: {
+          created_at: string
+          id: string
+          pin_hash: string
+          salt: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          pin_hash: string
+          salt: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          pin_hash?: string
+          salt?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       user_subscriptions: {
         Row: {

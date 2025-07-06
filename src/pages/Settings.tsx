@@ -7,8 +7,9 @@ import { SubscriptionManagementPanel } from '@/components/settings/SubscriptionM
 import { APICredentialsPanel } from '@/components/settings/APICredentialsPanel';
 import { ProductionDashboard } from '@/components/monitoring/ProductionDashboard';
 import { ProductionReadinessDashboard } from '@/components/monitoring/ProductionReadinessDashboard';
+import { MarketplaceAdminPanel } from '@/components/marketplace/MarketplaceAdminPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings as SettingsIcon, Mail, Smartphone, Package, Activity, Shield, Key } from 'lucide-react';
+import { Settings as SettingsIcon, Mail, Smartphone, Package, Activity, Shield, Key, Store } from 'lucide-react';
 
 const Settings = () => {
   return (
@@ -19,7 +20,7 @@ const Settings = () => {
       </div>
       
       <Tabs defaultValue="monitoring" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="monitoring" className="flex items-center gap-2">
             <Activity className="h-4 w-4" />
             Monitor
@@ -27,6 +28,10 @@ const Settings = () => {
           <TabsTrigger value="readiness" className="flex items-center gap-2">
             <Shield className="h-4 w-4" />
             Readiness
+          </TabsTrigger>
+          <TabsTrigger value="marketplace" className="flex items-center gap-2">
+            <Store className="h-4 w-4" />
+            Marketplace
           </TabsTrigger>
           <TabsTrigger value="mobile" className="flex items-center gap-2">
             <Smartphone className="h-4 w-4" />
@@ -56,6 +61,10 @@ const Settings = () => {
         
         <TabsContent value="readiness">
           <ProductionReadinessDashboard />
+        </TabsContent>
+        
+        <TabsContent value="marketplace">
+          <MarketplaceAdminPanel />
         </TabsContent>
         
         <TabsContent value="mobile">
