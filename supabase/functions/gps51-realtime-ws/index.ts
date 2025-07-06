@@ -119,34 +119,79 @@ serve(async (req) => {
   return response;
 });
 
+// Enhanced vehicle sync with intelligent batching
 async function triggerVehicleSync(vehicleIds: string[], supabase: any) {
   try {
-    // Get GPS51 credentials and trigger priority sync for specific vehicles
+    console.log(`WebSocket: Triggering intelligent sync for ${vehicleIds.length} vehicles`);
+    
+    // Get GPS51 credentials and trigger priority sync
     const { data: vehicles } = await supabase
       .from('vehicles')
-      .select('gps51_device_id, license_plate')
+      .select('gps51_device_id, license_plate, make, model')
       .in('id', vehicleIds)
       .not('gps51_device_id', 'is', null);
 
     if (vehicles && vehicles.length > 0) {
-      console.log(`Triggering priority sync for ${vehicles.length} vehicles`);
+      const deviceIds = vehicles.map((v: any) => v.gps51_device_id);
       
-      // This would typically call the GPS51 sync with priority filtering
+      // Trigger intelligent GPS51 sync with priority
       const { error } = await supabase.functions.invoke('gps51-sync', {
         body: {
-          priority: 1, // High priority
+          action: 'intelligent_sync',
+          priority: 1, // Highest priority for real-time requests
           batchMode: true,
           cronTriggered: false,
-          specificVehicles: vehicles.map((v: any) => v.gps51_device_id)
+          specificDevices: deviceIds,
+          requestSource: 'websocket_client',
+          timestamp: new Date().toISOString()
         }
       });
 
       if (error) {
-        console.error('Error triggering vehicle sync:', error);
+        console.error('WebSocket: Error triggering intelligent sync:', error);
+      } else {
+        console.log(`WebSocket: Successfully triggered sync for ${deviceIds.length} devices`);
       }
+    } else {
+      console.warn('WebSocket: No vehicles found for sync request');
     }
   } catch (error) {
-    console.error('Error in triggerVehicleSync:', error);
+    console.error('WebSocket: Error in triggerVehicleSync:', error);
+  }
+}
+
+// Enhanced position broadcasting with intelligent filtering
+export function broadcastIntelligentPositionUpdate(
+  vehicleId: string, 
+  position: any, 
+  priority: 'high' | 'medium' | 'low' = 'medium'
+) {
+  const message = JSON.stringify({
+    type: 'position_update',
+    vehicleId,
+    position,
+    priority,
+    timestamp: new Date().toISOString(),
+    source: 'gps51_intelligent_orchestrator'
+  });
+
+  let broadcastCount = 0;
+  
+  connectedClients.forEach((client, clientId) => {
+    // Only send to clients subscribed to this vehicle or all vehicles
+    if (client.subscribedVehicles.has(vehicleId) || client.subscribedVehicles.size === 0) {
+      try {
+        client.socket.send(message);
+        broadcastCount++;
+      } catch (error) {
+        console.error(`WebSocket: Error sending to client ${clientId}:`, error);
+        connectedClients.delete(clientId);
+      }
+    }
+  });
+
+  if (broadcastCount > 0) {
+    console.log(`WebSocket: Broadcasted ${priority} priority update for vehicle ${vehicleId} to ${broadcastCount} clients`);
   }
 }
 
