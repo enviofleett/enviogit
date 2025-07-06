@@ -10,41 +10,37 @@ import Index from "./pages/Index";
 import Settings from "./pages/Settings";
 import MobileApp from "./pages/MobileApp";
 import NotFound from "./pages/NotFound";
-import { gps51StartupService } from "./services/gps51/GPS51StartupService";
+import { gps51ProductionBootstrap } from "./services/production/GPS51ProductionBootstrap";
 
 const queryClient = new QueryClient();
 
 const App = () => {
-  // Initialize GPS51 services on app startup
+  // Initialize production system on app startup
   useEffect(() => {
-    const initializeGPS51 = async () => {
+    const initializeProductionSystem = async () => {
       try {
-        console.log('🚀 Initializing GPS51 services on app startup...');
-        const initialized = await gps51StartupService.initialize();
+        console.log('🚀 Initializing production system...');
+        const result = await gps51ProductionBootstrap.initializeProductionSystem();
         
-        if (initialized) {
-          console.log('✅ GPS51 services initialized successfully');
+        if (result.success) {
+          console.log('✅ Production system initialized successfully');
+          if (result.systemReady) {
+            console.log('🎉 System is production ready!');
+          }
         } else {
-          console.log('⚠️ GPS51 services not initialized (not configured or authentication failed)');
+          console.log('⚠️ Production system initialization completed with issues:', result.errors);
+        }
+
+        // Log any warnings
+        if (result.warnings.length > 0) {
+          console.warn('⚠️ Production system warnings:', result.warnings);
         }
       } catch (error) {
-        console.error('❌ Failed to initialize GPS51 services:', error);
+        console.error('❌ Failed to initialize production system:', error);
       }
     };
 
-    initializeGPS51();
-
-    // Listen for token refresh events
-    const handleTokenRefresh = async () => {
-      console.log('🔄 Token refresh event received');
-      await gps51StartupService.refreshAuthentication();
-    };
-
-    window.addEventListener('gps51-token-refresh-needed', handleTokenRefresh);
-
-    return () => {
-      window.removeEventListener('gps51-token-refresh-needed', handleTokenRefresh);
-    };
+    initializeProductionSystem();
   }, []);
 
   return (

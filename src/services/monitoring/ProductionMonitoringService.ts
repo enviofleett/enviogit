@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { getEnvironmentConfig, getCurrentEnvironment } from '@/config/environment';
+import { gps51StartupService } from '@/services/gps51/GPS51StartupService';
 
 export interface SystemMetrics {
   timestamp: number;
@@ -448,23 +449,66 @@ export class ProductionMonitoringService {
 
   private async performHealthCheck(): Promise<{ healthy: boolean; message: string }> {
     try {
-      const { data, error } = await supabase.functions.invoke('mobile-production-monitor');
+      // Use timeout for edge function call to prevent hanging
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Health check timeout')), 10000)
+      );
+
+      const healthCheckPromise = supabase.functions.invoke('mobile-production-monitor', {
+        body: { 
+          includeMetrics: false,
+          includeRecommendations: false 
+        }
+      });
+
+      const { data, error } = await Promise.race([healthCheckPromise, timeoutPromise]) as any;
       
-      if (error || !data.success) {
-        return {
-          healthy: false,
-          message: `Health check failed: ${error?.message || 'Unknown error'}`
-        };
+      if (error) {
+        console.warn('ProductionMonitoringService: Edge function call failed, falling back to basic health check');
+        return await this.performBasicHealthCheck();
+      }
+
+      if (!data || !data.success) {
+        console.warn('ProductionMonitoringService: Edge function returned error, falling back to basic health check');
+        return await this.performBasicHealthCheck();
       }
 
       return {
-        healthy: data.health.overall === 'healthy',
-        message: data.health.overall
+        healthy: data.health?.overall === 'healthy',
+        message: `System status: ${data.health?.overall || 'unknown'}`
+      };
+    } catch (error) {
+      console.warn('ProductionMonitoringService: Health check exception, falling back to basic health check:', error);
+      return await this.performBasicHealthCheck();
+    }
+  }
+
+  private async performBasicHealthCheck(): Promise<{ healthy: boolean; message: string }> {
+    try {
+      // Basic database connectivity test
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .select('id')
+        .limit(1);
+
+      if (dbError) {
+        return {
+          healthy: false,
+          message: `Database connectivity failed: ${dbError.message}`
+        };
+      }
+
+      // Basic GPS51 system check
+      const gps51Status = gps51StartupService.isAuthenticated();
+      
+      return {
+        healthy: true,
+        message: `Basic health check passed - DB: OK, GPS51: ${gps51Status ? 'OK' : 'WARNING'}`
       };
     } catch (error) {
       return {
         healthy: false,
-        message: `Health check error: ${error}`
+        message: `Basic health check failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       };
     }
   }
