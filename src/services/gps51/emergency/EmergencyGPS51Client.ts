@@ -214,11 +214,9 @@ export class EmergencyGPS51Client {
   }
 
   private async md5Hash(input: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(input);
-    const hashBuffer = await crypto.subtle.digest('MD5', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    // Use GPS51Utils MD5 implementation to fix browser compatibility
+    const { GPS51Utils } = await import('../GPS51Utils');
+    return GPS51Utils.ensureMD5Hash(input);
   }
 
   // Emergency diagnostics

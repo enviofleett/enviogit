@@ -32,6 +32,7 @@ export class GPS51EmergencyManager {
   private constructor() {
     this.client = new EmergencyGPS51Client('https://api.gps51.com/openapi');
     this.loadAuthState();
+    this.initializeFromExistingAuth();
   }
 
   static getInstance(): GPS51EmergencyManager {
@@ -64,7 +65,11 @@ export class GPS51EmergencyManager {
     try {
       console.log('🚨 GPS51EmergencyManager: Authenticating with emergency client');
       
-      const token = await this.client.login(credentials.username, credentials.password);
+      // Auto-hash password if needed using GPS51Utils
+      const { GPS51Utils } = await import('./GPS51Utils');
+      const hashedPassword = await GPS51Utils.ensureMD5Hash(credentials.password);
+      
+      const token = await this.client.login(credentials.username, hashedPassword);
       
       this.authState = {
         isAuthenticated: true,
@@ -75,7 +80,15 @@ export class GPS51EmergencyManager {
       this.saveAuthState();
       
       // Cache credentials for device list calls
-      localStorage.setItem('gps51_credentials', JSON.stringify(credentials));
+      localStorage.setItem('gps51_credentials', JSON.stringify({
+        ...credentials,
+        password: hashedPassword // Store hashed password
+      }));
+      
+      // Emit authentication success event for other components
+      window.dispatchEvent(new CustomEvent('gps51-emergency-auth-success', {
+        detail: { username: credentials.username, timestamp: Date.now() }
+      }));
       
       console.log('🟢 GPS51EmergencyManager: Authentication successful');
       return { success: true };
@@ -199,6 +212,45 @@ export class GPS51EmergencyManager {
       console.warn('Failed to check emergency status:', error);
     }
     return false;
+  }
+
+  // Initialize from existing authentication if available
+  private async initializeFromExistingAuth(): Promise<void> {
+    try {
+      // Check if we have saved credentials and attempt auto-authentication
+      const savedCredentials = localStorage.getItem('gps51_credentials');
+      if (savedCredentials && !this.authState.isAuthenticated) {
+        const credentials = JSON.parse(savedCredentials);
+        console.log('🔄 GPS51EmergencyManager: Found saved credentials, attempting auto-authentication');
+        await this.authenticate(credentials);
+      }
+
+      // Listen for unified auth service events
+      window.addEventListener('gps51-authentication-success', this.handleUnifiedAuthSuccess.bind(this));
+      window.addEventListener('gps51-authentication-logout', this.handleUnifiedAuthLogout.bind(this));
+    } catch (error) {
+      console.warn('GPS51EmergencyManager: Failed to initialize from existing auth:', error);
+    }
+  }
+
+  private handleUnifiedAuthSuccess(event: CustomEvent): void {
+    const authData = event.detail;
+    console.log('🔗 GPS51EmergencyManager: Received unified auth success event', authData);
+    
+    // Update our auth state based on unified service
+    if (authData?.credentials) {
+      this.authState = {
+        isAuthenticated: true,
+        username: authData.credentials.username,
+        lastLoginTime: Date.now()
+      };
+      this.saveAuthState();
+    }
+  }
+
+  private handleUnifiedAuthLogout(): void {
+    console.log('🔗 GPS51EmergencyManager: Received unified auth logout event');
+    this.logout();
   }
 }
 

@@ -191,6 +191,16 @@ export const GPS51UnifiedCredentialsPanel = () => {
         from: 'WEB',
         type: 'USER'
       });
+
+      // Also authenticate with Emergency Manager for live functionality
+      const { gps51EmergencyManager } = await import('@/services/gps51/GPS51EmergencyManager');
+      await gps51EmergencyManager.authenticate({
+        username: credentials.username,
+        password: hashedPassword,
+        apiUrl: credentials.apiUrl,
+        from: 'WEB',
+        type: 'USER'
+      });
       
       setAuthResult(result);
       

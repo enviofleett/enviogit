@@ -305,10 +305,21 @@ export const useGPS51Data = (): UseGPS51DataReturn => {
     }
   }, []);
 
-  // Initialize authentication
+  // Initialize authentication and listen for auth events
   useEffect(() => {
     authenticateIfNeeded();
-  }, [authenticateIfNeeded]);
+    
+    // Listen for emergency manager auth events
+    const handleEmergencyAuth = () => {
+      console.log('useGPS51Data: Received emergency auth success event');
+      setState(prev => ({ ...prev, isAuthenticated: true }));
+      // Refresh data when authentication succeeds
+      setTimeout(() => refreshData(), 100);
+    };
+    
+    window.addEventListener('gps51-emergency-auth-success', handleEmergencyAuth);
+    return () => window.removeEventListener('gps51-emergency-auth-success', handleEmergencyAuth);
+  }, [authenticateIfNeeded, refreshData]);
 
   // Cleanup on unmount
   useEffect(() => {
