@@ -1,7 +1,12 @@
-import { gps51EnhancedSyncService } from './GPS51EnhancedSyncService';
-import { gps51IntelligentConnectionManager } from './GPS51IntelligentConnectionManager';
-import { gps51DatabaseIntegration } from './GPS51DatabaseIntegration';
-import type { EnhancedLiveDataState } from './GPS51EnhancedStateManager';
+import { gps51MasterPollingService } from './GPS51MasterPollingService';
+import { gps51CoordinatorClient } from './GPS51CoordinatorClient';
+import { GPS51Device, GPS51Position } from './types';
+
+export interface EnhancedLiveDataState {
+  devices: GPS51Device[];
+  positions: GPS51Position[];
+  lastUpdate: Date | null;
+}
 
 export interface LiveDataManagerStatus {
   isActive: boolean;
@@ -17,8 +22,12 @@ export interface LiveDataManagerStatus {
 
 export class GPS51LiveDataManager {
   private static instance: GPS51LiveDataManager;
-  private isPolling = false;
-  private pollingCallback?: (data: EnhancedLiveDataState) => void;
+  private activeSession: string | null = null;
+  private currentState: EnhancedLiveDataState = {
+    devices: [],
+    positions: [],
+    lastUpdate: null
+  };
 
   static getInstance(): GPS51LiveDataManager {
     if (!GPS51LiveDataManager.instance) {
@@ -28,124 +37,136 @@ export class GPS51LiveDataManager {
   }
 
   /**
-   * Initialize the live data system with proper authentication and connection management
+   * Initialize the live data system using the master polling service
    */
   async initializeLiveDataSystem(): Promise<boolean> {
     try {
-      console.log('GPS51LiveDataManager: Initializing live data system...');
+      console.log('GPS51LiveDataManager: Initializing coordinated live data system...');
 
-      // Step 1: Test connection health
-      const connectionTest = await gps51IntelligentConnectionManager.testAllConnections();
-      const hasWorkingConnection = Array.from(connectionTest.values()).some(result => result.success);
-      
-      if (!hasWorkingConnection) {
-        console.warn('GPS51LiveDataManager: No working connections available');
+      // Test basic connectivity through coordinator
+      try {
+        await gps51CoordinatorClient.getCoordinatorStatus();
+        console.log('GPS51LiveDataManager: Coordinator connectivity confirmed');
+      } catch (error) {
+        console.warn('GPS51LiveDataManager: Coordinator not available:', error);
         return false;
       }
 
-      // Step 2: Start enhanced sync service
-      if (!this.isPolling) {
-        console.log('GPS51LiveDataManager: Starting enhanced live data polling...');
+      // Start polling if not already active
+      if (!this.activeSession) {
+        console.log('GPS51LiveDataManager: Starting coordinated polling...');
         this.startEnhancedPolling();
       }
 
-      console.log('GPS51LiveDataManager: Live data system initialized successfully');
+      console.log('GPS51LiveDataManager: Coordinated live data system initialized successfully');
       return true;
     } catch (error) {
-      console.error('GPS51LiveDataManager: Failed to initialize live data system:', error);
+      console.error('GPS51LiveDataManager: Failed to initialize coordinated live data system:', error);
       return false;
     }
   }
 
   /**
-   * Start enhanced polling with callback and database integration
+   * Start enhanced polling using the master polling service
    */
   startEnhancedPolling(callback?: (data: EnhancedLiveDataState) => void): void {
-    if (this.isPolling) {
-      console.log('GPS51LiveDataManager: Polling already active');
+    if (this.activeSession) {
+      console.log('GPS51LiveDataManager: Polling session already active');
       return;
     }
 
-    this.pollingCallback = callback;
-    this.isPolling = true;
+    console.log('GPS51LiveDataManager: Starting coordinated enhanced polling...');
 
-    console.log('GPS51LiveDataManager: Starting enhanced polling with database integration...');
+    // Create a unique session ID
+    this.activeSession = `live-data-manager-${Date.now()}`;
 
-    // Use the enhanced sync service with comprehensive data processing
-    gps51EnhancedSyncService.startEnhancedPolling(async (data) => {
-      console.log('GPS51LiveDataManager: Live data update received:', {
-        devices: data.devices.length,
-        positions: data.positions.length,
-        lastUpdate: data.lastUpdate
+    // Register with master polling service
+    gps51MasterPollingService.registerSession(
+      this.activeSession,
+      [], // Will be updated with actual device IDs
+      30000, // 30 second interval for general live data
+      (data) => {
+        console.log('GPS51LiveDataManager: Live data update received:', {
+          devices: data.devices.length,
+          positions: data.positions.length,
+          lastQueryTime: data.lastQueryTime
+        });
+
+        // Update internal state
+        this.currentState = {
+          devices: data.devices,
+          positions: data.positions,
+          lastUpdate: new Date()
+        };
+
+        // Dispatch custom event for dashboard updates
+        window.dispatchEvent(new CustomEvent('gps51-live-data-update', { 
+          detail: this.currentState
+        }));
+
+        // Call callback if provided
+        if (callback) {
+          callback(this.currentState);
+        }
+      },
+      'normal'
+    );
+
+    // Get initial device list and update session
+    this.updateDeviceList();
+
+    console.log('GPS51LiveDataManager: Coordinated enhanced polling started');
+  }
+
+  /**
+   * Update device list for the polling session
+   */
+  private async updateDeviceList(): Promise<void> {
+    if (!this.activeSession) return;
+
+    try {
+      const devices = await gps51CoordinatorClient.getDeviceList();
+      const deviceIds = devices.map(d => d.deviceid);
+      
+      gps51MasterPollingService.updateSession(this.activeSession, {
+        deviceIds
       });
 
-      // Sync to database if we have meaningful data
-      if (data.devices.length > 0) {
-        try {
-          const syncResult = await gps51DatabaseIntegration.syncToDatabase(data);
-          console.log('GPS51LiveDataManager: Database sync completed:', {
-            success: syncResult.success,
-            vehiclesProcessed: syncResult.vehiclesProcessed,
-            positionsStored: syncResult.positionsStored,
-            executionTime: `${syncResult.executionTime}ms`
-          });
-        } catch (syncError) {
-          console.warn('GPS51LiveDataManager: Database sync failed:', syncError);
-        }
-      }
-
-      // Dispatch custom event for dashboard updates
-      window.dispatchEvent(new CustomEvent('gps51-live-data-update', { 
-        detail: data 
-      }));
-
-      // Call callback if provided
-      if (this.pollingCallback) {
-        this.pollingCallback(data);
-      }
-
-      // Call the original callback if provided
-      if (callback) {
-        callback(data);
-      }
-    });
-
-    console.log('GPS51LiveDataManager: Enhanced polling with database integration started');
+      console.log('GPS51LiveDataManager: Updated session with', deviceIds.length, 'devices');
+    } catch (error) {
+      console.error('GPS51LiveDataManager: Failed to update device list:', error);
+    }
   }
 
   /**
    * Stop live data polling
    */
   stopPolling(): void {
-    if (!this.isPolling) {
+    if (!this.activeSession) {
       return;
     }
 
-    console.log('GPS51LiveDataManager: Stopping live data polling...');
-    gps51EnhancedSyncService.stopEnhancedPolling();
-    this.isPolling = false;
-    this.pollingCallback = undefined;
-    console.log('GPS51LiveDataManager: Live data polling stopped');
+    console.log('GPS51LiveDataManager: Stopping coordinated live data polling...');
+    gps51MasterPollingService.unregisterSession(this.activeSession);
+    this.activeSession = null;
+    console.log('GPS51LiveDataManager: Coordinated live data polling stopped');
   }
 
   /**
-   * Get current live data status with database sync information
+   * Get current live data status
    */
   getStatus(): LiveDataManagerStatus {
-    const syncService = gps51EnhancedSyncService;
-    const currentState = syncService.getCurrentEnhancedState();
-    const serviceStatus = syncService.getEnhancedServiceStatus();
-    const connectionHealth = gps51IntelligentConnectionManager.getConnectionHealth();
+    const masterStatus = gps51MasterPollingService.getStatus();
 
     return {
-      isActive: this.isPolling && serviceStatus.polling.isActive,
-      isAuthenticated: true, // Always authenticated through intelligent connection manager
-      connectionHealth: connectionHealth.overallHealth,
-      lastUpdate: currentState.lastUpdate,
-      deviceCount: currentState.devices.length,
-      positionCount: currentState.positions.length,
-      databaseSyncEnabled: true,
-      lastDatabaseSync: currentState.lastUpdate,
+      isActive: !!this.activeSession && masterStatus.isPolling,
+      isAuthenticated: true, // Authenticated through coordinator
+      connectionHealth: 'good', // Simplified for now
+      lastUpdate: this.currentState.lastUpdate,
+      deviceCount: this.currentState.devices.length,
+      positionCount: this.currentState.positions.length,
+      databaseSyncEnabled: false, // Simplified for now
+      lastDatabaseSync: null,
       errors: []
     };
   }
@@ -154,52 +175,36 @@ export class GPS51LiveDataManager {
    * Get current live data state
    */
   getCurrentState(): EnhancedLiveDataState {
-    return gps51EnhancedSyncService.getCurrentEnhancedState();
+    return this.currentState;
   }
 
   /**
-   * Force a manual sync with database integration
+   * Force a manual sync through the coordinator
    */
   async forceLiveDataSync(): Promise<EnhancedLiveDataState> {
     try {
-      console.log('GPS51LiveDataManager: Manual sync with database integration requested...');
+      console.log('GPS51LiveDataManager: Manual coordinated sync requested...');
       
-      // Test connection health first
-      const connectionHealth = gps51IntelligentConnectionManager.getConnectionHealth();
-      if (connectionHealth.overallHealth === 'poor') {
-        throw new Error('No healthy connections available for sync');
+      if (!this.activeSession) {
+        throw new Error('No active polling session');
       }
 
-      // Fetch fresh data
-      const data = await gps51EnhancedSyncService.fetchEnhancedLiveData();
+      // Force immediate poll for this session
+      await gps51MasterPollingService.forcePoll(this.activeSession);
       
-      console.log('GPS51LiveDataManager: Manual sync completed:', {
-        devices: data.devices.length,
-        positions: data.positions.length
+      console.log('GPS51LiveDataManager: Manual coordinated sync completed:', {
+        devices: this.currentState.devices.length,
+        positions: this.currentState.positions.length
       });
-
-      // Sync to database
-      if (data.devices.length > 0) {
-        try {
-          const syncResult = await gps51DatabaseIntegration.syncToDatabase(data);
-          console.log('GPS51LiveDataManager: Manual database sync completed:', {
-            success: syncResult.success,
-            vehiclesProcessed: syncResult.vehiclesProcessed,
-            positionsStored: syncResult.positionsStored
-          });
-        } catch (syncError) {
-          console.warn('GPS51LiveDataManager: Manual database sync failed:', syncError);
-        }
-      }
 
       // Dispatch update event
       window.dispatchEvent(new CustomEvent('gps51-live-data-update', { 
-        detail: data 
+        detail: this.currentState 
       }));
 
-      return data;
+      return this.currentState;
     } catch (error) {
-      console.error('GPS51LiveDataManager: Manual sync failed:', error);
+      console.error('GPS51LiveDataManager: Manual coordinated sync failed:', error);
       throw error;
     }
   }
@@ -208,45 +213,34 @@ export class GPS51LiveDataManager {
    * Reset the entire live data system
    */
   async resetSystem(): Promise<void> {
-    console.log('GPS51LiveDataManager: Resetting live data system...');
+    console.log('GPS51LiveDataManager: Resetting coordinated live data system...');
     
     this.stopPolling();
-    gps51EnhancedSyncService.resetEnhancedService();
-    gps51IntelligentConnectionManager.resetHealthTracking();
+    this.currentState = {
+      devices: [],
+      positions: [],
+      lastUpdate: null
+    };
     
-    console.log('GPS51LiveDataManager: System reset completed');
+    console.log('GPS51LiveDataManager: Coordinated system reset completed');
   }
 
   /**
-   * Get comprehensive diagnostic information with database status
+   * Get comprehensive diagnostic information
    */
   getDiagnosticInfo() {
     return {
       manager: {
-        isPolling: this.isPolling,
-        hasCallback: !!this.pollingCallback
+        isActive: !!this.activeSession,
+        sessionId: this.activeSession,
+        currentDevices: this.currentState.devices.length,
+        currentPositions: this.currentState.positions.length
       },
-      syncService: gps51EnhancedSyncService.exportDebugInfo(),
-      connection: gps51IntelligentConnectionManager.getConnectionHealth(),
-      database: {
-        integrationEnabled: true,
-        canTestConnection: true
+      masterPolling: gps51MasterPollingService.getStatus(),
+      coordinator: {
+        available: true
       }
     };
-  }
-
-  /**
-   * Test database connectivity
-   */
-  async testDatabaseConnection(): Promise<{ success: boolean; error?: string }> {
-    return gps51DatabaseIntegration.testDatabaseConnection();
-  }
-
-  /**
-   * Get database sync statistics
-   */
-  async getDatabaseSyncStats() {
-    return gps51DatabaseIntegration.getSyncJobStats();
   }
 }
 

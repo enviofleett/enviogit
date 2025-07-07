@@ -1,26 +1,23 @@
 
-import { GPS51Client, gps51Client } from './GPS51Client';
+import { gps51CoordinatorClient } from './GPS51CoordinatorClient';
 import { GPS51Device, GPS51Position } from './types';
 import { GPS51TimeManager } from './GPS51TimeManager';
-import { GPS51LiveDataEnhancer } from './GPS51LiveDataEnhancer';
 
 export class GPS51DataFetcher {
-  private client: GPS51Client;
-  private liveDataEnhancer: GPS51LiveDataEnhancer;
+  private coordinatorClient = gps51CoordinatorClient;
 
-  constructor(client: GPS51Client = gps51Client) {
-    this.client = client;
-    this.liveDataEnhancer = new GPS51LiveDataEnhancer(client);
+  constructor() {
+    // Now uses the coordinator client for all GPS51 interactions
   }
 
   /**
-   * Fetch all devices for the authenticated user
+   * Fetch all devices for the authenticated user through coordinator
    */
   async fetchUserDevices(): Promise<GPS51Device[]> {
     try {
-      console.log('GPS51DataFetcher: Fetching user devices...');
+      console.log('GPS51DataFetcher: Fetching user devices through coordinator...');
       
-      const devices = await this.client.getDeviceList();
+      const devices = await this.coordinatorClient.getDeviceList();
       console.log(`GPS51DataFetcher: Retrieved ${devices.length} devices`);
       
       return devices;
@@ -73,21 +70,21 @@ export class GPS51DataFetcher {
   }
 
   /**
-   * Fetch live positions for the specified device IDs with proper server timestamp handling
+   * Fetch live positions for the specified device IDs through coordinator
    */
   async fetchLivePositions(deviceIds: string[], lastQueryTime?: number): Promise<{positions: GPS51Position[], lastQueryTime: number}> {
     try {
-      console.log('GPS51DataFetcher: Fetching live positions (ENHANCED):', {
+      console.log('GPS51DataFetcher: Fetching live positions through coordinator:', {
         deviceCount: deviceIds.length,
         inputLastQueryTime: lastQueryTime,
         isFirstCall: !lastQueryTime || lastQueryTime === 0,
         callType: (!lastQueryTime || lastQueryTime === 0) ? 'INITIAL' : 'INCREMENTAL'
       });
       
-      // CRITICAL FIX: Pass the server's lastQueryTime directly to client
-      const result = await this.client.getRealtimePositions(deviceIds, lastQueryTime);
+      // Use coordinator for all GPS51 API calls
+      const result = await this.coordinatorClient.getRealtimePositions(deviceIds, lastQueryTime);
       
-      console.log('GPS51DataFetcher: Live positions result (ENHANCED):', {
+      console.log('GPS51DataFetcher: Live positions result through coordinator:', {
         positionsRetrieved: result.positions.length,
         serverLastQueryTime: result.lastQueryTime,
         serverTimestamp: result.lastQueryTime ? new Date(result.lastQueryTime).toISOString() : 'N/A',
@@ -115,113 +112,48 @@ export class GPS51DataFetcher {
   }
 
   /**
-   * Fetch complete live data with enhanced time synchronization and device activity monitoring
+   * Fetch complete live data through coordinator with simplified architecture
    */
   async fetchCompleteLiveData(lastQueryTime?: number): Promise<{devices: GPS51Device[], positions: GPS51Position[], lastQueryTime: number}> {
     try {
-      console.log('GPS51DataFetcher: Starting enhanced live data fetch with UTC time sync...');
+      console.log('GPS51DataFetcher: Starting coordinated live data fetch...');
       GPS51TimeManager.logTimeSyncInfo('FetchStart', lastQueryTime);
       
-      // Step 1: Get devices with comprehensive activity analysis
-      const { 
-        devices: allDevices, 
-        onlineDevices, 
-        offlineDevices,
-        activitySummary 
-      } = await this.liveDataEnhancer.fetchDevicesWithActivity();
+      // Step 1: Get devices through coordinator
+      const allDevices = await this.coordinatorClient.getDeviceList();
       
       if (allDevices.length === 0) {
         console.warn('GPS51DataFetcher: No devices found for user');
         return { devices: [], positions: [], lastQueryTime: lastQueryTime || GPS51TimeManager.getCurrentUtcTimestamp() };
       }
 
-      console.log('GPS51DataFetcher: Device activity analysis:', activitySummary);
-
-      // PRODUCTION FIX: Enhanced device selection strategy
-      let targetDevices = onlineDevices;
-      let targetDeviceIds = onlineDevices.map(device => device.deviceid);
+      // Step 2: Filter active devices using existing logic
+      const { activeDevices } = this.filterActiveDevices(allDevices);
       
-      if (onlineDevices.length === 0) {
-        console.warn('GPS51DataFetcher: No online devices found - using smart fallback strategy...');
-        
-        // Smart fallback: Use devices with recent activity or all devices if none have activity
-        const devicesWithRecentActivity = allDevices.filter(device => 
-          device.lastactivetime && device.lastactivetime > (Date.now() - (6 * 60 * 60 * 1000)) // 6 hours
-        );
-        
-        if (devicesWithRecentActivity.length > 0) {
-          targetDevices = devicesWithRecentActivity;
-          targetDeviceIds = devicesWithRecentActivity.map(device => device.deviceid);
-          console.log(`GPS51DataFetcher: Using ${targetDeviceIds.length} devices with recent activity (fallback strategy)`);
-        } else {
-          // Last resort: try a sample of all devices to avoid overwhelming the API
-          const maxDevicesToTry = Math.min(allDevices.length, 100); // Limit to 100 devices
-          targetDevices = allDevices.slice(0, maxDevicesToTry);
-          targetDeviceIds = targetDevices.map(device => device.deviceid);
-          console.log(`GPS51DataFetcher: Using first ${targetDeviceIds.length} devices (last resort fallback)`);
-        }
-      }
-      
-      try {
-        const { 
-          positions, 
-          lastQueryTime: newLastQueryTime,
-          hasNewData,
-          serverTimeDrift,
-          responseMetadata
-        } = await this.liveDataEnhancer.fetchLivePositionsEnhanced(targetDeviceIds);
-        
-        console.log('GPS51DataFetcher: Enhanced fetch completed:', {
-          strategy: onlineDevices.length > 0 ? 'online_devices' : 'fallback_strategy',
-          totalDevices: allDevices.length,
-          targetDevices: targetDevices.length,
-          positionsRetrieved: positions.length,
-          hasNewData,
-          serverTimeDrift: `${serverTimeDrift}s`,
-          responseMetadata
-        });
-        
-        return {
-          devices: allDevices,
-          positions,
-          lastQueryTime: newLastQueryTime
-        };
-      } catch (error) {
-        console.error('GPS51DataFetcher: Enhanced fetch failed:', error);
-        
-        // Return devices without positions rather than failing completely
-        return { 
-          devices: allDevices, 
-          positions: [], 
-          lastQueryTime: lastQueryTime || GPS51TimeManager.getCurrentUtcTimestamp()
-        };
-      }
-
-      // Step 2: Fetch live positions with enhanced error handling and time management
-      const onlineDeviceIds = onlineDevices.map(device => device.deviceid);
-      const { 
-        positions, 
-        lastQueryTime: newLastQueryTime,
-        hasNewData,
-        serverTimeDrift,
-        responseMetadata
-      } = await this.liveDataEnhancer.fetchLivePositionsEnhanced(onlineDeviceIds);
-
-      console.log('GPS51DataFetcher: Enhanced live data fetch completed:', {
+      console.log('GPS51DataFetcher: Device filtering results:', {
         totalDevices: allDevices.length,
-        onlineDevices: onlineDevices.length,
-        offlineDevices: offlineDevices.length,
-        positionsRetrieved: positions.length,
-        hasNewData,
-        serverTimeDrift: `${serverTimeDrift}s`,
-        responseMetadata,
-        successRate: onlineDevices.length > 0 ? (positions.length / onlineDevices.length * 100).toFixed(1) + '%' : '0%'
+        activeDevices: activeDevices.length
       });
 
-      // Log time drift warnings
-      if (Math.abs(serverTimeDrift) > 30) {
-        console.warn(`GPS51DataFetcher: Significant server time drift detected: ${serverTimeDrift}s`);
-      }
+      // Step 3: Get device IDs for position fetching
+      const targetDeviceIds = activeDevices.length > 0 
+        ? activeDevices.map(device => device.deviceid)
+        : allDevices.slice(0, 50).map(device => device.deviceid); // Limit to 50 devices max
+
+      console.log(`GPS51DataFetcher: Fetching positions for ${targetDeviceIds.length} devices`);
+
+      // Step 4: Fetch positions through coordinator
+      const { positions, lastQueryTime: newLastQueryTime } = await this.coordinatorClient.getRealtimePositions(
+        targetDeviceIds,
+        lastQueryTime
+      );
+
+      console.log('GPS51DataFetcher: Coordinated fetch completed:', {
+        totalDevices: allDevices.length,
+        targetDevices: targetDeviceIds.length,
+        positionsRetrieved: positions.length,
+        successRate: targetDeviceIds.length > 0 ? (positions.length / targetDeviceIds.length * 100).toFixed(1) + '%' : '0%'
+      });
 
       return {
         devices: allDevices,
@@ -229,15 +161,8 @@ export class GPS51DataFetcher {
         lastQueryTime: newLastQueryTime
       };
     } catch (error) {
-      console.error('GPS51DataFetcher: Enhanced live data fetch failed:', error);
+      console.error('GPS51DataFetcher: Coordinated live data fetch failed:', error);
       throw error;
     }
-  }
-
-  /**
-   * Get live data enhancer for advanced debugging
-   */
-  getLiveDataEnhancer(): GPS51LiveDataEnhancer {
-    return this.liveDataEnhancer;
   }
 }
