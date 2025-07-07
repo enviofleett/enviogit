@@ -805,6 +805,69 @@ export type Database = {
           },
         ]
       }
+      gps51_coordinator_logs: {
+        Row: {
+          action: string | null
+          cooldown_until: string | null
+          error: string | null
+          id: string
+          metadata: Json | null
+          processing_time: number | null
+          request_id: string | null
+          success: boolean | null
+          timestamp: string
+          type: string
+        }
+        Insert: {
+          action?: string | null
+          cooldown_until?: string | null
+          error?: string | null
+          id?: string
+          metadata?: Json | null
+          processing_time?: number | null
+          request_id?: string | null
+          success?: boolean | null
+          timestamp?: string
+          type: string
+        }
+        Update: {
+          action?: string | null
+          cooldown_until?: string | null
+          error?: string | null
+          id?: string
+          metadata?: Json | null
+          processing_time?: number | null
+          request_id?: string | null
+          success?: boolean | null
+          timestamp?: string
+          type?: string
+        }
+        Relationships: []
+      }
+      gps51_emergency_controls: {
+        Row: {
+          cooldown_until: string | null
+          emergency_stop_active: boolean
+          id: string
+          reason: string | null
+          updated_at: string
+        }
+        Insert: {
+          cooldown_until?: string | null
+          emergency_stop_active?: boolean
+          id?: string
+          reason?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cooldown_until?: string | null
+          emergency_stop_active?: boolean
+          id?: string
+          reason?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       gps51_feature_mapping: {
         Row: {
           category: string | null

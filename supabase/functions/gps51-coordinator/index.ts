@@ -159,6 +159,8 @@ async function processQueue() {
     try {
       console.log(`GPS51Coordinator: Processing request ${request.id} - ${request.action}`);
       
+      const requestStartTime = Date.now();
+      
       // Make actual GPS51 API call through existing proxy
       const { data, error } = await supabase.functions.invoke('gps51-proxy', {
         body: {
@@ -168,15 +170,18 @@ async function processQueue() {
         }
       });
 
+      const responseTime = Date.now() - requestStartTime;
       lastRequestTime = Date.now();
 
       if (error) {
+        await recordRequest(request.action, false, responseTime, error.message);
         throw new Error(error.message);
       }
 
       // Check for 8902 rate limit error
       if (data.status === 8902 || (typeof data.status === 'string' && data.status.includes('8902'))) {
         console.error('GPS51Coordinator: 8902 rate limit detected, activating emergency measures');
+        await recordRequest(request.action, false, responseTime, 8902);
         await handle8902Error();
         
         // Notify waiting request
@@ -187,6 +192,9 @@ async function processQueue() {
         });
         continue;
       }
+
+      // Record successful request
+      await recordRequest(request.action, true, responseTime, data.status);
 
       // Cache successful response
       const cacheKey = `${request.action}:${JSON.stringify(request.params)}`;
