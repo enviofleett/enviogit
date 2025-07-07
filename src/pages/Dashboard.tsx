@@ -24,9 +24,7 @@ const Dashboard = () => {
   } = useGPS51ProductionData();
   
   // Fallback to legacy hook for compatibility
-  const { state } = useGPS51Data();
-  const legacyVehicles = state.devices;
-  const legacyLoading = state.isLoading;
+  const { vehicles: legacyVehicles, vehiclePositions, loading: legacyLoading } = useGPS51Data();
   
   const [enableRealTime, setEnableRealTime] = useState(true);
   const [enableGPS51RealTime, setEnableGPS51RealTime] = useState(true);

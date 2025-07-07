@@ -2,14 +2,46 @@ import { useState, useEffect, useCallback } from 'react';
 import { gps51CoordinatorClient } from '@/services/gps51/GPS51CoordinatorClient';
 import { GPS51Device, GPS51Position } from '@/services/gps51/types';
 
+// Compatible vehicle interface for existing components
+export interface VehicleData {
+  id: string;
+  brand: string;
+  model: string;
+  license_plate: string;
+  status: string;
+  type: string;
+  created_at: string;
+  updated_at: string;
+  notes: string;
+  gps51_device_id?: string;
+  latest_position: VehiclePosition | null;
+}
+
+export interface VehiclePosition {
+  vehicle_id: string;
+  latitude: number;
+  longitude: number;
+  speed: number;
+  timestamp: string;
+  status: string;
+  isMoving: boolean;
+  ignition_status?: boolean;
+  heading?: number;
+  fuel_level?: number;
+  engine_temperature?: number;
+}
+
 export interface GPS51DataState {
   devices: GPS51Device[];
   positions: GPS51Position[];
+  vehicles: VehicleData[];  // Compatible interface
+  vehiclePositions: VehiclePosition[];  // Compatible interface
   isLoading: boolean;
   error: string | null;
   lastUpdate: Date | null;
   isAuthenticated: boolean;
   pollingActive: boolean;
+  loading: boolean;  // Alias for isLoading
 }
 
 export interface GPS51DataActions {
@@ -17,11 +49,18 @@ export interface GPS51DataActions {
   stopPolling: () => void;
   refreshData: () => Promise<void>;
   authenticateIfNeeded: () => Promise<boolean>;
+  refresh: () => Promise<void>;  // Alias for refreshData
 }
 
 export interface UseGPS51DataReturn {
   state: GPS51DataState;
   actions: GPS51DataActions;
+  // Direct access for backward compatibility
+  vehicles: VehicleData[];
+  vehiclePositions: VehiclePosition[];
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
 }
 
 /**
@@ -35,29 +74,82 @@ export const useGPS51Data = (): UseGPS51DataReturn => {
   const [state, setState] = useState<GPS51DataState>({
     devices: [],
     positions: [],
+    vehicles: [],
+    vehiclePositions: [],
     isLoading: false,
     error: null,
     lastUpdate: null,
     isAuthenticated: false,
-    pollingActive: false
+    pollingActive: false,
+    loading: false
   });
 
   const [pollingTimer, setPollingTimer] = useState<NodeJS.Timeout | null>(null);
   const [lastQueryPositionTime, setLastQueryPositionTime] = useState<number>(0);
 
+  // Convert GPS51 data to compatible format
+  const convertToVehicleData = useCallback((devices: GPS51Device[], positions: GPS51Position[]): { vehicles: VehicleData[], vehiclePositions: VehiclePosition[] } => {
+    const vehicles: VehicleData[] = devices.map(device => {
+      const position = positions.find(p => p.deviceid === device.deviceid);
+      
+      let latest_position: VehiclePosition | null = null;
+      if (position) {
+        latest_position = {
+          vehicle_id: device.deviceid,
+          latitude: Number(position.callat),
+          longitude: Number(position.callon),
+          speed: Number(position.speed || 0),
+          timestamp: new Date(position.updatetime * 1000).toISOString(),
+          status: position.strstatus || 'Unknown',
+          isMoving: (position.speed || 0) > 1,
+          ignition_status: position.moving === 1,
+          heading: position.course,
+          fuel_level: undefined,
+          engine_temperature: undefined
+        };
+      }
+
+      return {
+        id: device.deviceid,
+        brand: 'GPS51',
+        model: device.devicename || 'Unknown',
+        license_plate: device.devicename || device.deviceid,
+        status: device.status === 1 ? 'active' : 'inactive',
+        type: 'vehicle',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        notes: '',
+        gps51_device_id: device.deviceid,
+        latest_position
+      };
+    });
+
+    const vehiclePositions: VehiclePosition[] = vehicles
+      .filter(v => v.latest_position)
+      .map(v => v.latest_position!);
+
+    return { vehicles, vehiclePositions };
+  }, []);
+
   // Simple API call: action=lastposition with lastquerypositiontime
   const fetchPositions = useCallback(async () => {
     try {
-      setState(prev => ({ ...prev, isLoading: true, error: null }));
+      setState(prev => ({ ...prev, isLoading: true, loading: true, error: null }));
 
       // Direct lastposition API call as per documentation
       const result = await gps51CoordinatorClient.getRealtimePositions([], lastQueryPositionTime);
 
+      // Convert to compatible format
+      const { vehicles, vehiclePositions } = convertToVehicleData(state.devices, result.positions);
+
       setState(prev => ({
         ...prev,
         positions: result.positions,
+        vehicles,
+        vehiclePositions,
         lastUpdate: new Date(),
-        isLoading: false
+        isLoading: false,
+        loading: false
       }));
 
       // Update lastQueryPositionTime from server response for next incremental call
@@ -73,11 +165,12 @@ export const useGPS51Data = (): UseGPS51DataReturn => {
       setState(prev => ({
         ...prev,
         error: errorMessage,
-        isLoading: false
+        isLoading: false,
+        loading: false
       }));
       console.error('GPS51Data: Fetch failed:', error);
     }
-  }, [lastQueryPositionTime]);
+  }, [lastQueryPositionTime, convertToVehicleData, state.devices]);
 
   const startPolling = useCallback(() => {
     if (pollingTimer) {
@@ -108,7 +201,7 @@ export const useGPS51Data = (): UseGPS51DataReturn => {
 
   const refreshData = useCallback(async () => {
     try {
-      setState(prev => ({ ...prev, isLoading: true, error: null }));
+      setState(prev => ({ ...prev, isLoading: true, loading: true, error: null }));
 
       // Fetch devices first
       const devices = await gps51CoordinatorClient.getDeviceList();
@@ -116,12 +209,18 @@ export const useGPS51Data = (): UseGPS51DataReturn => {
       // Then fetch all positions (reset lastQueryPositionTime for full refresh)
       const positionsResult = await gps51CoordinatorClient.getRealtimePositions([], 0);
 
+      // Convert to compatible format
+      const { vehicles, vehiclePositions } = convertToVehicleData(devices, positionsResult.positions);
+
       setState(prev => ({
         ...prev,
         devices,
         positions: positionsResult.positions,
+        vehicles,
+        vehiclePositions,
         lastUpdate: new Date(),
-        isLoading: false
+        isLoading: false,
+        loading: false
       }));
 
       setLastQueryPositionTime(positionsResult.lastQueryTime);
@@ -136,22 +235,24 @@ export const useGPS51Data = (): UseGPS51DataReturn => {
       setState(prev => ({
         ...prev,
         error: errorMessage,
-        isLoading: false
+        isLoading: false,
+        loading: false
       }));
       console.error('GPS51Data: Refresh failed:', error);
     }
-  }, []);
+  }, [convertToVehicleData]);
 
   const authenticateIfNeeded = useCallback(async (): Promise<boolean> => {
     try {
-      setState(prev => ({ ...prev, isLoading: true, error: null }));
+      setState(prev => ({ ...prev, isLoading: true, loading: true, error: null }));
 
       const status = await gps51CoordinatorClient.getCoordinatorStatus();
       
       setState(prev => ({
         ...prev,
         isAuthenticated: !status.circuitBreakerOpen,
-        isLoading: false
+        isLoading: false,
+        loading: false
       }));
 
       return !status.circuitBreakerOpen;
@@ -160,7 +261,8 @@ export const useGPS51Data = (): UseGPS51DataReturn => {
         ...prev,
         isAuthenticated: false,
         error: 'Authentication check failed',
-        isLoading: false
+        isLoading: false,
+        loading: false
       }));
       return false;
     }
@@ -186,7 +288,14 @@ export const useGPS51Data = (): UseGPS51DataReturn => {
       startPolling,
       stopPolling,
       refreshData,
-      authenticateIfNeeded
-    }
+      authenticateIfNeeded,
+      refresh: refreshData
+    },
+    // Direct access for backward compatibility
+    vehicles: state.vehicles,
+    vehiclePositions: state.vehiclePositions,
+    loading: state.loading,
+    error: state.error,
+    refresh: refreshData
   };
 };

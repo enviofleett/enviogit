@@ -5,11 +5,7 @@ import { MapPin, Navigation, Fuel, Thermometer, Wifi, WifiOff } from 'lucide-rea
 import { useGPS51Data } from '@/hooks/useGPS51Data';
 
 const RealTimeMap: React.FC = () => {
-  const { state, actions } = useGPS51Data();
-  const vehicles = state.devices;
-  const loading = state.isLoading;
-  const error = state.error;
-  const refresh = actions.refreshData;
+  const { vehicles, loading, error, refresh } = useGPS51Data();
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
 
   const vehiclesWithGPS = vehicles.filter(v => v.latest_position);
