@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withSecurity, PRODUCTION_SECURITY_CONFIG } from "../_shared/security.ts";
+import { md5 } from "https://esm.sh/js-md5@0.8.3";
 
 interface MobileAuthRequest {
   email: string;
@@ -29,11 +30,7 @@ const secureHandler = async (req: Request): Promise<Response> => {
     );
 
     // Hash password for GPS51 (MD5)
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password);
-    const hashBuffer = await crypto.subtle.digest('MD5', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashedPassword = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    const hashedPassword = md5(password);
 
     console.log('Mobile Auth: Attempting GPS51 login:', {
       email,
