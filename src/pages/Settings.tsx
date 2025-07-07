@@ -18,6 +18,7 @@ import { AIChatbotSettings } from '@/components/settings/AIChatbotSettings';
 import { GPS51EmergencyControls } from '@/components/settings/GPS51EmergencyControls';
 import { GPS51OptimizationStatus } from '@/components/settings/GPS51OptimizationStatus';
 import { GPS51ProductionValidator } from '@/components/settings/GPS51ProductionValidator/GPS51ProductionValidator';
+import { EmergencyGPS51Panel } from '@/components/settings/EmergencyGPS51Panel';
 
 const Settings = () => {
   return (
@@ -110,6 +111,7 @@ const Settings = () => {
             <GPS51OptimizationStatus />
             <GPS51ProductionValidator />
             <GPS51EmergencyControls />
+            <EmergencyGPS51Panel />
           </div>
         </TabsContent>
         

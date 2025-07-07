@@ -1,15 +1,18 @@
 import React from 'react';
-import { EmergencyGPS51Dashboard } from '@/components/dashboard/EmergencyGPS51Dashboard';
+import Dashboard from './Dashboard';
+import { UnauthenticatedDashboard } from '@/components/dashboard/UnauthenticatedDashboard';
+import { useGPS51SessionStatus } from '@/hooks/useGPS51SessionStatus';
 
 const Index = () => {
-  // PHASE 3 EMERGENCY: Replace all GPS51 services with emergency version
-  console.log('🚨 Index page using Emergency GPS51 Dashboard to prevent API spikes');
+  const { status } = useGPS51SessionStatus();
   
-  return (
-    <div className="min-h-screen bg-background">
-      <EmergencyGPS51Dashboard apiUrl="https://api.gps51.com/openapi" />
-    </div>
-  );
+  // Show unauthenticated dashboard if not authenticated
+  if (!status.isAuthenticated) {
+    return <UnauthenticatedDashboard />;
+  }
+  
+  // Show main dashboard if authenticated
+  return <Dashboard />;
 };
 
 export default Index;
