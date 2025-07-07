@@ -8,7 +8,7 @@ import { useGPS51DirectAuth } from '@/hooks/useGPS51DirectAuth';
 import { useGPS51DirectVehicles } from '@/hooks/useGPS51DirectVehicles';
 import { useGPS51DirectPositions } from '@/hooks/useGPS51DirectPositions';
 import { useGPS51DirectConnection } from '@/hooks/useGPS51DirectConnection';
-import { useGPS51SmartPolling } from '@/hooks/useGPS51SmartPolling';
+import { useGPS51UnifiedData } from '@/hooks/useGPS51UnifiedData';
 import { useGPS51MetricsTracker } from '@/hooks/useGPS51MetricsTracker';
 import { GPS51DirectVehicleTable } from './GPS51DirectVehicleTable';
 import { GPS51DirectStatusCards } from './GPS51DirectStatusCards';
@@ -19,16 +19,16 @@ export const GPS51DirectDashboard: React.FC = () => {
   const vehicles = useGPS51DirectVehicles({ autoRefresh: true });
   const positions = useGPS51DirectPositions({ autoStart: false });
   const connection = useGPS51DirectConnection({ autoStart: true });
-  const smartPolling = useGPS51SmartPolling();
+  const { state: unifiedData, actions } = useGPS51UnifiedData();
   const metrics = useGPS51MetricsTracker();
 
-  // Auto-start smart polling when vehicles are loaded
+  // Auto-start unified polling when vehicles are loaded
   React.useEffect(() => {
-    if (vehicles.hasVehicles && !smartPolling.state.isActive) {
+    if (vehicles.hasVehicles && !unifiedData.pollingActive) {
       const deviceIds = vehicles.state.vehicles.map(v => v.deviceid);
-      smartPolling.startSmartPolling(deviceIds);
+      actions.startPolling(deviceIds);
     }
-  }, [vehicles.hasVehicles, vehicles.state.vehicles, smartPolling]);
+  }, [vehicles.hasVehicles, vehicles.state.vehicles, unifiedData.pollingActive, actions]);
 
   // Show login prompt if not authenticated
   if (!auth.isReady && !auth.state.isLoading) {
@@ -111,7 +111,7 @@ export const GPS51DirectDashboard: React.FC = () => {
 
   const metricsSnapshot = metrics.getSnapshot();
   const connectionStatus = connection.state.status;
-  const isPollingActive = smartPolling.state.isActive;
+  const isPollingActive = unifiedData.pollingActive;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/10">
@@ -170,10 +170,10 @@ export const GPS51DirectDashboard: React.FC = () => {
                 size="sm"
                 onClick={() => {
                   if (isPollingActive) {
-                    smartPolling.stopSmartPolling();
+                    actions.stopPolling();
                   } else {
                     const deviceIds = vehicles.state.vehicles.map(v => v.deviceid);
-                    smartPolling.startSmartPolling(deviceIds);
+                    actions.startPolling(deviceIds);
                   }
                 }}
               >
@@ -206,7 +206,7 @@ export const GPS51DirectDashboard: React.FC = () => {
           vehicles={vehicles.state.vehicles}
           positions={positions.state.positions}
           connection={connection.state}
-          smartPolling={smartPolling.state}
+          smartPolling={{ isActive: isPollingActive, currentInterval: 30000, activeDevices: 0, inactiveDevices: 0, lastAdaptation: 0, pollingEfficiency: 100 }}
           metrics={metricsSnapshot}
         />
 

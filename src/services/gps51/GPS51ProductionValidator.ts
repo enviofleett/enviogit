@@ -1,5 +1,5 @@
 import { gps51IntelligentConnectionManager } from './GPS51IntelligentConnectionManager';
-import { gps51EnhancedSyncService } from './GPS51EnhancedSyncService';
+import { gps51CoordinatorClient } from './GPS51CoordinatorClient';
 import { gps51DatabaseIntegration } from './GPS51DatabaseIntegration';
 import { gps51LiveDataManager } from './GPS51LiveDataManager';
 
@@ -157,22 +157,22 @@ export class GPS51ProductionValidator {
     const checks: ProductionReadinessCheck[] = [];
 
     try {
-      const syncServiceStatus = gps51EnhancedSyncService.getEnhancedServiceStatus();
+      // Use coordinator status instead of removed enhanced sync service
+      const coordinatorStatus = await gps51CoordinatorClient.getCoordinatorStatus();
       
       checks.push({
-        name: 'Data Sync Service',
-        status: syncServiceStatus.sync.successRate > 80 ? 'pass' : 
-               syncServiceStatus.sync.successRate > 50 ? 'warning' : 'fail',
-        message: `Sync success rate: ${syncServiceStatus.sync.successRate.toFixed(1)}%`,
-        details: syncServiceStatus.sync,
-        severity: syncServiceStatus.sync.successRate < 50 ? 'high' : 'medium'
+        name: 'Coordinator Status',
+        status: !coordinatorStatus.circuitBreakerOpen ? 'pass' : 'fail',
+        message: `Circuit breaker: ${coordinatorStatus.circuitBreakerOpen ? 'Open' : 'Closed'}`,
+        details: coordinatorStatus,
+        severity: coordinatorStatus.circuitBreakerOpen ? 'high' : 'low'
       });
 
       checks.push({
-        name: 'Performance Metrics',
-        status: syncServiceStatus.sync.averageResponseTime < 5000 ? 'pass' : 'warning',
-        message: `Average response time: ${syncServiceStatus.sync.averageResponseTime}ms`,
-        details: syncServiceStatus.performance,
+        name: 'Request Queue Health',
+        status: coordinatorStatus.queueSize < 100 ? 'pass' : 'warning',
+        message: `Queue size: ${coordinatorStatus.queueSize} requests`,
+        details: coordinatorStatus,
         severity: 'medium'
       });
 
@@ -301,22 +301,23 @@ export class GPS51ProductionValidator {
     const checks: ProductionReadinessCheck[] = [];
 
     try {
-      const syncServiceStatus = gps51EnhancedSyncService.getEnhancedServiceStatus();
+      // Use coordinator status for performance validation
+      const coordinatorStatus = await gps51CoordinatorClient.getCoordinatorStatus();
       
-      // Check adaptive polling performance
+      // Check coordinator performance
       checks.push({
-        name: 'Adaptive Polling',
-        status: syncServiceStatus.polling.isActive ? 'pass' : 'warning',
-        message: `Polling active: ${syncServiceStatus.polling.isActive}, Interval: ${syncServiceStatus.polling.currentInterval}ms`,
-        details: syncServiceStatus.polling,
+        name: 'Request Processing',
+        status: coordinatorStatus.queueSize === 0 ? 'pass' : 'warning',
+        message: `Queue size: ${coordinatorStatus.queueSize}, Cache hit rate: ${(coordinatorStatus.cacheHitRate * 100).toFixed(1)}%`,
+        details: coordinatorStatus,
         severity: 'low'
       });
 
       // Check circuit breaker status
       checks.push({
         name: 'Circuit Breaker Health',
-        status: syncServiceStatus.polling.circuitState === 'closed' ? 'pass' : 'warning',
-        message: `Circuit breaker state: ${syncServiceStatus.polling.circuitState}`,
+        status: !coordinatorStatus.circuitBreakerOpen ? 'pass' : 'warning',
+        message: `Circuit breaker: ${coordinatorStatus.circuitBreakerOpen ? 'Open' : 'Closed'}`,
         severity: 'medium'
       });
 

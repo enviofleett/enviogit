@@ -4,7 +4,14 @@ import { Badge } from '@/components/ui/badge';
 import { Activity, MapPin, Car, Users, Wifi, Zap, TrendingUp, AlertTriangle } from 'lucide-react';
 import type { GPS51Device, GPS51Position } from '@/services/gps51/direct';
 import type { UseGPS51DirectConnectionState } from '@/hooks/useGPS51DirectConnection';
-import type { SmartPollingState } from '@/hooks/useGPS51SmartPolling';
+export interface SmartPollingState {
+  isActive: boolean;
+  currentInterval: number;
+  activeDevices: number;
+  inactiveDevices: number;
+  lastAdaptation: number;
+  pollingEfficiency: number;
+}
 import type { MetricsSnapshot } from '@/hooks/useGPS51MetricsTracker';
 
 interface GPS51DirectStatusCardsProps {

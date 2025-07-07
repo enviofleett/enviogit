@@ -164,5 +164,4 @@ export class GPS51LiveDataService {
 // Export singleton instance
 export const gps51LiveDataService = GPS51LiveDataService.getInstance();
 
-// Re-export enhanced service as primary export
-export { gps51EnhancedSyncService as gps51PrimaryService } from './GPS51EnhancedSyncService';
+// Note: Enhanced sync service removed in favor of unified coordinator approach
