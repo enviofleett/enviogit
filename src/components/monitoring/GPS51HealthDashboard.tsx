@@ -88,7 +88,8 @@ export const GPS51HealthDashboard = () => {
         const failed = recentCalls.filter(call => call.response_status >= 400);
         const errors8902 = recentCalls.filter(call => 
           call.error_message?.includes('8902') || 
-          call.response_body?.status === 8902
+          (call.response_body && typeof call.response_body === 'object' && 
+           'status' in call.response_body && call.response_body.status === 8902)
         );
 
         const responseTimes = recentCalls
@@ -154,12 +155,12 @@ export const GPS51HealthDashboard = () => {
     try {
       const { error } = await supabase.from('system_settings').upsert({
         key: 'gps51_emergency_stop',
-        value: JSON.stringify({
+        value: {
           active: true,
           reason: 'manual_dashboard_trigger',
           activatedAt: new Date().toISOString(),
           cooldownUntil: new Date(Date.now() + 30 * 60 * 1000).toISOString()
-        })
+        }
       });
 
       if (error) throw error;

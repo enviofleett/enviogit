@@ -48,7 +48,7 @@ export const GPS51EmergencyControls = () => {
         .single();
 
       if (data?.value) {
-        const status = JSON.parse(data.value);
+        const status = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
         setEmergencyStatus(status);
       }
     } catch (error) {
@@ -70,10 +70,14 @@ export const GPS51EmergencyControls = () => {
         const stats = {
           queueSize: 0, // Would need real-time queue size from coordinator
           lastRequest: recentActivity[0]?.timestamp || null,
-          circuitBreakerOpen: recentActivity.some(a => 
-            a.request_payload?.type === '8902_emergency_activated' && 
-            new Date(a.request_payload?.cooldownUntil || 0) > new Date()
-          ),
+          circuitBreakerOpen: recentActivity.some(a => {
+            if (a.request_payload && typeof a.request_payload === 'object' && 'type' in a.request_payload) {
+              return a.request_payload.type === '8902_emergency_activated' && 
+                     'cooldownUntil' in a.request_payload &&
+                     new Date(a.request_payload.cooldownUntil as string || 0) > new Date();
+            }
+            return false;
+          }),
           cacheHitRate: 0 // Would calculate from cache hits vs misses
         };
         
@@ -96,7 +100,7 @@ export const GPS51EmergencyControls = () => {
 
       const { error } = await supabase.from('system_settings').upsert({
         key: 'gps51_emergency_stop',
-        value: JSON.stringify(newStatus)
+        value: newStatus as any
       });
 
       if (error) throw error;
@@ -127,7 +131,7 @@ export const GPS51EmergencyControls = () => {
       // Reset circuit breaker by clearing emergency stop
       const { error } = await supabase.from('system_settings').upsert({
         key: 'gps51_emergency_stop',
-        value: JSON.stringify({ active: false })
+        value: { active: false } as any
       });
 
       if (error) throw error;
