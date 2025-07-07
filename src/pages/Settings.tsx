@@ -11,8 +11,9 @@ import { ProductionDashboard } from '@/components/monitoring/ProductionDashboard
 import { ProductionReadinessDashboard } from '@/components/monitoring/ProductionReadinessDashboard';
 import { MarketplaceAdminPanel } from '@/components/marketplace/MarketplaceAdminPanel';
 import { TechnicalPartnerAdminPanel } from '@/components/settings/TechnicalPartnerAdminPanel';
+import { GPS51HealthDashboard } from '@/components/monitoring/GPS51HealthDashboard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings as SettingsIcon, Mail, Smartphone, Package, Activity, Shield, Key, Store, Lock, Users, Brain } from 'lucide-react';
+import { Settings as SettingsIcon, Mail, Smartphone, Package, Activity, Shield, Key, Store, Lock, Users, Brain, AlertTriangle } from 'lucide-react';
 import { AIChatbotSettings } from '@/components/settings/AIChatbotSettings';
 
 const Settings = () => {
@@ -23,8 +24,12 @@ const Settings = () => {
         <p className="text-muted-foreground">Configure your fleet management system</p>
       </div>
       
-      <Tabs defaultValue="monitoring" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-11">
+      <Tabs defaultValue="gps51-health" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-12">
+          <TabsTrigger value="gps51-health" className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            GPS51 Health
+          </TabsTrigger>
           <TabsTrigger value="monitoring" className="flex items-center gap-2">
             <Activity className="h-4 w-4" />
             Monitor
@@ -70,6 +75,10 @@ const Settings = () => {
             AI Chatbot
           </TabsTrigger>
         </TabsList>
+        
+        <TabsContent value="gps51-health">
+          <GPS51HealthDashboard />
+        </TabsContent>
         
         <TabsContent value="monitoring">
           <ProductionDashboard />
