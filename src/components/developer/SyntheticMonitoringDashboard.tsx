@@ -18,7 +18,8 @@ import {
   ShoppingCart,
   Smartphone,
   Shield,
-  TestTube
+  TestTube,
+  Activity
 } from 'lucide-react';
 
 interface TestRun {
@@ -302,59 +303,6 @@ export const SyntheticMonitoringDashboard = () => {
           </div>
         </CardContent>
       </Card>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Activity className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm font-medium">System Status</span>
-                </div>
-                <Badge className={overallHealth.color}>
-                  {overallHealth.status}
-                </Badge>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                  <span className="text-sm font-medium">GPS51 Optimization</span>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-lg font-bold">Active</p>
-                  <p className="text-xs text-muted-foreground">Enhanced monitoring</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <TrendingUp className="h-4 w-4 text-purple-600" />
-                  <span className="text-sm font-medium">Performance</span>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-lg font-bold">Optimized</p>
-                  <p className="text-xs text-muted-foreground">Rate limiting active</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Shield className="h-4 w-4 text-orange-600" />
-                  <span className="text-sm font-medium">Protection</span>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-lg font-bold">Enabled</p>
-                  <p className="text-xs text-muted-foreground">8902 prevention</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
 
       {/* Recent Test Runs */}
       <Card>
