@@ -16,7 +16,7 @@ import {
   Users,
   Car
 } from 'lucide-react';
-import { gps51CoordinatorClient } from '@/services/gps51/GPS51CoordinatorClient';
+import { gps51EmergencyManager } from '@/services/gps51/GPS51EmergencyManager';
 import { useGPS51Data } from '@/hooks/useGPS51Data';
 
 interface RealTimeMonitorProps {
@@ -38,14 +38,20 @@ export const GPS51RealTimeMonitor: React.FC<RealTimeMonitorProps> = ({
   
   const { vehicles, loading, error } = useGPS51Data();
 
-  // Get coordinator status only once on mount (no polling to prevent API spikes)
+  // Get emergency status only once on mount (no polling to prevent API spikes)
   useEffect(() => {
     const getInitialStatus = async () => {
       try {
-        const status = await gps51CoordinatorClient.getCoordinatorStatus();
-        setCoordinatorStatus(status);
+        // Use emergency manager diagnostics
+        const diagnostics = gps51EmergencyManager.getDiagnostics();
+        setCoordinatorStatus({
+          queueSize: diagnostics.client.queueSize,
+          lastRequest: null,
+          circuitBreakerOpen: gps51EmergencyManager.isEmergencyStopActive(),
+          cacheHitRate: 0
+        });
       } catch (error) {
-        console.error('Failed to get coordinator status:', error);
+        console.error('Failed to get emergency status:', error);
       }
     };
     

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { gps51CoordinatorClient } from '@/services/gps51/GPS51CoordinatorClient';
+import { gps51EmergencyManager } from '@/services/gps51/GPS51EmergencyManager';
 import { GPS51Device, GPS51Position } from '@/services/gps51/types';
 
 // Compatible vehicle interface for existing components
@@ -131,15 +131,27 @@ export const useGPS51Data = (): UseGPS51DataReturn => {
     return { vehicles, vehiclePositions };
   }, []);
 
-  // Simple API call: action=lastposition with lastquerypositiontime
+  // Emergency optimized position fetching with aggressive caching
   const fetchPositions = useCallback(async () => {
     try {
       setState(prev => ({ ...prev, isLoading: true, loading: true, error: null }));
 
-      // Direct lastposition API call as per documentation
-      const result = await gps51CoordinatorClient.getRealtimePositions([], lastQueryPositionTime);
+      // Check if emergency stop is active
+      if (gps51EmergencyManager.isEmergencyStopActive()) {
+        setState(prev => ({
+          ...prev,
+          error: 'GPS51 Emergency Stop is active',
+          isLoading: false,
+          loading: false
+        }));
+        return;
+      }
 
-      // Convert to compatible format
+      // Use Emergency Manager with ALL device IDs in one batch request
+      const deviceIds = state.devices.map(d => d.deviceid);
+      const result = await gps51EmergencyManager.getRealtimePositions(deviceIds, lastQueryPositionTime);
+
+      // Convert emergency response to compatible format
       const { vehicles, vehiclePositions } = convertToVehicleData(state.devices, result.positions);
 
       setState(prev => ({
@@ -152,12 +164,13 @@ export const useGPS51Data = (): UseGPS51DataReturn => {
         loading: false
       }));
 
-      // Update lastQueryPositionTime from server response for next incremental call
+      // Update lastQueryPositionTime from server response
       setLastQueryPositionTime(result.lastQueryTime);
 
-      console.log('GPS51Data: Fetched positions', {
+      console.log('GPS51Data: Emergency fetch completed', {
         count: result.positions.length,
-        lastQueryTime: result.lastQueryTime
+        lastQueryTime: result.lastQueryTime,
+        cacheEnabled: true
       });
 
     } catch (error) {
@@ -203,12 +216,29 @@ export const useGPS51Data = (): UseGPS51DataReturn => {
     try {
       setState(prev => ({ ...prev, isLoading: true, loading: true, error: null }));
 
-      // Fetch devices first
-      const devices = await gps51CoordinatorClient.getDeviceList();
-      
-      // Then fetch all positions (reset lastQueryPositionTime for full refresh)
-      const positionsResult = await gps51CoordinatorClient.getRealtimePositions([], 0);
+      // Check if authenticated with Emergency Manager
+      if (!gps51EmergencyManager.isAuthenticated()) {
+        throw new Error('Not authenticated with GPS51. Please login first.');
+      }
 
+      // Check if emergency stop is active
+      if (gps51EmergencyManager.isEmergencyStopActive()) {
+        setState(prev => ({
+          ...prev,
+          error: 'GPS51 Emergency Stop is active',
+          isLoading: false,
+          loading: false
+        }));
+        return;
+      }
+      
+      // Emergency device list with aggressive caching (10 minutes)
+      const devices = await gps51EmergencyManager.getDeviceList(false);
+      
+      // Emergency position fetch with all device IDs in one batch
+      const deviceIds = devices.map(d => d.deviceid);
+      const positionsResult = await gps51EmergencyManager.getRealtimePositions(deviceIds, 0);
+      
       // Convert to compatible format
       const { vehicles, vehiclePositions } = convertToVehicleData(devices, positionsResult.positions);
 
@@ -225,9 +255,11 @@ export const useGPS51Data = (): UseGPS51DataReturn => {
 
       setLastQueryPositionTime(positionsResult.lastQueryTime);
 
-      console.log('GPS51Data: Manual refresh completed', {
+      console.log('GPS51Data: Emergency refresh completed', {
         devices: devices.length,
-        positions: positionsResult.positions.length
+        positions: positionsResult.positions.length,
+        emergencyMode: true,
+        cached: true
       });
 
     } catch (error) {
@@ -246,15 +278,21 @@ export const useGPS51Data = (): UseGPS51DataReturn => {
     try {
       setState(prev => ({ ...prev, isLoading: true, loading: true, error: null }));
 
-      // Skip coordinator status check to prevent API spikes - assume authenticated
+      // Check Emergency Manager authentication status
+      const isAuthenticated = gps51EmergencyManager.isAuthenticated();
+      
       setState(prev => ({
         ...prev,
-        isAuthenticated: true,
+        isAuthenticated,
         isLoading: false,
         loading: false
       }));
 
-      return true;
+      if (!isAuthenticated) {
+        console.warn('GPS51Data: Not authenticated with Emergency Manager');
+      }
+
+      return isAuthenticated;
     } catch (error) {
       setState(prev => ({
         ...prev,

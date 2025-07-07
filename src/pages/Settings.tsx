@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Settings as SettingsIcon, Mail, Smartphone, Package, Activity, Shield, Key, Store, Lock, Users, Brain, AlertTriangle } from 'lucide-react';
 import { AIChatbotSettings } from '@/components/settings/AIChatbotSettings';
 import { GPS51EmergencyControls } from '@/components/settings/GPS51EmergencyControls';
+import { GPS51OptimizationStatus } from '@/components/settings/GPS51OptimizationStatus';
 
 const Settings = () => {
   return (
@@ -104,7 +105,10 @@ const Settings = () => {
         </div>
         
         <TabsContent value="emergency">
-          <GPS51EmergencyControls />
+          <div className="space-y-6">
+            <GPS51OptimizationStatus />
+            <GPS51EmergencyControls />
+          </div>
         </TabsContent>
         
         <TabsContent value="gps51-health">
