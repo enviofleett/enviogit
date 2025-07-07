@@ -150,6 +150,227 @@ export type Database = {
         }
         Relationships: []
       }
+      chatbot_audit_logs: {
+        Row: {
+          action_details: Json | null
+          action_type: string
+          conversation_id: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          success: boolean | null
+          user_id: string
+        }
+        Insert: {
+          action_details?: Json | null
+          action_type: string
+          conversation_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          success?: boolean | null
+          user_id: string
+        }
+        Update: {
+          action_details?: Json | null
+          action_type?: string
+          conversation_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          success?: boolean | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chatbot_audit_logs_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "chatbot_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chatbot_configurations: {
+        Row: {
+          api_endpoint: string | null
+          conversation_history_retention_days: number | null
+          created_at: string
+          id: string
+          llm_provider: string
+          model_name: string | null
+          persona_description: string | null
+          updated_at: string
+          welcome_message: string | null
+        }
+        Insert: {
+          api_endpoint?: string | null
+          conversation_history_retention_days?: number | null
+          created_at?: string
+          id?: string
+          llm_provider?: string
+          model_name?: string | null
+          persona_description?: string | null
+          updated_at?: string
+          welcome_message?: string | null
+        }
+        Update: {
+          api_endpoint?: string | null
+          conversation_history_retention_days?: number | null
+          created_at?: string
+          id?: string
+          llm_provider?: string
+          model_name?: string | null
+          persona_description?: string | null
+          updated_at?: string
+          welcome_message?: string | null
+        }
+        Relationships: []
+      }
+      chatbot_conversations: {
+        Row: {
+          conversation_history: Json
+          created_at: string
+          id: string
+          session_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          conversation_history?: Json
+          created_at?: string
+          id?: string
+          session_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          conversation_history?: Json
+          created_at?: string
+          id?: string
+          session_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      chatbot_package_features: {
+        Row: {
+          created_at: string
+          feature_name: string
+          id: string
+          is_enabled: boolean
+          package_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          feature_name: string
+          id?: string
+          is_enabled?: boolean
+          package_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          feature_name?: string
+          id?: string
+          is_enabled?: boolean
+          package_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chatbot_package_features_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_packages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chatbot_usage_limits: {
+        Row: {
+          created_at: string
+          id: string
+          max_prompts_per_day: number | null
+          max_prompts_per_month: number | null
+          max_prompts_per_week: number | null
+          package_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          max_prompts_per_day?: number | null
+          max_prompts_per_month?: number | null
+          max_prompts_per_week?: number | null
+          package_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          max_prompts_per_day?: number | null
+          max_prompts_per_month?: number | null
+          max_prompts_per_week?: number | null
+          package_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chatbot_usage_limits_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: true
+            referencedRelation: "subscription_packages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chatbot_usage_tracking: {
+        Row: {
+          created_at: string
+          id: string
+          last_reset_date: string | null
+          package_id: string | null
+          prompts_this_month: number | null
+          prompts_this_week: number | null
+          prompts_today: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_reset_date?: string | null
+          package_id?: string | null
+          prompts_this_month?: number | null
+          prompts_this_week?: number | null
+          prompts_today?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_reset_date?: string | null
+          package_id?: string | null
+          prompts_this_month?: number | null
+          prompts_this_week?: number | null
+          prompts_today?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chatbot_usage_tracking_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_packages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       command_audit: {
         Row: {
           command_data: Json

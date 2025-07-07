@@ -12,7 +12,8 @@ import { ProductionReadinessDashboard } from '@/components/monitoring/Production
 import { MarketplaceAdminPanel } from '@/components/marketplace/MarketplaceAdminPanel';
 import { TechnicalPartnerAdminPanel } from '@/components/settings/TechnicalPartnerAdminPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings as SettingsIcon, Mail, Smartphone, Package, Activity, Shield, Key, Store, Lock, Users } from 'lucide-react';
+import { Settings as SettingsIcon, Mail, Smartphone, Package, Activity, Shield, Key, Store, Lock, Users, Brain } from 'lucide-react';
+import { AIChatbotSettings } from '@/components/settings/AIChatbotSettings';
 
 const Settings = () => {
   return (
@@ -23,7 +24,7 @@ const Settings = () => {
       </div>
       
       <Tabs defaultValue="monitoring" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-10">
+        <TabsList className="grid w-full grid-cols-11">
           <TabsTrigger value="monitoring" className="flex items-center gap-2">
             <Activity className="h-4 w-4" />
             Monitor
@@ -63,6 +64,10 @@ const Settings = () => {
           <TabsTrigger value="partners" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             Partners
+          </TabsTrigger>
+          <TabsTrigger value="chatbot" className="flex items-center gap-2">
+            <Brain className="h-4 w-4" />
+            AI Chatbot
           </TabsTrigger>
         </TabsList>
         
@@ -107,6 +112,10 @@ const Settings = () => {
         
         <TabsContent value="partners">
           <TechnicalPartnerAdminPanel />
+        </TabsContent>
+        
+        <TabsContent value="chatbot">
+          <AIChatbotSettings />
         </TabsContent>
       </Tabs>
     </div>
