@@ -1,6 +1,6 @@
 
 import { GPS51Device, GPS51Position } from './types';
-import { gps51MasterPollingService } from './GPS51MasterPollingService';
+import { gps51CoordinatorClient } from './GPS51CoordinatorClient';
 
 export interface LiveDataServiceOptions {
   pollingInterval?: number;
@@ -28,7 +28,7 @@ export class GPS51LiveDataService {
       lastQueryPositionTime: 0,
       lastUpdate: new Date()
     };
-    console.log('GPS51LiveDataService: Redirecting to unified master polling service');
+    console.log('GPS51LiveDataService: Using coordinator client directly');
   }
 
   static getInstance(options?: LiveDataServiceOptions): GPS51LiveDataService {
@@ -39,14 +39,21 @@ export class GPS51LiveDataService {
   }
 
   /**
-   * Legacy method: Now uses unified master polling service
+   * Direct API call using coordinator client
    */
   async fetchLiveData(): Promise<LiveDataState> {
     try {
-      console.log('GPS51LiveDataService: Delegating to unified master polling service');
+      console.log('GPS51LiveDataService: Direct coordinator call');
       
-      // Force a poll through the master service
-      await gps51MasterPollingService.forcePoll(this.sessionId);
+      // Direct call to coordinator for positions
+      const result = await gps51CoordinatorClient.getRealtimePositions([], this.currentState.lastQueryPositionTime);
+      
+      this.currentState = {
+        devices: this.currentState.devices,
+        positions: result.positions,
+        lastQueryPositionTime: result.lastQueryTime,
+        lastUpdate: new Date()
+      };
       
       return this.currentState;
     } catch (error) {
@@ -56,43 +63,24 @@ export class GPS51LiveDataService {
   }
 
   /**
-   * Start continuous polling - now delegates to master service
+   * Simple polling with fixed interval
    */
   startPolling(callback?: (data: LiveDataState) => void): void {
-    const dataCallback = (data: { devices: GPS51Device[]; positions: GPS51Position[]; lastQueryTime: number }) => {
-      this.currentState = {
-        devices: data.devices,
-        positions: data.positions,
-        lastQueryPositionTime: data.lastQueryTime,
-        lastUpdate: new Date()
-      };
-      
-      if (callback) {
-        callback(this.currentState);
-      }
-    };
-
-    gps51MasterPollingService.registerSession(
-      this.sessionId,
-      [], // Will be updated when devices are available
-      30000, // 30 second default
-      dataCallback,
-      'normal'
-    );
+    console.log('GPS51LiveDataService: Simple polling not implemented - use useGPS51UnifiedData hook instead');
   }
 
   /**
    * Stop continuous polling
    */
   stopPolling(): void {
-    gps51MasterPollingService.unregisterSession(this.sessionId);
+    console.log('GPS51LiveDataService: Simple polling - use useGPS51UnifiedData hook instead');
   }
 
   /**
    * Update polling interval
    */
   updatePollingInterval(interval: number): void {
-    gps51MasterPollingService.updateSession(this.sessionId, { interval });
+    console.log('GPS51LiveDataService: Use useGPS51UnifiedData hook for polling control');
   }
 
   /**
@@ -127,17 +115,16 @@ export class GPS51LiveDataService {
   }
 
   /**
-   * Get service status information - now from master service
+   * Get service status information
    */
   getServiceStatus(): {
     isPolling: boolean;
     retryCount: number;
     stateStats: {totalDevices: number, totalPositions: number, lastUpdate: Date};
   } {
-    const masterStatus = gps51MasterPollingService.getStatus();
     return {
-      isPolling: masterStatus.isPolling,
-      retryCount: 0, // Master service handles retries
+      isPolling: false, // Use useGPS51UnifiedData hook for polling
+      retryCount: 0,
       stateStats: {
         totalDevices: this.currentState.devices.length,
         totalPositions: this.currentState.positions.length,

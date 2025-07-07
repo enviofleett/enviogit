@@ -38,12 +38,12 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
   const [pollingTimer, setPollingTimer] = useState<NodeJS.Timeout | null>(null);
   const [lastQueryTime, setLastQueryTime] = useState<number>(0);
 
-  // Optimized polling with proper incremental queries
+  // Simple polling with lastquerypositiontime incremental updates
   const pollData = useCallback(async (deviceIds?: string[]) => {
     try {
       setState(prev => ({ ...prev, isLoading: true, error: null }));
 
-      // Use incremental polling with lastQueryTime for efficiency
+      // Direct lastposition API call with lastquerypositiontime
       const result = await gps51CoordinatorClient.getRealtimePositions(
         deviceIds || [],
         lastQueryTime
@@ -56,10 +56,10 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
         isLoading: false
       }));
 
-      // Update lastQueryTime for next incremental query
+      // Update lastQueryTime from server response for incremental polling
       setLastQueryTime(result.lastQueryTime);
 
-      console.log('GPS51UnifiedData: Incremental poll completed', {
+      console.log('GPS51Data: Poll completed', {
         positionsReceived: result.positions.length,
         lastQueryTime: result.lastQueryTime
       });
@@ -71,7 +71,7 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
         error: errorMessage,
         isLoading: false
       }));
-      console.error('GPS51UnifiedData: Polling failed:', error);
+      console.error('GPS51Data: Polling failed:', error);
     }
   }, [lastQueryTime]);
 
@@ -82,17 +82,17 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
 
     setState(prev => ({ ...prev, pollingActive: true }));
 
-    // Start with immediate poll (lastQueryTime=0 for initial data)
+    // Initial poll with lastQueryTime=0 per API documentation
     setLastQueryTime(0);
     pollData(deviceIds);
 
-    // Set up optimized polling interval (30-60 seconds as recommended)
+    // Fixed 60-second interval as per API documentation
     const timer = setInterval(() => {
       pollData(deviceIds);
-    }, 30000); // 30 seconds - single coordinated interval
+    }, 60000); // 60 seconds - simple fixed interval
 
     setPollingTimer(timer);
-    console.log('GPS51UnifiedData: Started optimized polling with 30s interval');
+    console.log('GPS51Data: Started polling with 60s fixed interval');
   }, [pollData, pollingTimer]);
 
   const stopPolling = useCallback(() => {
@@ -101,7 +101,7 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
       setPollingTimer(null);
     }
     setState(prev => ({ ...prev, pollingActive: false }));
-    console.log('GPS51UnifiedData: Stopped polling');
+    console.log('GPS51Data: Stopped polling');
   }, [pollingTimer]);
 
   const refreshData = useCallback(async () => {
@@ -124,7 +124,7 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
 
       setLastQueryTime(positionsResult.lastQueryTime);
 
-      console.log('GPS51UnifiedData: Manual refresh completed', {
+      console.log('GPS51Data: Manual refresh completed', {
         devices: devices.length,
         positions: positionsResult.positions.length
       });
@@ -136,7 +136,7 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
         error: errorMessage,
         isLoading: false
       }));
-      console.error('GPS51UnifiedData: Refresh failed:', error);
+      console.error('GPS51Data: Refresh failed:', error);
     }
   }, []);
 

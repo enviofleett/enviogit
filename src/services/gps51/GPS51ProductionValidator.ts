@@ -1,7 +1,7 @@
 import { gps51IntelligentConnectionManager } from './GPS51IntelligentConnectionManager';
 import { gps51CoordinatorClient } from './GPS51CoordinatorClient';
 import { gps51DatabaseIntegration } from './GPS51DatabaseIntegration';
-import { gps51LiveDataManager } from './GPS51LiveDataManager';
+import { gps51LiveDataService } from './GPS51LiveDataService';
 
 export interface ProductionReadinessCheck {
   name: string;
@@ -229,25 +229,25 @@ export class GPS51ProductionValidator {
     const checks: ProductionReadinessCheck[] = [];
 
     try {
-      const liveDataStatus = gps51LiveDataManager.getStatus();
+      const liveDataStatus = gps51LiveDataService.getServiceStatus();
       
       checks.push({
         name: 'Live Data System',
-        status: liveDataStatus.isActive ? 'pass' : 'fail',
-        message: liveDataStatus.isActive ? 'Live data system active' : 'Live data system inactive',
+        status: liveDataStatus.isPolling ? 'pass' : 'fail',
+        message: liveDataStatus.isPolling ? 'Live data system active' : 'Live data system inactive',
         details: liveDataStatus,
         severity: 'critical'
       });
 
       checks.push({
         name: 'Device Data Availability',
-        status: liveDataStatus.deviceCount > 0 ? 'pass' : 'warning',
-        message: `${liveDataStatus.deviceCount} devices available`,
+        status: liveDataStatus.stateStats.totalDevices > 0 ? 'pass' : 'warning',
+        message: `${liveDataStatus.stateStats.totalDevices} devices available`,
         severity: 'medium'
       });
 
-      const dataAge = liveDataStatus.lastUpdate ? 
-        Date.now() - liveDataStatus.lastUpdate.getTime() : Infinity;
+      const dataAge = liveDataStatus.stateStats.lastUpdate ? 
+        Date.now() - liveDataStatus.stateStats.lastUpdate.getTime() : Infinity;
       
       checks.push({
         name: 'Data Freshness',
@@ -272,14 +272,14 @@ export class GPS51ProductionValidator {
     const checks: ProductionReadinessCheck[] = [];
 
     try {
-      const diagnosticInfo = gps51LiveDataManager.getDiagnosticInfo();
+      const diagnosticInfo = gps51LiveDataService.getServiceStatus();
       
       checks.push({
         name: 'Error Handling System',
         status: 'pass',
         message: 'Error handling and logging systems operational',
         details: {
-          circuitBreakerEnabled: diagnosticInfo.masterPolling.isPolling,
+          circuitBreakerEnabled: diagnosticInfo.isPolling,
           connectionHealthMonitoring: 'operational'
         },
         severity: 'low'

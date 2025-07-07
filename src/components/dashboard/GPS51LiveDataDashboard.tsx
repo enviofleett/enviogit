@@ -2,13 +2,13 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { AlertTriangle } from 'lucide-react';
-import { useGPS51UnifiedData } from '@/hooks/useGPS51UnifiedData';
+import { useGPS51Data } from '@/hooks/useGPS51Data';
 import FleetMetricsCards from './gps51/FleetMetricsCards';
 import DataStatusCard from './gps51/DataStatusCard';
 import VehicleListCard from './gps51/VehicleListCard';
 
 const GPS51LiveDataDashboard: React.FC = () => {
-  const { state, actions } = useGPS51UnifiedData();
+  const { state, actions } = useGPS51Data();
   const { devices: vehicles, isLoading: loading, error } = state;
   
   // Mock enhanced metrics for compatibility with the card components

@@ -1,150 +1,192 @@
-
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { gps51CoordinatorClient } from '@/services/gps51/GPS51CoordinatorClient';
+import { GPS51Device, GPS51Position } from '@/services/gps51/types';
 
-// Define the VehiclePosition type
-export interface VehiclePosition {
-  vehicle_id: string;
-  latitude: number;
-  longitude: number;
-  speed: number;
-  timestamp: string;
-  status: string;
-  isMoving: boolean;
-  ignition_status?: boolean;
-  heading?: number;
-  fuel_level?: number;
-  engine_temperature?: number;
+export interface GPS51DataState {
+  devices: GPS51Device[];
+  positions: GPS51Position[];
+  isLoading: boolean;
+  error: string | null;
+  lastUpdate: Date | null;
+  isAuthenticated: boolean;
+  pollingActive: boolean;
 }
 
-// Define the VehicleData type - updated to include 'bike'
-export interface VehicleData {
-  id: string;
-  brand: string;
-  model: string;
-  license_plate: string;
-  status: string;
-  type: string;
-  created_at: string;
-  updated_at: string;
-  notes: string;
-  gps51_device_id?: string;
-  latest_position: VehiclePosition | null;
+export interface GPS51DataActions {
+  startPolling: () => void;
+  stopPolling: () => void;
+  refreshData: () => Promise<void>;
+  authenticateIfNeeded: () => Promise<boolean>;
 }
 
-export const useGPS51Data = () => {
-  const [vehicles, setVehicles] = useState<VehicleData[]>([]);
-  const [vehiclePositions, setVehiclePositions] = useState<VehiclePosition[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export interface UseGPS51DataReturn {
+  state: GPS51DataState;
+  actions: GPS51DataActions;
+}
 
-  const fetchVehicleData = useCallback(async () => {
+/**
+ * Simple GPS51 data hook following pure API documentation pattern
+ * - Single action=lastposition API call
+ * - Uses lastquerypositiontime for incremental updates
+ * - Fixed 60-second polling interval
+ * - No adaptive logic, no orchestration, no user activity tracking
+ */
+export const useGPS51Data = (): UseGPS51DataReturn => {
+  const [state, setState] = useState<GPS51DataState>({
+    devices: [],
+    positions: [],
+    isLoading: false,
+    error: null,
+    lastUpdate: null,
+    isAuthenticated: false,
+    pollingActive: false
+  });
+
+  const [pollingTimer, setPollingTimer] = useState<NodeJS.Timeout | null>(null);
+  const [lastQueryPositionTime, setLastQueryPositionTime] = useState<number>(0);
+
+  // Simple API call: action=lastposition with lastquerypositiontime
+  const fetchPositions = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
+      setState(prev => ({ ...prev, isLoading: true, error: null }));
 
-      console.log('Fetching vehicles with LEFT JOIN...');
+      // Direct lastposition API call as per documentation
+      const result = await gps51CoordinatorClient.getRealtimePositions([], lastQueryPositionTime);
 
-      // Fetch ALL vehicles with their latest positions using LEFT JOIN
-      const { data: vehiclesRaw, error: vehiclesError } = await supabase
-        .from('vehicles')
-        .select(`
-          *,
-          vehicle_positions!left(
-            vehicle_id, latitude, longitude, speed, timestamp, address, ignition_status, heading, fuel_level, engine_temperature
-          )
-        `)
-        .order('updated_at', { ascending: false });
+      setState(prev => ({
+        ...prev,
+        positions: result.positions,
+        lastUpdate: new Date(),
+        isLoading: false
+      }));
 
-      if (vehiclesError) {
-        console.error('Error fetching vehicles:', vehiclesError);
-        throw vehiclesError;
-      }
+      // Update lastQueryPositionTime from server response for next incremental call
+      setLastQueryPositionTime(result.lastQueryTime);
 
-      console.log('Raw vehicles data:', vehiclesRaw?.length || 0, 'vehicles found');
+      console.log('GPS51Data: Fetched positions', {
+        count: result.positions.length,
+        lastQueryTime: result.lastQueryTime
+      });
 
-      if (vehiclesRaw) {
-        const transformedVehicles: VehicleData[] = vehiclesRaw.map(vehicle => {
-          console.log(`Processing vehicle: ${vehicle.license_plate}, positions:`, vehicle.vehicle_positions);
-          
-          // Handle both array and single position data, get the most recent
-          let latestPositionRaw = null;
-          if (Array.isArray(vehicle.vehicle_positions) && vehicle.vehicle_positions.length > 0) {
-            // Sort by timestamp to get the latest
-            latestPositionRaw = vehicle.vehicle_positions.sort((a, b) => 
-              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-            )[0];
-          } else if (vehicle.vehicle_positions && !Array.isArray(vehicle.vehicle_positions)) {
-            latestPositionRaw = vehicle.vehicle_positions;
-          }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch positions';
+      setState(prev => ({
+        ...prev,
+        error: errorMessage,
+        isLoading: false
+      }));
+      console.error('GPS51Data: Fetch failed:', error);
+    }
+  }, [lastQueryPositionTime]);
 
-          let latestPosition: VehiclePosition | null = null;
-          if (latestPositionRaw) {
-            latestPosition = {
-              vehicle_id: vehicle.id,
-              latitude: Number(latestPositionRaw.latitude),
-              longitude: Number(latestPositionRaw.longitude),
-              speed: Number(latestPositionRaw.speed || 0),
-              timestamp: latestPositionRaw.timestamp,
-              status: latestPositionRaw.address || 'Unknown location',
-              isMoving: latestPositionRaw.ignition_status || false,
-              ignition_status: latestPositionRaw.ignition_status || false,
-              heading: latestPositionRaw.heading ? Number(latestPositionRaw.heading) : undefined,
-              fuel_level: latestPositionRaw.fuel_level ? Number(latestPositionRaw.fuel_level) : undefined,
-              engine_temperature: latestPositionRaw.engine_temperature ? Number(latestPositionRaw.engine_temperature) : undefined,
-            };
-          }
+  const startPolling = useCallback(() => {
+    if (pollingTimer) {
+      clearInterval(pollingTimer);
+    }
 
-          return {
-            id: vehicle.id,
-            brand: vehicle.brand || 'Unknown',
-            model: vehicle.model || 'Unknown',
-            license_plate: vehicle.license_plate,
-            status: vehicle.status,
-            type: vehicle.type,
-            created_at: vehicle.created_at,
-            updated_at: vehicle.updated_at,
-            notes: vehicle.notes || '',
-            gps51_device_id: vehicle.gps51_device_id,
-            latest_position: latestPosition,
-          };
-        });
+    setState(prev => ({ ...prev, pollingActive: true }));
 
-        console.log('Transformed vehicles:', transformedVehicles.length, 'total');
-        console.log('Vehicles with positions:', transformedVehicles.filter(v => v.latest_position).length);
+    // Initial call with lastQueryPositionTime=0 for first fetch
+    setLastQueryPositionTime(0);
+    fetchPositions();
 
-        setVehicles(transformedVehicles);
-        
-        // Extract all positions for the separate positions array
-        const allPositions: VehiclePosition[] = transformedVehicles
-          .filter(v => v.latest_position !== null)
-          .map(v => v.latest_position as VehiclePosition);
-        
-        setVehiclePositions(allPositions);
-        console.log('Vehicle positions extracted:', allPositions.length);
-      }
-    } catch (err) {
-      console.error('Error fetching vehicle data:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setLoading(false);
+    // Fixed 60-second interval as recommended in API documentation
+    const timer = setInterval(fetchPositions, 60000);
+    setPollingTimer(timer);
+    
+    console.log('GPS51Data: Started polling (60s interval)');
+  }, [fetchPositions, pollingTimer]);
+
+  const stopPolling = useCallback(() => {
+    if (pollingTimer) {
+      clearInterval(pollingTimer);
+      setPollingTimer(null);
+    }
+    setState(prev => ({ ...prev, pollingActive: false }));
+    console.log('GPS51Data: Stopped polling');
+  }, [pollingTimer]);
+
+  const refreshData = useCallback(async () => {
+    try {
+      setState(prev => ({ ...prev, isLoading: true, error: null }));
+
+      // Fetch devices first
+      const devices = await gps51CoordinatorClient.getDeviceList();
+      
+      // Then fetch all positions (reset lastQueryPositionTime for full refresh)
+      const positionsResult = await gps51CoordinatorClient.getRealtimePositions([], 0);
+
+      setState(prev => ({
+        ...prev,
+        devices,
+        positions: positionsResult.positions,
+        lastUpdate: new Date(),
+        isLoading: false
+      }));
+
+      setLastQueryPositionTime(positionsResult.lastQueryTime);
+
+      console.log('GPS51Data: Manual refresh completed', {
+        devices: devices.length,
+        positions: positionsResult.positions.length
+      });
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Refresh failed';
+      setState(prev => ({
+        ...prev,
+        error: errorMessage,
+        isLoading: false
+      }));
+      console.error('GPS51Data: Refresh failed:', error);
     }
   }, []);
 
-  useEffect(() => {
-    fetchVehicleData();
-  }, [fetchVehicleData]);
+  const authenticateIfNeeded = useCallback(async (): Promise<boolean> => {
+    try {
+      setState(prev => ({ ...prev, isLoading: true, error: null }));
 
-  const refresh = useCallback(() => {
-    console.log('Manually refreshing vehicle data...');
-    fetchVehicleData();
-  }, [fetchVehicleData]);
+      const status = await gps51CoordinatorClient.getCoordinatorStatus();
+      
+      setState(prev => ({
+        ...prev,
+        isAuthenticated: !status.circuitBreakerOpen,
+        isLoading: false
+      }));
+
+      return !status.circuitBreakerOpen;
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        isAuthenticated: false,
+        error: 'Authentication check failed',
+        isLoading: false
+      }));
+      return false;
+    }
+  }, []);
+
+  // Initialize authentication
+  useEffect(() => {
+    authenticateIfNeeded();
+  }, [authenticateIfNeeded]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingTimer) {
+        clearInterval(pollingTimer);
+      }
+    };
+  }, [pollingTimer]);
 
   return {
-    vehicles,
-    vehiclePositions,
-    loading,
-    error,
-    refresh
+    state,
+    actions: {
+      startPolling,
+      stopPolling,
+      refreshData,
+      authenticateIfNeeded
+    }
   };
 };

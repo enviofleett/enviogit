@@ -73,7 +73,7 @@ export class GPS51ProductionHealthMonitor {
       if (authStatus.isAuthenticated) {
         try {
           const liveDataManager = gps51StartupService.getLiveDataManager();
-          const quickSync = await liveDataManager.forceLiveDataSync();
+          const quickSync = await liveDataManager.fetchLiveData();
           liveDataTest = {
             success: true,
             deviceCount: quickSync.devices.length,

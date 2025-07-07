@@ -6,7 +6,9 @@ import { useGPS51Data } from '@/hooks/useGPS51Data';
 import { useGPS51LiveData } from '@/hooks/useGPS51LiveData';
 
 const FleetStats = () => {
-  const { vehicles, loading: vehiclesLoading } = useGPS51Data();
+  const { state } = useGPS51Data();
+  const vehicles = state.devices;
+  const vehiclesLoading = state.isLoading;
   const { metrics, loading: metricsLoading } = useGPS51LiveData();
 
   const loading = vehiclesLoading || metricsLoading;

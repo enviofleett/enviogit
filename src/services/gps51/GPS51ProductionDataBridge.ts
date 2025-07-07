@@ -1,5 +1,5 @@
 import { gps51UnifiedAuthService } from './GPS51UnifiedAuthService';
-import { gps51LiveDataManager } from './GPS51LiveDataManager';
+import { gps51LiveDataService } from './GPS51LiveDataService';
 import { gps51ProductionHealthMonitor } from './GPS51ProductionHealthMonitor';
 import { gps51Client } from './GPS51Client';
 
@@ -36,11 +36,8 @@ export class GPS51ProductionDataBridge {
         }
       }
 
-      // Initialize live data manager
-      const liveDataInitialized = await gps51LiveDataManager.initializeLiveDataSystem();
-      if (!liveDataInitialized) {
-        console.warn('GPS51ProductionDataBridge: Live data manager initialization failed, using fallback mode');
-      }
+      // Initialize live data service
+      console.log('GPS51ProductionDataBridge: Live data service ready (using simple coordinator approach)');
 
       // Set up event listeners for data updates
       this.setupEventListeners();
@@ -102,7 +99,7 @@ export class GPS51ProductionDataBridge {
           }
         }
         
-        const data = await gps51LiveDataManager.forceLiveDataSync();
+        const data = await gps51LiveDataService.fetchLiveData();
         
         if (data.devices.length > 0) {
           this.updateDashboardData(data);
@@ -210,7 +207,7 @@ export class GPS51ProductionDataBridge {
         }
       }
       
-      const data = await gps51LiveDataManager.forceLiveDataSync();
+      const data = await gps51LiveDataService.fetchLiveData();
       this.updateDashboardData(data);
       
       console.log('GPS51ProductionDataBridge: Manual data refresh successful:', {

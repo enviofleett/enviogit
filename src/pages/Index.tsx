@@ -29,19 +29,19 @@ const Index = () => {
     const checkSystemStatus = () => {
       const isInitialized = gps51StartupService.isSystemInitialized();
       const liveDataManager = gps51StartupService.getLiveDataManager();
-      const serviceStatus = liveDataManager.getStatus();
+      const serviceStatus = liveDataManager.getServiceStatus();
       const currentState = liveDataManager.getCurrentState();
       
       console.log('Index: System status check:', {
         isInitialized,
-        isActive: serviceStatus.isActive,
+        isActive: serviceStatus.isPolling,
         deviceCount: currentState.devices.length,
         lastUpdate: currentState.lastUpdate
       });
       
       setSystemStatus({
         isInitialized,
-        isLiveDataActive: serviceStatus.isActive,
+        isLiveDataActive: serviceStatus.isPolling,
         vehicleCount: currentState.devices.length,
         lastUpdate: currentState.lastUpdate
       });

@@ -8,7 +8,7 @@ import { useGPS51DirectAuth } from '@/hooks/useGPS51DirectAuth';
 import { useGPS51DirectVehicles } from '@/hooks/useGPS51DirectVehicles';
 import { useGPS51DirectPositions } from '@/hooks/useGPS51DirectPositions';
 import { useGPS51DirectConnection } from '@/hooks/useGPS51DirectConnection';
-import { useGPS51UnifiedData } from '@/hooks/useGPS51UnifiedData';
+import { useGPS51Data } from '@/hooks/useGPS51Data';
 import { useGPS51MetricsTracker } from '@/hooks/useGPS51MetricsTracker';
 import { GPS51DirectVehicleTable } from './GPS51DirectVehicleTable';
 import { GPS51DirectStatusCards } from './GPS51DirectStatusCards';
@@ -19,16 +19,15 @@ export const GPS51DirectDashboard: React.FC = () => {
   const vehicles = useGPS51DirectVehicles({ autoRefresh: true });
   const positions = useGPS51DirectPositions({ autoStart: false });
   const connection = useGPS51DirectConnection({ autoStart: true });
-  const { state: unifiedData, actions } = useGPS51UnifiedData();
+  const { state: gps51Data, actions } = useGPS51Data();
   const metrics = useGPS51MetricsTracker();
 
-  // Auto-start unified polling when vehicles are loaded
+  // Auto-start simple polling when vehicles are loaded
   React.useEffect(() => {
-    if (vehicles.hasVehicles && !unifiedData.pollingActive) {
-      const deviceIds = vehicles.state.vehicles.map(v => v.deviceid);
-      actions.startPolling(deviceIds);
+    if (vehicles.hasVehicles && !gps51Data.pollingActive) {
+      actions.startPolling();
     }
-  }, [vehicles.hasVehicles, vehicles.state.vehicles, unifiedData.pollingActive, actions]);
+  }, [vehicles.hasVehicles, gps51Data.pollingActive, actions]);
 
   // Show login prompt if not authenticated
   if (!auth.isReady && !auth.state.isLoading) {
@@ -111,7 +110,7 @@ export const GPS51DirectDashboard: React.FC = () => {
 
   const metricsSnapshot = metrics.getSnapshot();
   const connectionStatus = connection.state.status;
-  const isPollingActive = unifiedData.pollingActive;
+  const isPollingActive = gps51Data.pollingActive;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/10">
@@ -172,8 +171,7 @@ export const GPS51DirectDashboard: React.FC = () => {
                   if (isPollingActive) {
                     actions.stopPolling();
                   } else {
-                    const deviceIds = vehicles.state.vehicles.map(v => v.deviceid);
-                    actions.startPolling(deviceIds);
+                    actions.startPolling();
                   }
                 }}
               >
@@ -203,8 +201,8 @@ export const GPS51DirectDashboard: React.FC = () => {
       <div className="container mx-auto px-4 py-6 space-y-6">
         {/* Status Cards */}
         <GPS51DirectStatusCards 
-          vehicles={vehicles.state.vehicles}
-          positions={positions.state.positions}
+          vehicles={gps51Data.devices}
+          positions={gps51Data.positions}
           connection={connection.state}
           smartPolling={{ isActive: isPollingActive, currentInterval: 30000, activeDevices: 0, inactiveDevices: 0, lastAdaptation: 0, pollingEfficiency: 100 }}
           metrics={metricsSnapshot}

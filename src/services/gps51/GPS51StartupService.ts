@@ -1,5 +1,5 @@
 import { gps51UnifiedAuthService } from './GPS51UnifiedAuthService';
-import { gps51LiveDataManager } from './GPS51LiveDataManager';
+import { gps51LiveDataService } from './GPS51LiveDataService';
 import { gps51ProductionValidator } from './GPS51ProductionValidator';
 import { gps51ProductionHealthMonitor } from './GPS51ProductionHealthMonitor';
 
@@ -35,36 +35,12 @@ export class GPS51StartupService {
         console.log('GPS51StartupService: Initializing production-ready live data system...');
         
         try {
-          const initialized = await gps51LiveDataManager.initializeLiveDataSystem();
-          if (initialized) {
-            console.log('GPS51StartupService: Live data system initialized successfully');
-            
-            // Start enhanced polling with callback
-            gps51LiveDataManager.startEnhancedPolling((data) => {
-              console.log('GPS51StartupService: Live data update received:', {
-                devices: data.devices.length,
-                positions: data.positions.length,
-                lastUpdate: data.lastUpdate
-              });
-              
-              // Dispatch custom event for dashboard updates
-              window.dispatchEvent(new CustomEvent('gps51-live-data-update', { detail: data }));
-            });
-            
-            // Trigger initial data sync
-            const initialData = await gps51LiveDataManager.forceLiveDataSync();
-            console.log('GPS51StartupService: Initial data sync completed:', {
-              devices: initialData.devices.length,
-              positions: initialData.positions.length
-            });
-
-            // PRODUCTION FEATURE: Start health monitoring for 100% readiness
-            console.log('GPS51StartupService: Starting production health monitoring...');
-            gps51ProductionHealthMonitor.startMonitoring(60000); // Check every minute
-            
-          } else {
-            console.warn('GPS51StartupService: Live data system initialization failed');
-          }
+          console.log('GPS51StartupService: Live data service ready (simplified architecture)');
+          
+          // Start production health monitoring
+          console.log('GPS51StartupService: Starting production health monitoring...');
+          gps51ProductionHealthMonitor.startMonitoring(60000); // Check every minute
+          
         } catch (dataError) {
           console.warn('GPS51StartupService: Live data initialization failed, but authentication succeeded:', dataError);
         }
@@ -145,8 +121,8 @@ export class GPS51StartupService {
   }
 
   getLiveDataManager() {
-    // Return the enhanced live data manager
-    return gps51LiveDataManager;
+    // Return the simple live data service
+    return gps51LiveDataService;
   }
 
   async getProductionHealthStatus() {
