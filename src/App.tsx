@@ -12,6 +12,7 @@ import Settings from "./pages/Settings";
 import Developer from "./pages/Developer";
 import Marketplace from "./pages/Marketplace";
 import MobileApp from "./pages/MobileApp";
+import Partners from "./pages/Partners";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import { gps51ProductionBootstrap } from "./services/production/GPS51ProductionBootstrap";
@@ -68,6 +69,7 @@ const App = () => {
                       <Route path="/" element={<Index />} />
                       <Route path="/tracking" element={<Index />} />
                       <Route path="/marketplace" element={<Marketplace />} />
+                      <Route path="/partners" element={<Partners />} />
                       <Route path="/developer" element={<Developer />} />
                       <Route path="/mobile" element={<MobileApp />} />
                       <Route path="/settings" element={<Settings />} />
