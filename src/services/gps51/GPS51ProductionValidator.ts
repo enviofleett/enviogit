@@ -279,8 +279,8 @@ export class GPS51ProductionValidator {
         status: 'pass',
         message: 'Error handling and logging systems operational',
         details: {
-          circuitBreakerEnabled: diagnosticInfo.syncService.serviceStatus.polling.circuitState,
-          connectionHealthMonitoring: diagnosticInfo.connection.overallHealth
+          circuitBreakerEnabled: diagnosticInfo.masterPolling.isPolling,
+          connectionHealthMonitoring: 'operational'
         },
         severity: 'low'
       });

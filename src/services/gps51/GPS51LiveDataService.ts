@@ -16,7 +16,7 @@ export class GPS51LiveDataService {
   private pollingService: GPS51PollingService;
 
   private constructor(options: LiveDataServiceOptions = {}) {
-    this.dataFetcher = new GPS51DataFetcher(gps51Client);
+    this.dataFetcher = new GPS51DataFetcher();
     this.stateManager = new GPS51StateManager();
     this.pollingService = new GPS51PollingService(options);
   }

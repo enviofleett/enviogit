@@ -57,7 +57,7 @@ export class GPS51EnhancedSyncService {
       ...options
     };
 
-    this.dataFetcher = new GPS51DataFetcher(gps51Client);
+    this.dataFetcher = new GPS51DataFetcher();
     this.stateManager = new GPS51EnhancedStateManager();
     this.pollingService = new GPS51AdaptivePollingService(this.options);
     
