@@ -55,6 +55,62 @@ export type Database = {
           },
         ]
       }
+      agent_payout_requests: {
+        Row: {
+          agent_id: string
+          amount: number
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          failure_reason: string | null
+          id: string
+          paid_at: string | null
+          paystack_transfer_code: string | null
+          paystack_transfer_id: string | null
+          requested_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          amount: number
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          failure_reason?: string | null
+          id?: string
+          paid_at?: string | null
+          paystack_transfer_code?: string | null
+          paystack_transfer_id?: string | null
+          requested_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          failure_reason?: string | null
+          id?: string
+          paid_at?: string | null
+          paystack_transfer_code?: string | null
+          paystack_transfer_id?: string | null
+          requested_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_payout_requests_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "referring_agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       api_calls_monitor: {
         Row: {
           created_at: string
@@ -91,6 +147,184 @@ export type Database = {
           response_body?: Json | null
           response_status?: number
           timestamp?: string
+        }
+        Relationships: []
+      }
+      command_audit: {
+        Row: {
+          command_data: Json
+          command_type: string
+          completed_at: string | null
+          created_at: string
+          device_id: string
+          error_message: string | null
+          id: string
+          response_data: Json | null
+          status: string
+          technical_partner_id: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          command_data: Json
+          command_type: string
+          completed_at?: string | null
+          created_at?: string
+          device_id: string
+          error_message?: string | null
+          id?: string
+          response_data?: Json | null
+          status?: string
+          technical_partner_id: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          command_data?: Json
+          command_type?: string
+          completed_at?: string | null
+          created_at?: string
+          device_id?: string
+          error_message?: string | null
+          id?: string
+          response_data?: Json | null
+          status?: string
+          technical_partner_id?: string
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "command_audit_technical_partner_id_fkey"
+            columns: ["technical_partner_id"]
+            isOneToOne: false
+            referencedRelation: "technical_partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "command_audit_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      commission_events: {
+        Row: {
+          amount: number
+          commission_type: string
+          created_at: string
+          id: string
+          payout_status: string
+          percentage_applied: number
+          referred_user_id: string
+          referring_agent_id: string
+          source_entity_id: string | null
+          timestamp: string
+        }
+        Insert: {
+          amount: number
+          commission_type: string
+          created_at?: string
+          id?: string
+          payout_status?: string
+          percentage_applied: number
+          referred_user_id: string
+          referring_agent_id: string
+          source_entity_id?: string | null
+          timestamp?: string
+        }
+        Update: {
+          amount?: number
+          commission_type?: string
+          created_at?: string
+          id?: string
+          payout_status?: string
+          percentage_applied?: number
+          referred_user_id?: string
+          referring_agent_id?: string
+          source_entity_id?: string | null
+          timestamp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commission_events_referring_agent_id_fkey"
+            columns: ["referring_agent_id"]
+            isOneToOne: false
+            referencedRelation: "referring_agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      commission_rates: {
+        Row: {
+          activation_commission_percentage: number
+          created_at: string
+          id: string
+          is_active: boolean | null
+          renewal_commission_percentage: number
+          subscription_package_id: string | null
+          updated_at: string
+          upgrade_commission_percentage: number
+        }
+        Insert: {
+          activation_commission_percentage?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          renewal_commission_percentage?: number
+          subscription_package_id?: string | null
+          updated_at?: string
+          upgrade_commission_percentage?: number
+        }
+        Update: {
+          activation_commission_percentage?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          renewal_commission_percentage?: number
+          subscription_package_id?: string | null
+          updated_at?: string
+          upgrade_commission_percentage?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commission_rates_subscription_package_id_fkey"
+            columns: ["subscription_package_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_packages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      device_types: {
+        Row: {
+          activation_fee_amount: number
+          configuration_sms_template: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          activation_fee_amount?: number
+          configuration_sms_template: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          activation_fee_amount?: number
+          configuration_sms_template?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -978,6 +1212,180 @@ export type Database = {
           },
         ]
       }
+      partner_earnings: {
+        Row: {
+          amount_earned: number
+          base_amount: number
+          commission_percentage: number
+          created_at: string
+          earning_type: string
+          id: string
+          payout_status: string
+          technical_partner_id: string
+          user_subscription_id: string | null
+        }
+        Insert: {
+          amount_earned: number
+          base_amount: number
+          commission_percentage: number
+          created_at?: string
+          earning_type: string
+          id?: string
+          payout_status?: string
+          technical_partner_id: string
+          user_subscription_id?: string | null
+        }
+        Update: {
+          amount_earned?: number
+          base_amount?: number
+          commission_percentage?: number
+          created_at?: string
+          earning_type?: string
+          id?: string
+          payout_status?: string
+          technical_partner_id?: string
+          user_subscription_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_earnings_technical_partner_id_fkey"
+            columns: ["technical_partner_id"]
+            isOneToOne: false
+            referencedRelation: "technical_partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_earnings_user_subscription_id_fkey"
+            columns: ["user_subscription_id"]
+            isOneToOne: false
+            referencedRelation: "user_subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partner_payout_requests: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          approved_by: string | null
+          bank_account_details: Json
+          created_at: string
+          failure_reason: string | null
+          id: string
+          paid_at: string | null
+          paystack_transfer_code: string | null
+          paystack_transfer_id: string | null
+          requested_at: string
+          status: string
+          technical_partner_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          approved_at?: string | null
+          approved_by?: string | null
+          bank_account_details: Json
+          created_at?: string
+          failure_reason?: string | null
+          id?: string
+          paid_at?: string | null
+          paystack_transfer_code?: string | null
+          paystack_transfer_id?: string | null
+          requested_at?: string
+          status?: string
+          technical_partner_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          bank_account_details?: Json
+          created_at?: string
+          failure_reason?: string | null
+          id?: string
+          paid_at?: string | null
+          paystack_transfer_code?: string | null
+          paystack_transfer_id?: string | null
+          requested_at?: string
+          status?: string
+          technical_partner_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_payout_requests_technical_partner_id_fkey"
+            columns: ["technical_partner_id"]
+            isOneToOne: false
+            referencedRelation: "technical_partners"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partner_users: {
+        Row: {
+          created_at: string
+          id: string
+          technical_partner_id: string
+          user_id: string
+          welcome_email_sent: boolean | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          technical_partner_id: string
+          user_id: string
+          welcome_email_sent?: boolean | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          technical_partner_id?: string
+          user_id?: string
+          welcome_email_sent?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_users_technical_partner_id_fkey"
+            columns: ["technical_partner_id"]
+            isOneToOne: false
+            referencedRelation: "technical_partners"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partner_wallets: {
+        Row: {
+          created_at: string
+          current_balance: number
+          id: string
+          technical_partner_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_balance?: number
+          id?: string
+          technical_partner_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_balance?: number
+          id?: string
+          technical_partner_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_wallets_technical_partner_id_fkey"
+            columns: ["technical_partner_id"]
+            isOneToOne: true
+            referencedRelation: "technical_partners"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       paystack_events: {
         Row: {
           created_at: string | null
@@ -1101,6 +1509,113 @@ export type Database = {
           tutorial_watched?: boolean | null
           updated_at?: string | null
           vehicle_added?: boolean | null
+        }
+        Relationships: []
+      }
+      referral_commission_rates: {
+        Row: {
+          commission_type: string
+          created_at: string
+          id: string
+          is_active: boolean
+          percentage: number
+          updated_at: string
+        }
+        Insert: {
+          commission_type: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          percentage: number
+          updated_at?: string
+        }
+        Update: {
+          commission_type?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          percentage?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      referrals: {
+        Row: {
+          created_at: string
+          id: string
+          initial_commission_status: string
+          referral_code_used: string
+          referred_user_id: string
+          referring_agent_id: string
+          signup_timestamp: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          initial_commission_status?: string
+          referral_code_used: string
+          referred_user_id: string
+          referring_agent_id: string
+          signup_timestamp?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          initial_commission_status?: string
+          referral_code_used?: string
+          referred_user_id?: string
+          referring_agent_id?: string
+          signup_timestamp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referrals_referring_agent_id_fkey"
+            columns: ["referring_agent_id"]
+            isOneToOne: false
+            referencedRelation: "referring_agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      referring_agents: {
+        Row: {
+          bank_account_info: Json
+          created_at: string
+          email: string
+          id: string
+          name: string
+          pending_payout: number | null
+          phone_number: string
+          referral_code: string
+          status: string
+          total_earned: number | null
+          updated_at: string
+        }
+        Insert: {
+          bank_account_info?: Json
+          created_at?: string
+          email: string
+          id?: string
+          name: string
+          pending_payout?: number | null
+          phone_number: string
+          referral_code: string
+          status?: string
+          total_earned?: number | null
+          updated_at?: string
+        }
+        Update: {
+          bank_account_info?: Json
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          pending_payout?: number | null
+          phone_number?: string
+          referral_code?: string
+          status?: string
+          total_earned?: number | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -1233,6 +1748,56 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      support_requests: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          customer_user_id: string
+          description: string
+          id: string
+          metadata: Json | null
+          priority: string
+          status: string
+          subject: string
+          technical_partner_id: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          customer_user_id: string
+          description: string
+          id?: string
+          metadata?: Json | null
+          priority?: string
+          status?: string
+          subject: string
+          technical_partner_id: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          customer_user_id?: string
+          description?: string
+          id?: string
+          metadata?: Json | null
+          priority?: string
+          status?: string
+          subject?: string
+          technical_partner_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_requests_technical_partner_id_fkey"
+            columns: ["technical_partner_id"]
+            isOneToOne: false
+            referencedRelation: "technical_partners"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       synthetic_monitoring_alerts: {
         Row: {
@@ -1480,6 +2045,63 @@ export type Database = {
           test_steps?: Json
           timeout_seconds?: number
           updated_at?: string
+        }
+        Relationships: []
+      }
+      technical_partners: {
+        Row: {
+          assigned_admin_id: string | null
+          bank_account_info: Json | null
+          city: string | null
+          country: string | null
+          created_at: string
+          email: string
+          id: string
+          name: string
+          nin: string | null
+          office_address: string | null
+          phone_number: string
+          profile_literature: string | null
+          profile_picture_url: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          assigned_admin_id?: string | null
+          bank_account_info?: Json | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          name: string
+          nin?: string | null
+          office_address?: string | null
+          phone_number: string
+          profile_literature?: string | null
+          profile_picture_url?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          assigned_admin_id?: string | null
+          bank_account_info?: Json | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          nin?: string | null
+          office_address?: string | null
+          phone_number?: string
+          profile_literature?: string | null
+          profile_picture_url?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -1749,6 +2371,79 @@ export type Database = {
           },
         ]
       }
+      vehicle_activation_audit: {
+        Row: {
+          activation_fee_charged: number | null
+          completed_at: string | null
+          created_at: string
+          device_type_id: string
+          error_message: string | null
+          id: string
+          initial_position_fetched: boolean | null
+          initial_position_response: Json | null
+          sms_response: string | null
+          sms_sent: boolean | null
+          status: string
+          system_id: string
+          technical_partner_id: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          activation_fee_charged?: number | null
+          completed_at?: string | null
+          created_at?: string
+          device_type_id: string
+          error_message?: string | null
+          id?: string
+          initial_position_fetched?: boolean | null
+          initial_position_response?: Json | null
+          sms_response?: string | null
+          sms_sent?: boolean | null
+          status?: string
+          system_id: string
+          technical_partner_id: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          activation_fee_charged?: number | null
+          completed_at?: string | null
+          created_at?: string
+          device_type_id?: string
+          error_message?: string | null
+          id?: string
+          initial_position_fetched?: boolean | null
+          initial_position_response?: Json | null
+          sms_response?: string | null
+          sms_sent?: boolean | null
+          status?: string
+          system_id?: string
+          technical_partner_id?: string
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_activation_audit_device_type_id_fkey"
+            columns: ["device_type_id"]
+            isOneToOne: false
+            referencedRelation: "device_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_activation_audit_technical_partner_id_fkey"
+            columns: ["technical_partner_id"]
+            isOneToOne: false
+            referencedRelation: "technical_partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_activation_audit_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vehicle_fuel_profiles: {
         Row: {
           created_at: string
@@ -1939,6 +2634,47 @@ export type Database = {
           year?: number | null
         }
         Relationships: []
+      }
+      wallet_transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string | null
+          id: string
+          metadata: Json | null
+          reference: string | null
+          transaction_type: string
+          wallet_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          reference?: string | null
+          transaction_type: string
+          wallet_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          reference?: string | null
+          transaction_type?: string
+          wallet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_transactions_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "partner_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

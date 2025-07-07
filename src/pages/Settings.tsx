@@ -10,8 +10,9 @@ import { SuperAdminSetup } from '@/components/settings/SuperAdminSetup';
 import { ProductionDashboard } from '@/components/monitoring/ProductionDashboard';
 import { ProductionReadinessDashboard } from '@/components/monitoring/ProductionReadinessDashboard';
 import { MarketplaceAdminPanel } from '@/components/marketplace/MarketplaceAdminPanel';
+import { TechnicalPartnerAdminPanel } from '@/components/settings/TechnicalPartnerAdminPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings as SettingsIcon, Mail, Smartphone, Package, Activity, Shield, Key, Store, Lock } from 'lucide-react';
+import { Settings as SettingsIcon, Mail, Smartphone, Package, Activity, Shield, Key, Store, Lock, Users } from 'lucide-react';
 
 const Settings = () => {
   return (
@@ -22,7 +23,7 @@ const Settings = () => {
       </div>
       
       <Tabs defaultValue="monitoring" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-9">
+        <TabsList className="grid w-full grid-cols-10">
           <TabsTrigger value="monitoring" className="flex items-center gap-2">
             <Activity className="h-4 w-4" />
             Monitor
@@ -58,6 +59,10 @@ const Settings = () => {
           <TabsTrigger value="email" className="flex items-center gap-2">
             <Mail className="h-4 w-4" />
             Email
+          </TabsTrigger>
+          <TabsTrigger value="partners" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Partners
           </TabsTrigger>
         </TabsList>
         
@@ -98,6 +103,10 @@ const Settings = () => {
         
         <TabsContent value="email">
           <EmailConfigurationPanel />
+        </TabsContent>
+        
+        <TabsContent value="partners">
+          <TechnicalPartnerAdminPanel />
         </TabsContent>
       </Tabs>
     </div>
