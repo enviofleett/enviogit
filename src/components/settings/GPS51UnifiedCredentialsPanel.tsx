@@ -16,7 +16,8 @@ import {
   TestTube,
   User,
   Key,
-  Globe
+  Globe,
+  Power
 } from 'lucide-react';
 import { gps51UnifiedAuthService } from '@/services/gps51/GPS51UnifiedAuthService';
 import { GPS51Utils } from '@/services/gps51/GPS51Utils';
@@ -236,6 +237,35 @@ export const GPS51UnifiedCredentialsPanel = () => {
     setAuthStatus(status);
   };
 
+  const disconnectFromGPS51 = async () => {
+    try {
+      // Logout from GPS51 service
+      gps51UnifiedAuthService.logout();
+      
+      // Clear local state
+      setAuthStatus(null);
+      setAuthResult(null);
+      setConnectionResult(null);
+      setCredentials({
+        username: '',
+        password: '',
+        apiUrl: 'https://api.gps51.com/openapi'
+      });
+      
+      toast({
+        title: "Disconnected Successfully",
+        description: "GPS51 connection has been terminated and credentials cleared.",
+      });
+    } catch (error) {
+      console.error('Disconnect failed:', error);
+      toast({
+        title: "Disconnect Error",
+        description: error instanceof Error ? error.message : 'Failed to disconnect',
+        variant: "destructive",
+      });
+    }
+  };
+
   const StatusBadge = ({ success, label }: { success: boolean; label: string }) => (
     <Badge variant={success ? 'default' : 'destructive'} className="flex items-center gap-1">
       {success ? <CheckCircle className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
@@ -341,7 +371,7 @@ export const GPS51UnifiedCredentialsPanel = () => {
         )}
 
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button 
             onClick={testConnection}
             disabled={isTestingConnection || isLoadingCredentials || !credentials.apiUrl}
@@ -360,6 +390,17 @@ export const GPS51UnifiedCredentialsPanel = () => {
             <Shield className={`h-4 w-4 ${isTestingAuth ? 'animate-spin' : ''}`} />
             {isTestingAuth ? 'Authenticating...' : 'Test & Save Credentials'}
           </Button>
+
+          {authStatus?.isAuthenticated && (
+            <Button 
+              onClick={disconnectFromGPS51}
+              variant="destructive"
+              className="flex items-center gap-2"
+            >
+              <Power className="h-4 w-4" />
+              Disconnect from GPS51
+            </Button>
+          )}
         </div>
 
         {connectionResult && (
