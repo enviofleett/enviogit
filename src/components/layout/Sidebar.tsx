@@ -16,6 +16,7 @@ const navigation = [
   { name: 'Live Tracking', href: '/tracking', icon: MapPin },
   { name: 'Marketplace', href: '/marketplace', icon: Store },
   { name: 'Partners', href: '/partners', icon: Users },
+  { name: 'Referral Program', href: '/referrals', icon: Users },
   { name: 'Developer', href: '/developer', icon: Code },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
