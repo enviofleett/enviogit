@@ -17,7 +17,7 @@ import { Settings as SettingsIcon, Mail, Smartphone, Package, Activity, Shield, 
 import { AIChatbotSettings } from '@/components/settings/AIChatbotSettings';
 import { GPS51EmergencyControls } from '@/components/settings/GPS51EmergencyControls';
 import { GPS51OptimizationStatus } from '@/components/settings/GPS51OptimizationStatus';
-import { GPS51ProductionValidator } from '@/components/settings/GPS51ProductionValidator';
+import { GPS51ProductionValidator } from '@/components/settings/GPS51ProductionValidator/GPS51ProductionValidator';
 
 const Settings = () => {
   return (
