@@ -269,13 +269,11 @@ async function logAlert(type: string, message: string): Promise<void> {
   try {
     await supabase.from('api_calls_monitor').insert({
       endpoint: 'GPS51-RateLimiter',
-      method: 'ALERT',
-      request_payload: { alertType: type, state: globalRateLimitState },
       response_status: 200,
-      response_body: { message },
       duration_ms: 0,
-      error_message: null,
-      timestamp: new Date().toISOString()
+      error_message: message,
+      timestamp: new Date().toISOString(),
+      metadata: { alertType: type, state: globalRateLimitState }
     });
   } catch (error) {
     console.warn('Failed to log rate limiter alert:', error);

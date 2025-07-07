@@ -47,6 +47,20 @@ serve(async (req) => {
   try {
     const { action, params, priority = 'normal', requesterId } = await req.json();
 
+// Check rate limiter first
+    const rateLimitCheck = await checkRateLimit();
+    if (!rateLimitCheck.shouldAllow) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: rateLimitCheck.message || 'Rate limit exceeded',
+        shouldWait: true,
+        waitTime: rateLimitCheck.waitTime || 0
+      }), {
+        status: 429,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     // Check for emergency stop
     if (await checkEmergencyStop()) {
       return new Response(JSON.stringify({
@@ -291,6 +305,40 @@ async function handle8902Error(): Promise<void> {
       });
   } catch (error) {
     console.error('GPS51Coordinator: Failed to update emergency controls:', error);
+  }
+}
+
+async function checkRateLimit(): Promise<{shouldAllow: boolean, message?: string, waitTime?: number}> {
+  try {
+    const { data, error } = await supabase.functions.invoke('gps51-rate-limiter', {
+      body: { action: 'check_limits' }
+    });
+    
+    if (error) {
+      console.warn('GPS51Coordinator: Rate limiter check failed:', error);
+      return { shouldAllow: true }; // Allow on error to avoid blocking
+    }
+    
+    return data;
+  } catch (error) {
+    console.warn('GPS51Coordinator: Rate limiter unavailable:', error);
+    return { shouldAllow: true }; // Allow on error to avoid blocking
+  }
+}
+
+async function recordRequest(action: string, success: boolean, responseTime: number, status?: any): Promise<void> {
+  try {
+    await supabase.functions.invoke('gps51-rate-limiter', {
+      body: { 
+        action: 'record_request',
+        action: action,
+        success,
+        responseTime,
+        status
+      }
+    });
+  } catch (error) {
+    console.warn('GPS51Coordinator: Failed to record request in rate limiter:', error);
   }
 }
 
