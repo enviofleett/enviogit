@@ -312,4 +312,78 @@ export class PartnerWalletService {
       throw error;
     }
   }
+
+  /**
+   * Get all partner wallets (Admin only)
+   */
+  static async getAllWallets(): Promise<any[]> {
+    const { data: wallets, error } = await supabase
+      .from('partner_wallets')
+      .select(`
+        *,
+        technical_partners (
+          name,
+          email
+        )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching all wallets:', error);
+      throw new Error(`Failed to fetch wallets: ${error.message}`);
+    }
+
+    return wallets || [];
+  }
+
+  /**
+   * Get wallet summary statistics (Admin only)
+   */
+  static async getWalletSummary(): Promise<any> {
+    const { data: wallets, error } = await supabase
+      .from('partner_wallets')
+      .select('current_balance');
+
+    if (error) {
+      console.error('Error fetching wallet summary:', error);
+      throw new Error(`Failed to fetch wallet summary: ${error.message}`);
+    }
+
+    const totalBalance = wallets?.reduce((sum, wallet) => sum + parseFloat(wallet.current_balance.toString()), 0) || 0;
+
+    // Get monthly earnings (simplified calculation)
+    const { data: earnings, error: earningsError } = await supabase
+      .from('partner_earnings')
+      .select('amount_earned')
+      .gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString());
+
+    const monthlyEarnings = earnings?.reduce((sum, earning) => sum + parseFloat(earning.amount_earned.toString()), 0) || 0;
+
+    return {
+      totalBalance,
+      monthlyEarnings,
+      totalPayouts: 0 // TODO: Calculate from payout history
+    };
+  }
+
+  /**
+   * Reject a payout request (Admin only)
+   */
+  static async rejectPayoutRequest(requestId: string, reason: string): Promise<void> {
+    const { error } = await supabase
+      .from('partner_payout_requests')
+      .update({ 
+        status: 'rejected',
+        failure_reason: reason,
+        approved_at: new Date().toISOString()
+      })
+      .eq('id', requestId);
+
+    if (error) {
+      console.error('Error rejecting payout request:', error);
+      throw new Error(`Failed to reject payout request: ${error.message}`);
+    }
+
+    console.log('Payout request rejected successfully');
+  }
 }

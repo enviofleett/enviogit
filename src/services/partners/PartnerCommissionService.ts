@@ -283,4 +283,36 @@ export class PartnerCommissionService {
 
     return summary;
   }
+
+  /**
+   * Get all partner earnings (Admin only)
+   */
+  static async getAllEarnings(): Promise<any[]> {
+    const { data: earnings, error } = await supabase
+      .from('partner_earnings')
+      .select(`
+        *,
+        technical_partners (
+          name,
+          email
+        ),
+        user_subscriptions (
+          id,
+          profiles:user_id (
+            name
+          ),
+          subscription_packages (
+            name
+          )
+        )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching all earnings:', error);
+      throw new Error(`Failed to fetch earnings: ${error.message}`);
+    }
+
+    return earnings || [];
+  }
 }
