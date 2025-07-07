@@ -21,32 +21,10 @@ import { gps51ProductionBootstrap } from "./services/production/GPS51ProductionB
 const queryClient = new QueryClient();
 
 const App = () => {
-  // Initialize production system on app startup
+  // PHASE 3 EMERGENCY: Skip production system to prevent API spikes
   useEffect(() => {
-    const initializeProductionSystem = async () => {
-      try {
-        console.log('🚀 Initializing production system...');
-        const result = await gps51ProductionBootstrap.initializeProductionSystem();
-        
-        if (result.success) {
-          console.log('✅ Production system initialized successfully');
-          if (result.systemReady) {
-            console.log('🎉 System is production ready!');
-          }
-        } else {
-          console.log('⚠️ Production system initialization completed with issues:', result.errors);
-        }
-
-        // Log any warnings
-        if (result.warnings.length > 0) {
-          console.warn('⚠️ Production system warnings:', result.warnings);
-        }
-      } catch (error) {
-        console.error('❌ Failed to initialize production system:', error);
-      }
-    };
-
-    initializeProductionSystem();
+    console.log('🚨 PHASE 3 EMERGENCY MODE: Skipping GPS51 production bootstrap to prevent API spikes');
+    console.log('✅ App initialized in emergency mode - minimal features active');
   }, []);
 
   return (

@@ -15,6 +15,7 @@ import { GPS51HealthDashboard } from '@/components/monitoring/GPS51HealthDashboa
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Settings as SettingsIcon, Mail, Smartphone, Package, Activity, Shield, Key, Store, Lock, Users, Brain, AlertTriangle } from 'lucide-react';
 import { AIChatbotSettings } from '@/components/settings/AIChatbotSettings';
+import { GPS51EmergencyControls } from '@/components/settings/GPS51EmergencyControls';
 
 const Settings = () => {
   return (
@@ -24,8 +25,12 @@ const Settings = () => {
         <p className="text-muted-foreground">Configure your fleet management system</p>
       </div>
       
-      <Tabs defaultValue="gps51-health" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-12">
+      <Tabs defaultValue="emergency" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-13">
+          <TabsTrigger value="emergency" className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-red-500" />
+            EMERGENCY
+          </TabsTrigger>
           <TabsTrigger value="gps51-health" className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4" />
             GPS51 Health
@@ -75,6 +80,10 @@ const Settings = () => {
             AI Chatbot
           </TabsTrigger>
         </TabsList>
+        
+        <TabsContent value="emergency">
+          <GPS51EmergencyControls />
+        </TabsContent>
         
         <TabsContent value="gps51-health">
           <GPS51HealthDashboard />
