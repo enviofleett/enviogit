@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { getEnvironmentConfig, getCurrentEnvironment } from '@/config/environment';
 import { gps51StartupService } from '@/services/gps51/GPS51StartupService';
+import { GPS51RateLimitService } from '@/services/gps51/GPS51RateLimitService';
 
 export interface SystemMetrics {
   timestamp: number;
@@ -35,6 +36,15 @@ export interface SystemMetrics {
     vehiclesOnline: number;
     commandsExecuted: number;
     dataPointsProcessed: number;
+  };
+  gps51Optimization: {
+    successRate: number;
+    averageResponseTime: number;
+    cacheHitRate: number;
+    circuitBreakerStatus: string;
+    rateLimitActiveBlocks: number;
+    totalRequests: number;
+    recentErrors: number;
   };
 }
 
@@ -135,6 +145,9 @@ export class ProductionMonitoringService {
     
     // Collect business metrics
     const business = await this.collectBusinessMetrics();
+    
+    // Collect GPS51 optimization metrics
+    const gps51Optimization = await this.collectGPS51OptimizationMetrics();
 
     return {
       timestamp: Date.now(),
@@ -143,7 +156,8 @@ export class ProductionMonitoringService {
       availability,
       resources,
       errors,
-      business
+      business,
+      gps51Optimization
     };
   }
 
@@ -229,10 +243,11 @@ export class ProductionMonitoringService {
         return true; // If we can check session, auth is working
       
       case 'gps51':
-        // Test GPS51 connectivity
+        // Test GPS51 optimization system
         try {
-          const { error: gps51Error } = await supabase.functions.invoke('mobile-production-monitor');
-          return !gps51Error;
+          const rateLimitService = GPS51RateLimitService.getInstance();
+          const status = await rateLimitService.getStatus();
+          return status.rateLimitState.circuitBreakerOpen === false;
         } catch {
           return false;
         }
@@ -321,6 +336,46 @@ export class ProductionMonitoringService {
     }
   }
 
+  private async collectGPS51OptimizationMetrics() {
+    try {
+      const rateLimitService = GPS51RateLimitService.getInstance();
+      const status = await rateLimitService.getStatus();
+      
+      // Get recent GPS51 API calls for optimization analysis
+      const { data: gps51Logs } = await supabase
+        .from('api_calls_monitor')
+        .select('duration_ms, response_status, endpoint, error_message')
+        .like('endpoint', 'GPS51%')
+        .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString())
+        .order('created_at', { ascending: false });
+
+      const logs = gps51Logs || [];
+      const successfulRequests = logs.filter(log => log.response_status < 400);
+      const cacheLogs = logs.filter(log => log.endpoint?.includes('Cache'));
+      
+      return {
+        successRate: logs.length > 0 ? (successfulRequests.length / logs.length) * 100 : 100,
+        averageResponseTime: status.metrics.averageResponseTime,
+        cacheHitRate: logs.length > 0 ? (cacheLogs.length / logs.length) * 100 : 0,
+        circuitBreakerStatus: status.rateLimitState.circuitBreakerOpen ? 'Open' : 'Closed',
+        rateLimitActiveBlocks: status.rateLimitState.rateLimitCooldownUntil > Date.now() ? 1 : 0,
+        totalRequests: status.metrics.totalRequests,
+        recentErrors: status.metrics.failedRequests
+      };
+    } catch (error) {
+      console.error('Failed to collect GPS51 optimization metrics:', error);
+      return {
+        successRate: 0,
+        averageResponseTime: 0,
+        cacheHitRate: 0,
+        circuitBreakerStatus: 'Unknown',
+        rateLimitActiveBlocks: 0,
+        totalRequests: 0,
+        recentErrors: 0
+      };
+    }
+  }
+
   private processMetrics(metrics: SystemMetrics): void {
     // Add to history
     this.metricsHistory.push(metrics);
@@ -377,6 +432,48 @@ export class ProductionMonitoringService {
         value: metrics.availability.healthScore,
         threshold: thresholds.availability,
         metadata: { availability: metrics.availability }
+      });
+    }
+
+    // Check GPS51 optimization health
+    if (metrics.gps51Optimization.successRate < 95) {
+      this.createAlert({
+        level: metrics.gps51Optimization.successRate < 80 ? 'critical' : 'warning',
+        title: 'GPS51 Optimization Issues',
+        message: `GPS51 success rate is ${metrics.gps51Optimization.successRate.toFixed(1)}%, below optimal threshold`,
+        service: 'gps51',
+        metric: 'success_rate',
+        value: metrics.gps51Optimization.successRate,
+        threshold: 95,
+        metadata: { gps51Optimization: metrics.gps51Optimization }
+      });
+    }
+
+    // Check GPS51 circuit breaker
+    if (metrics.gps51Optimization.circuitBreakerStatus === 'Open') {
+      this.createAlert({
+        level: 'critical',
+        title: 'GPS51 Circuit Breaker Open',
+        message: 'GPS51 circuit breaker is open due to consecutive failures. System is in protection mode.',
+        service: 'gps51',
+        metric: 'circuit_breaker',
+        value: 1,
+        threshold: 0,
+        metadata: { gps51Optimization: metrics.gps51Optimization }
+      });
+    }
+
+    // Check GPS51 rate limiting
+    if (metrics.gps51Optimization.rateLimitActiveBlocks > 0) {
+      this.createAlert({
+        level: 'warning',
+        title: 'GPS51 Rate Limiting Active',
+        message: 'GPS51 requests are being rate limited. This may indicate API load issues.',
+        service: 'gps51',
+        metric: 'rate_limit',
+        value: metrics.gps51Optimization.rateLimitActiveBlocks,
+        threshold: 0,
+        metadata: { gps51Optimization: metrics.gps51Optimization }
       });
     }
   }

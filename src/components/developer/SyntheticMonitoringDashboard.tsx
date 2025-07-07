@@ -303,66 +303,58 @@ export const SyntheticMonitoringDashboard = () => {
         </CardContent>
       </Card>
 
-      {/* User Journey Health */}
-      <Card>
-        <CardHeader>
-          <CardTitle>User Journey Health</CardTitle>
-          <CardDescription>
-            Critical user flows and their current status
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-blue-600" />
-                <span className="font-medium">Customer Journey</span>
-              </div>
-              <Progress value={95} className="h-2" />
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>Registration → Purchase</span>
-                <span>95%</span>
-              </div>
-            </div>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Activity className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-medium">System Status</span>
+                </div>
+                <Badge className={overallHealth.color}>
+                  {overallHealth.status}
+                </Badge>
+              </CardContent>
+            </Card>
 
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <ShoppingCart className="h-4 w-4 text-green-600" />
-                <span className="font-medium">Merchant Flow</span>
-              </div>
-              <Progress value={88} className="h-2" />
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>Onboarding → Validation</span>
-                <span>88%</span>
-              </div>
-            </div>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <span className="text-sm font-medium">GPS51 Optimization</span>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-lg font-bold">Active</p>
+                  <p className="text-xs text-muted-foreground">Enhanced monitoring</p>
+                </div>
+              </CardContent>
+            </Card>
 
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Smartphone className="h-4 w-4 text-purple-600" />
-                <span className="font-medium">Technical Partner</span>
-              </div>
-              <Progress value={92} className="h-2" />
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>Registration → Earnings</span>
-                <span>92%</span>
-              </div>
-            </div>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <TrendingUp className="h-4 w-4 text-purple-600" />
+                  <span className="text-sm font-medium">Performance</span>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-lg font-bold">Optimized</p>
+                  <p className="text-xs text-muted-foreground">Rate limiting active</p>
+                </div>
+              </CardContent>
+            </Card>
 
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Shield className="h-4 w-4 text-orange-600" />
-                <span className="font-medium">Admin Operations</span>
-              </div>
-              <Progress value={98} className="h-2" />
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>Approvals → Monitoring</span>
-                <span>98%</span>
-              </div>
-            </div>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Shield className="h-4 w-4 text-orange-600" />
+                  <span className="text-sm font-medium">Protection</span>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-lg font-bold">Enabled</p>
+                  <p className="text-xs text-muted-foreground">8902 prevention</p>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
 
       {/* Recent Test Runs */}
       <Card>
