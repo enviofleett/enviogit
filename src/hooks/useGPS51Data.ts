@@ -179,7 +179,7 @@ export const useGPS51Data = (): UseGPS51DataReturn => {
 
     setState(prev => ({ ...prev, pollingActive: true }));
 
-    // Initial call with lastQueryPositionTime=0 for first fetch
+    // PHASE 2: Initial call with lastQueryPositionTime=0 for full refresh  
     setLastQueryPositionTime(0);
     fetchPositions();
 

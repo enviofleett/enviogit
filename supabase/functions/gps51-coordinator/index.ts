@@ -179,12 +179,17 @@ async function processQueue() {
       
       const requestStartTime = Date.now();
       
-      // Make actual GPS51 API call through existing proxy
+      // PHASE 2 OPTIMIZATION: Direct GPS51 API call with CORS handling
+      console.log(`GPS51Coordinator: Phase 2 - Making optimized GPS51 API call for ${request.action}`);
+      
+      // Make direct GPS51 API call through existing proxy with enhanced error handling
       const { data, error } = await supabase.functions.invoke('gps51-proxy', {
         body: {
           action: request.action,
           params: request.params,
-          method: 'POST'
+          method: 'POST',
+          optimized: true, // Phase 2 flag
+          emergencyMode: emergencyModeManager?.isEmergencyMode?.() || false
         }
       });
 

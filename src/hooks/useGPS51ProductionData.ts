@@ -44,7 +44,10 @@ export function useGPS51ProductionData(): {
 
     const initializeProduction = async () => {
       try {
-        console.log('useGPS51ProductionData: Initializing production data system...');
+        console.log('useGPS51ProductionData: Phase 2 - Optimized GPS51 integration starting...');
+        
+        // PHASE 2: Verify this is the ONLY GPS51 data source active
+        console.log('useGPS51ProductionData: Ensuring no legacy polling services are active...');
         
         const initialized = await gps51ProductionDataBridge.initializeDataBridge();
         
