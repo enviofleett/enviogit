@@ -41,31 +41,49 @@ serve(async (req) => {
   }
 
   try {
-    const { action = 'check_limits' } = await req.json();
+    let requestBody;
+    let action = 'check_limits';
+    
+    // Safely parse request body
+    try {
+      const bodyText = await req.text();
+      if (bodyText) {
+        requestBody = JSON.parse(bodyText);
+        action = requestBody.action || 'check_limits';
+      }
+    } catch (parseError) {
+      console.warn('GPS51 Rate Limiter: Failed to parse request body, using defaults:', parseError);
+      requestBody = {};
+    }
+
+    console.log(`GPS51 Rate Limiter: Processing action '${action}'`);
 
     switch (action) {
       case 'check_limits':
         return handleCheckLimits();
       case 'record_request':
-        return handleRecordRequest(await req.json());
+        return handleRecordRequest(requestBody);
       case 'get_status':
         return handleGetStatus();
       case 'reset_state':
         return handleResetState();
       default:
-        return new Response(
-          JSON.stringify({ error: 'Invalid action' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        console.warn(`GPS51 Rate Limiter: Unknown action '${action}', defaulting to check_limits`);
+        return handleCheckLimits();
     }
   } catch (error) {
-    console.error('GPS51 Rate Limiter error:', error);
+    console.error('GPS51 Rate Limiter critical error:', error);
+    
+    // Return a safe fallback response that allows requests but logs the error
     return new Response(
       JSON.stringify({ 
-        error: 'Internal server error',
-        message: error.message 
+        shouldAllow: true,
+        reason: 'rate_limiter_error',
+        waitTime: 0,
+        message: 'Rate limiter error, allowing request as fallback',
+        error: error.message
       }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });

@@ -81,11 +81,33 @@ export class GPS51CoordinatorClient {
         };
       }
 
-      if (data.fromCache) {
+      // Handle rate limiting with automatic retry for short wait times
+      if (data && data.shouldWait && data.waitTime) {
+        console.warn(`GPS51CoordinatorClient: Rate limited, wait time: ${data.waitTime}ms`);
+        
+        // Auto-retry for waits under 10 seconds
+        if (data.waitTime < 10000) {
+          console.log('GPS51CoordinatorClient: Auto-retrying after rate limit wait');
+          await new Promise(resolve => setTimeout(resolve, data.waitTime));
+          return this.executeRequest(request);
+        }
+      }
+
+      // Handle emergency stop
+      if (data && data.emergencyStop) {
+        console.error('GPS51CoordinatorClient: Emergency stop detected');
+        return {
+          success: false,
+          error: 'GPS51 emergency stop is active',
+          emergencyStop: true
+        };
+      }
+
+      if (data && data.fromCache) {
         console.log('GPS51CoordinatorClient: Response from cache, age:', data.cacheAge + 'ms');
       }
 
-      return data;
+      return data || { success: false, error: 'No data received' };
     } catch (error) {
       console.error('GPS51CoordinatorClient: Network error:', error);
       return {

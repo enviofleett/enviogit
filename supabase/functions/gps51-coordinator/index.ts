@@ -47,18 +47,36 @@ serve(async (req) => {
   try {
     const { action, params, priority = 'normal', requesterId } = await req.json();
 
-// Check rate limiter first
-    const rateLimitCheck = await checkRateLimit();
-    if (!rateLimitCheck.shouldAllow) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: rateLimitCheck.message || 'Rate limit exceeded',
-        shouldWait: true,
-        waitTime: rateLimitCheck.waitTime || 0
-      }), {
-        status: 429,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+    // Check rate limiter first with fallback
+    let rateLimitCheck;
+    try {
+      rateLimitCheck = await checkRateLimit();
+      if (!rateLimitCheck.shouldAllow) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: rateLimitCheck.message || 'Rate limit exceeded',
+          shouldWait: true,
+          waitTime: rateLimitCheck.waitTime || 0
+        }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    } catch (rateLimitError) {
+      console.warn('GPS51Coordinator: Rate limiter failed, using local fallback:', rateLimitError);
+      // Fallback: Apply local rate limiting
+      const localCheck = applyLocalRateLimit();
+      if (!localCheck.shouldAllow) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: localCheck.message,
+          shouldWait: true,
+          waitTime: localCheck.waitTime
+        }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     // Check for emergency stop
@@ -348,6 +366,36 @@ async function recordRequest(action: string, success: boolean, responseTime: num
   } catch (error) {
     console.warn('GPS51Coordinator: Failed to record request in rate limiter:', error);
   }
+}
+
+// Local rate limiting fallback
+function applyLocalRateLimit(): {shouldAllow: boolean, message: string, waitTime: number} {
+  const now = Date.now();
+  
+  // Check circuit breaker
+  if (circuitBreakerOpen && now < rateLimitCooldownUntil) {
+    return {
+      shouldAllow: false,
+      message: 'Local circuit breaker active',
+      waitTime: rateLimitCooldownUntil - now
+    };
+  }
+  
+  // Check minimum spacing
+  const timeSinceLastRequest = now - lastRequestTime;
+  if (timeSinceLastRequest < MINIMUM_REQUEST_SPACING) {
+    return {
+      shouldAllow: false,
+      message: 'Local rate limit: minimum spacing not met',
+      waitTime: MINIMUM_REQUEST_SPACING - timeSinceLastRequest
+    };
+  }
+  
+  return {
+    shouldAllow: true,
+    message: 'Local rate limit check passed',
+    waitTime: 0
+  };
 }
 
 async function logCoordinatorActivity(activity: any): Promise<void> {
