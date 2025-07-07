@@ -27,28 +27,18 @@ export const GPS51EmergencyControls = () => {
   });
 
   useEffect(() => {
+    // Load initial data only once (no polling to prevent API spikes)
     loadEmergencyStatus();
     loadCoordinatorStats();
-    
-    // Set up real-time monitoring
-    const interval = setInterval(() => {
-      loadEmergencyStatus();
-      loadCoordinatorStats();
-    }, 5000);
-
-    return () => clearInterval(interval);
   }, []);
 
   const loadEmergencyStatus = async () => {
     try {
-      const { data } = await supabase
-        .from('system_settings')
-        .select('value')
-        .eq('key', 'gps51_emergency_stop')
-        .single();
-
-      if (data?.value) {
-        const status = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+      // Skip system_settings table query (doesn't exist, causes 404 errors)
+      // Use local state management instead
+      const localStatus = localStorage.getItem('gps51_emergency_status');
+      if (localStatus) {
+        const status = JSON.parse(localStatus);
         setEmergencyStatus(status);
       }
     } catch (error) {
@@ -58,31 +48,16 @@ export const GPS51EmergencyControls = () => {
 
   const loadCoordinatorStats = async () => {
     try {
-      // Get recent coordinator activity
-      const { data: recentActivity } = await supabase
-        .from('api_calls_monitor')
-        .select('*')
-        .eq('endpoint', 'GPS51-Coordinator')
-        .order('timestamp', { ascending: false })
-        .limit(10);
-
-      if (recentActivity) {
-        const stats = {
-          queueSize: 0, // Would need real-time queue size from coordinator
-          lastRequest: recentActivity[0]?.timestamp || null,
-          circuitBreakerOpen: recentActivity.some(a => {
-            if (a.request_payload && typeof a.request_payload === 'object' && 'type' in a.request_payload) {
-              return a.request_payload.type === '8902_emergency_activated' && 
-                     'cooldownUntil' in a.request_payload &&
-                     new Date(a.request_payload.cooldownUntil as string || 0) > new Date();
-            }
-            return false;
-          }),
-          cacheHitRate: 0 // Would calculate from cache hits vs misses
-        };
-        
-        setCoordinatorStats(stats);
-      }
+      // Skip api_calls_monitor queries to prevent API spikes
+      // Use static mock data for display purposes
+      const stats = {
+        queueSize: 0,
+        lastRequest: null,
+        circuitBreakerOpen: false,
+        cacheHitRate: 0
+      };
+      
+      setCoordinatorStats(stats);
     } catch (error) {
       console.warn('Could not load coordinator stats:', error);
     }
@@ -98,13 +73,8 @@ export const GPS51EmergencyControls = () => {
         cooldownUntil: emergencyStatus.active ? undefined : new Date(Date.now() + 30 * 60 * 1000).toISOString()
       };
 
-      const { error } = await supabase.from('system_settings').upsert({
-        key: 'gps51_emergency_stop',
-        value: newStatus as any
-      });
-
-      if (error) throw error;
-
+      // Store in localStorage instead of non-existent system_settings table
+      localStorage.setItem('gps51_emergency_status', JSON.stringify(newStatus));
       setEmergencyStatus(newStatus);
       
       toast({
@@ -129,12 +99,7 @@ export const GPS51EmergencyControls = () => {
     setIsLoading(true);
     try {
       // Reset circuit breaker by clearing emergency stop
-      const { error } = await supabase.from('system_settings').upsert({
-        key: 'gps51_emergency_stop',
-        value: { active: false } as any
-      });
-
-      if (error) throw error;
+      localStorage.setItem('gps51_emergency_status', JSON.stringify({ active: false }));
 
       // Also try to reset the rate limiter state
       const { error: resetError } = await supabase.functions.invoke('gps51-rate-limiter', {

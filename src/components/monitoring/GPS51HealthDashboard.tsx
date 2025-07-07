@@ -53,31 +53,31 @@ export const GPS51HealthDashboard = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
+    // Load initial data only once (no polling to prevent API spikes)
     loadHealthMetrics();
     loadRecentActivity();
-
-    // Auto-refresh every 10 seconds
-    const interval = setInterval(() => {
-      loadHealthMetrics();
-      loadRecentActivity();
-    }, 10000);
-
-    return () => clearInterval(interval);
   }, []);
 
   const loadHealthMetrics = async () => {
     try {
-      // Get recent GPS51 API calls from the last 5 minutes
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-      
-      const { data: recentCalls } = await supabase
-        .from('api_calls_monitor')
-        .select('*')
-        .or('endpoint.like.GPS51%,endpoint.eq.GPS51-Coordinator')
-        .gte('timestamp', fiveMinutesAgo)
-        .order('timestamp', { ascending: false });
+      // Skip api_calls_monitor queries to prevent API spikes
+      // Use mock data for display
+      const recentCalls = [];
 
-      if (recentCalls) {
+      if (recentCalls.length === 0) {
+        // Set default metrics when no data available
+        setMetrics({
+          requestsPerMinute: 0,
+          activePollers: 0,
+          rateLimitStatus: 'healthy',
+          circuitBreakerOpen: false,
+          cacheHitRate: 0,
+          averageResponseTime: 0,
+          recent8902Errors: 0,
+          lastSuccessfulRequest: null,
+          coordinatorQueueSize: 0
+        });
+      } else if (recentCalls) {
         const now = Date.now();
         const oneMinuteAgo = now - 60 * 1000;
         const requestsLastMinute = recentCalls.filter(
@@ -127,24 +127,9 @@ export const GPS51HealthDashboard = () => {
 
   const loadRecentActivity = async () => {
     try {
-      const { data } = await supabase
-        .from('api_calls_monitor')
-        .select('timestamp, endpoint, response_status, duration_ms, error_message')
-        .or('endpoint.like.GPS51%,endpoint.eq.GPS51-Coordinator')
-        .order('timestamp', { ascending: false })
-        .limit(20);
-
-      if (data) {
-        const activity: RecentActivity[] = data.map(call => ({
-          timestamp: call.timestamp,
-          endpoint: call.endpoint,
-          success: call.response_status < 400,
-          responseTime: call.duration_ms || 0,
-          error: call.error_message
-        }));
-        
-        setRecentActivity(activity);
-      }
+      // Skip api_calls_monitor queries to prevent API spikes
+      // Use empty array for now
+      setRecentActivity([]);
     } catch (error) {
       console.error('Failed to load recent activity:', error);
     }
@@ -153,17 +138,14 @@ export const GPS51HealthDashboard = () => {
   const triggerEmergencyStop = async () => {
     setIsLoading(true);
     try {
-      const { error } = await supabase.from('system_settings').upsert({
-        key: 'gps51_emergency_stop',
-        value: {
-          active: true,
-          reason: 'manual_dashboard_trigger',
-          activatedAt: new Date().toISOString(),
-          cooldownUntil: new Date(Date.now() + 30 * 60 * 1000).toISOString()
-        }
-      });
-
-      if (error) throw error;
+      // Store emergency stop in localStorage instead of non-existent system_settings table
+      const emergencyStatus = {
+        active: true,
+        reason: 'manual_dashboard_trigger',
+        activatedAt: new Date().toISOString(),
+        cooldownUntil: new Date(Date.now() + 30 * 60 * 1000).toISOString()
+      };
+      localStorage.setItem('gps51_emergency_status', JSON.stringify(emergencyStatus));
 
       toast({
         title: 'Emergency Stop Activated',

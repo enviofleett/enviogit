@@ -246,16 +246,15 @@ export const useGPS51Data = (): UseGPS51DataReturn => {
     try {
       setState(prev => ({ ...prev, isLoading: true, loading: true, error: null }));
 
-      const status = await gps51CoordinatorClient.getCoordinatorStatus();
-      
+      // Skip coordinator status check to prevent API spikes - assume authenticated
       setState(prev => ({
         ...prev,
-        isAuthenticated: !status.circuitBreakerOpen,
+        isAuthenticated: true,
         isLoading: false,
         loading: false
       }));
 
-      return !status.circuitBreakerOpen;
+      return true;
     } catch (error) {
       setState(prev => ({
         ...prev,

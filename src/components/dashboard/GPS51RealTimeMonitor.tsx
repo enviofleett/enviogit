@@ -38,18 +38,18 @@ export const GPS51RealTimeMonitor: React.FC<RealTimeMonitorProps> = ({
   
   const { vehicles, loading, error } = useGPS51Data();
 
-  // Update coordinator status periodically
+  // Get coordinator status only once on mount (no polling to prevent API spikes)
   useEffect(() => {
-    const interval = setInterval(async () => {
+    const getInitialStatus = async () => {
       try {
         const status = await gps51CoordinatorClient.getCoordinatorStatus();
         setCoordinatorStatus(status);
       } catch (error) {
         console.error('Failed to get coordinator status:', error);
       }
-    }, 5000);
-
-    return () => clearInterval(interval);
+    };
+    
+    getInitialStatus();
   }, []);
 
   const handleStartMonitoring = async () => {
