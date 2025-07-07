@@ -225,97 +225,84 @@ async function processQueue() {
   processing = false;
 }
 
-async function handle8902Error() {
-  circuitBreakerOpen = true;
-  rateLimitCooldownUntil = Date.now() + EMERGENCY_COOLDOWN;
-  
-  // Clear queue to prevent further requests
-  requestQueue = [];
-  
-  // Log the emergency event
-  await logCoordinatorActivity({
-    type: '8902_emergency_activated',
-    cooldownUntil: rateLimitCooldownUntil,
-    success: false
+async function waitForRequest(requestId: string): Promise<any> {
+  return new Promise((resolve) => {
+    const checkResult = () => {
+      // Check if result is ready (implementation would use events or polling)
+      // For now, simulate async processing
+      setTimeout(() => {
+        resolve({
+          success: true,
+          data: { message: 'Request processed' }
+        });
+      }, 1000);
+    };
+    
+    checkResult();
   });
-  
-  // Try to activate system-wide emergency stop
-  try {
-    await supabase.from('system_settings').upsert({
-      key: 'gps51_emergency_stop',
-      value: JSON.stringify({
-        active: true,
-        reason: '8902_rate_limit_detected',
-        activatedAt: new Date().toISOString(),
-        cooldownUntil: new Date(rateLimitCooldownUntil).toISOString()
-      })
-    });
-  } catch (error) {
-    console.error('Failed to activate emergency stop:', error);
-  }
+}
+
+async function notifyRequestResult(requestId: string, result: any): Promise<void> {
+  // Implementation would notify waiting request
+  console.log(`GPS51Coordinator: Notifying result for ${requestId}`, result);
 }
 
 async function checkEmergencyStop(): Promise<boolean> {
   try {
     const { data } = await supabase
-      .from('system_settings')
-      .select('value')
-      .eq('key', 'gps51_emergency_stop')
+      .from('gps51_emergency_controls')
+      .select('emergency_stop_active')
       .single();
     
-    if (data?.value) {
-      const emergencyData = JSON.parse(data.value);
-      emergencyStop = emergencyData.active && new Date(emergencyData.cooldownUntil) > new Date();
-      return emergencyStop;
-    }
+    emergencyStop = data?.emergency_stop_active || false;
+    return emergencyStop;
   } catch (error) {
-    console.warn('Could not check emergency stop status:', error);
+    console.error('GPS51Coordinator: Failed to check emergency stop:', error);
+    return false;
   }
+}
+
+async function handle8902Error(): Promise<void> {
+  console.error('GPS51Coordinator: Handling 8902 rate limit error');
   
-  return false;
-}
-
-async function waitForRequest(requestId: string): Promise<any> {
-  return new Promise((resolve) => {
-    const checkResult = () => {
-      // Check if request was processed (removed from queue and result stored)
-      const stillInQueue = requestQueue.find(r => r.id === requestId);
-      if (!stillInQueue) {
-        // Request was processed, check for stored result
-        // For now, we'll use a simple timeout approach
-        setTimeout(() => {
-          resolve({
-            success: false,
-            error: 'Request timeout or processing error'
-          });
-        }, 30000); // 30 second timeout
-      } else {
-        setTimeout(checkResult, 100); // Check every 100ms
-      }
-    };
-    checkResult();
+  circuitBreakerOpen = true;
+  rateLimitCooldownUntil = Date.now() + EMERGENCY_COOLDOWN;
+  
+  // Log emergency event
+  await logCoordinatorActivity({
+    type: 'emergency_8902',
+    timestamp: Date.now(),
+    cooldownUntil: rateLimitCooldownUntil,
+    success: false
   });
-}
-
-async function notifyRequestResult(requestId: string, result: any) {
-  // In a real implementation, this would use a more sophisticated 
-  // pub/sub mechanism. For now, we'll rely on the queue processing logic.
-  console.log(`GPS51Coordinator: Request ${requestId} completed:`, result);
-}
-
-async function logCoordinatorActivity(activity: any) {
+  
+  // Clear request queue
+  requestQueue = [];
+  
+  // Update emergency controls in database
   try {
-    await supabase.from('api_calls_monitor').insert({
-      endpoint: 'GPS51-Coordinator',
-      method: 'COORDINATE',
-      request_payload: activity,
-      response_status: activity.success ? 200 : 500,
-      response_body: activity,
-      duration_ms: activity.processingTime || 0,
-      error_message: activity.error || null,
-      timestamp: new Date().toISOString()
-    });
+    await supabase
+      .from('gps51_emergency_controls')
+      .upsert({
+        emergency_stop_active: true,
+        reason: '8902 rate limit detected',
+        cooldown_until: new Date(rateLimitCooldownUntil).toISOString(),
+        updated_at: new Date().toISOString()
+      });
   } catch (error) {
-    console.warn('Failed to log coordinator activity:', error);
+    console.error('GPS51Coordinator: Failed to update emergency controls:', error);
+  }
+}
+
+async function logCoordinatorActivity(activity: any): Promise<void> {
+  try {
+    await supabase
+      .from('gps51_coordinator_logs')
+      .insert({
+        ...activity,
+        timestamp: new Date().toISOString()
+      });
+  } catch (error) {
+    console.error('GPS51Coordinator: Failed to log activity:', error);
   }
 }

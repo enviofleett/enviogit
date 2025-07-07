@@ -1,24 +1,34 @@
 
-import { GPS51Client, gps51Client } from './GPS51Client';
 import { GPS51Device, GPS51Position } from './types';
-import { GPS51DataFetcher } from './GPS51DataFetcher';
-import { GPS51StateManager, LiveDataState } from './GPS51StateManager';
-import { GPS51PollingService, PollingOptions } from './GPS51PollingService';
+import { gps51MasterPollingService } from './GPS51MasterPollingService';
 
-export interface LiveDataServiceOptions extends PollingOptions {
-  // Inherited from PollingOptions: pollingInterval, maxRetries, enableIntelligentPolling
+export interface LiveDataServiceOptions {
+  pollingInterval?: number;
+  maxRetries?: number;
+  enableIntelligentPolling?: boolean;
+}
+
+export interface LiveDataState {
+  devices: GPS51Device[];
+  positions: GPS51Position[];
+  lastQueryPositionTime: number;
+  lastUpdate: Date;
 }
 
 export class GPS51LiveDataService {
   private static instance: GPS51LiveDataService;
-  private dataFetcher: GPS51DataFetcher;
-  private stateManager: GPS51StateManager;
-  private pollingService: GPS51PollingService;
+  private sessionId: string;
+  private currentState: LiveDataState;
 
   private constructor(options: LiveDataServiceOptions = {}) {
-    this.dataFetcher = new GPS51DataFetcher();
-    this.stateManager = new GPS51StateManager();
-    this.pollingService = new GPS51PollingService(options);
+    this.sessionId = `live_data_${crypto.randomUUID()}`;
+    this.currentState = {
+      devices: [],
+      positions: [],
+      lastQueryPositionTime: 0,
+      lastUpdate: new Date()
+    };
+    console.log('GPS51LiveDataService: Redirecting to unified master polling service');
   }
 
   static getInstance(options?: LiveDataServiceOptions): GPS51LiveDataService {
@@ -29,34 +39,16 @@ export class GPS51LiveDataService {
   }
 
   /**
-   * Main method: Fetch live data using the two-step API flow
+   * Legacy method: Now uses unified master polling service
    */
   async fetchLiveData(): Promise<LiveDataState> {
     try {
-      console.log('GPS51LiveDataService: Starting live data fetch...');
+      console.log('GPS51LiveDataService: Delegating to unified master polling service');
       
-      // Import and ensure authentication before fetching data
-      const { gps51StartupService } = await import('./GPS51StartupService');
-      const isAuthenticated = await gps51StartupService.ensureAuthenticated();
+      // Force a poll through the master service
+      await gps51MasterPollingService.forcePoll(this.sessionId);
       
-      if (!isAuthenticated) {
-        throw new Error('GPS51 authentication required. Please configure credentials in Settings.');
-      }
-      
-      const currentState = this.stateManager.getCurrentState();
-      
-      const { devices, positions, lastQueryTime } = await this.dataFetcher.fetchCompleteLiveData(
-        currentState.lastQueryPositionTime
-      );
-
-      // Update state
-      this.stateManager.updateState(devices, positions, lastQueryTime);
-
-      console.log('GPS51LiveDataService: Live data fetch completed successfully');
-      this.pollingService.resetRetryCount();
-      
-      return this.stateManager.getCurrentState();
-
+      return this.currentState;
     } catch (error) {
       console.error('GPS51LiveDataService: Live data fetch failed:', error);
       throw error;
@@ -64,79 +56,93 @@ export class GPS51LiveDataService {
   }
 
   /**
-   * Start continuous polling for live data updates
+   * Start continuous polling - now delegates to master service
    */
   startPolling(callback?: (data: LiveDataState) => void): void {
-    const pollCallback = async () => {
-      const data = await this.fetchLiveData();
+    const dataCallback = (data: { devices: GPS51Device[]; positions: GPS51Position[]; lastQueryTime: number }) => {
+      this.currentState = {
+        devices: data.devices,
+        positions: data.positions,
+        lastQueryPositionTime: data.lastQueryTime,
+        lastUpdate: new Date()
+      };
+      
       if (callback) {
-        callback(data);
+        callback(this.currentState);
       }
     };
 
-    this.pollingService.startPolling(pollCallback);
+    gps51MasterPollingService.registerSession(
+      this.sessionId,
+      [], // Will be updated when devices are available
+      30000, // 30 second default
+      dataCallback,
+      'normal'
+    );
   }
 
   /**
    * Stop continuous polling
    */
   stopPolling(): void {
-    this.pollingService.stopPolling();
-  }
-
-  /**
-   * Get current live data state
-   */
-  getCurrentState(): LiveDataState {
-    return this.stateManager.getCurrentState();
+    gps51MasterPollingService.unregisterSession(this.sessionId);
   }
 
   /**
    * Update polling interval
    */
   updatePollingInterval(interval: number): void {
-    this.pollingService.updatePollingInterval(interval);
-    
-    if (this.pollingService.isPolling()) {
-      // Restart polling with new interval
-      this.pollingService.stopPolling();
-      this.startPolling();
-    }
+    gps51MasterPollingService.updateSession(this.sessionId, { interval });
   }
 
   /**
    * Get device by ID
    */
   getDeviceById(deviceId: string): GPS51Device | undefined {
-    return this.stateManager.getDeviceById(deviceId);
+    return this.currentState.devices.find(d => d.deviceid === deviceId);
   }
 
   /**
    * Get position by device ID
    */
   getPositionByDeviceId(deviceId: string): GPS51Position | undefined {
-    return this.stateManager.getPositionByDeviceId(deviceId);
+    return this.currentState.positions.find(p => p.deviceid === deviceId);
   }
 
   /**
    * Get devices with their latest positions
    */
   getDevicesWithPositions(): Array<{device: GPS51Device, position?: GPS51Position}> {
-    return this.stateManager.getDevicesWithPositions();
+    return this.currentState.devices.map(device => ({
+      device,
+      position: this.currentState.positions.find(p => p.deviceid === device.deviceid)
+    }));
   }
 
   /**
-   * Get service status information
+   * Get current live data state
+   */
+  getCurrentState(): LiveDataState {
+    return this.currentState;
+  }
+
+  /**
+   * Get service status information - now from master service
    */
   getServiceStatus(): {
     isPolling: boolean;
     retryCount: number;
     stateStats: {totalDevices: number, totalPositions: number, lastUpdate: Date};
   } {
+    const masterStatus = gps51MasterPollingService.getStatus();
     return {
-      isPolling: this.pollingService.isPolling(),
-      retryCount: this.pollingService.getRetryCount(),
-      stateStats: this.stateManager.getStateStats()
+      isPolling: masterStatus.isPolling,
+      retryCount: 0, // Master service handles retries
+      stateStats: {
+        totalDevices: this.currentState.devices.length,
+        totalPositions: this.currentState.positions.length,
+        lastUpdate: this.currentState.lastUpdate
+      }
     };
   }
 
@@ -145,8 +151,12 @@ export class GPS51LiveDataService {
    */
   reset(): void {
     this.stopPolling();
-    this.stateManager.clearState();
-    this.pollingService.resetRetryCount();
+    this.currentState = {
+      devices: [],
+      positions: [],
+      lastQueryPositionTime: 0,
+      lastUpdate: new Date()
+    };
     console.log('GPS51LiveDataService: Service reset completed');
   }
 }
@@ -156,7 +166,3 @@ export const gps51LiveDataService = GPS51LiveDataService.getInstance();
 
 // Re-export enhanced service as primary export
 export { gps51EnhancedSyncService as gps51PrimaryService } from './GPS51EnhancedSyncService';
-
-// Re-export types for convenience
-export type { LiveDataState } from './GPS51StateManager';
-export type { EnhancedLiveDataState } from './GPS51EnhancedStateManager';
