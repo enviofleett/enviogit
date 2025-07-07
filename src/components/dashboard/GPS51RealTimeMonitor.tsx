@@ -17,7 +17,7 @@ import {
   Car
 } from 'lucide-react';
 import { gps51CoordinatorClient } from '@/services/gps51/GPS51CoordinatorClient';
-import { useWebSocketConnection } from '@/hooks/useWebSocketConnection';
+import { useGPS51Data } from '@/hooks/useGPS51Data';
 
 interface RealTimeMonitorProps {
   userId?: string;
@@ -35,20 +35,8 @@ export const GPS51RealTimeMonitor: React.FC<RealTimeMonitorProps> = ({
     cacheHitRate: 0
   });
   const [isMonitoring, setIsMonitoring] = useState(false);
-
-  const { 
-    connected: wsConnected, 
-    connect: wsConnect, 
-    disconnect: wsDisconnect,
-    reconnectAttempts 
-  } = useWebSocketConnection({
-    onPositionUpdate: (vehicleId, position) => {
-      console.log('Real-time position update:', { vehicleId, position });
-    },
-    onConnectionChange: (connected) => {
-      console.log('WebSocket connection changed:', connected);
-    }
-  });
+  
+  const { vehicles, loading, error } = useGPS51Data();
 
   // Update coordinator status periodically
   useEffect(() => {
@@ -99,12 +87,8 @@ export const GPS51RealTimeMonitor: React.FC<RealTimeMonitorProps> = ({
     }
   };
 
-  // Mock strategy counts for display
-  const strategyCounts = {
-    high: 0,
-    medium: 0,
-    low: 0
-  };
+  const activeVehicles = vehicles.filter(v => v.latest_position?.isMoving).length;
+  const successRate = error ? 0 : 100;
 
   return (
     <div className="space-y-6">
@@ -115,15 +99,15 @@ export const GPS51RealTimeMonitor: React.FC<RealTimeMonitorProps> = ({
             <div>
               <CardTitle className="flex items-center space-x-2">
                 <Radio className="w-5 h-5" />
-                <span>GPS51 Real-Time Monitor</span>
+                <span>GPS51 Emergency Monitor</span>
               </CardTitle>
               <CardDescription>
-                Intelligent orchestration and monitoring for GPS51 API interactions
+                Emergency GPS51 monitoring with rate limiting and caching
               </CardDescription>
             </div>
             <div className="flex items-center space-x-2">
-              <Badge variant={wsConnected ? 'default' : 'destructive'}>
-                {wsConnected ? 'WebSocket Connected' : 'WebSocket Disconnected'}
+              <Badge variant={!error ? 'default' : 'destructive'}>
+                {!error ? 'Connected' : 'Error'}
               </Badge>
               {!isMonitoring ? (
                 <Button onClick={handleStartMonitoring} className="flex items-center space-x-2">
@@ -161,11 +145,11 @@ export const GPS51RealTimeMonitor: React.FC<RealTimeMonitorProps> = ({
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
               <AlertTriangle className="w-4 h-4 text-muted-foreground" />
-              <div className="text-sm font-medium">Risk Level</div>
+              <div className="text-sm font-medium">System Status</div>
             </div>
             <div className="mt-2">
-              <Badge variant="default">
-                LOW
+              <Badge variant={error ? 'destructive' : 'default'}>
+                {error ? 'ERROR' : 'OPERATIONAL'}
               </Badge>
             </div>
           </CardContent>
@@ -178,8 +162,8 @@ export const GPS51RealTimeMonitor: React.FC<RealTimeMonitorProps> = ({
               <div className="text-sm font-medium">Success Rate</div>
             </div>
             <div className="mt-2">
-              <div className="text-2xl font-bold">100.0%</div>
-              <Progress value={100} className="mt-1" />
+              <div className="text-2xl font-bold">{successRate.toFixed(1)}%</div>
+              <Progress value={successRate} className="mt-1" />
             </div>
           </CardContent>
         </Card>
@@ -191,9 +175,9 @@ export const GPS51RealTimeMonitor: React.FC<RealTimeMonitorProps> = ({
               <div className="text-sm font-medium">Active Vehicles</div>
             </div>
             <div className="mt-2">
-              <div className="text-2xl font-bold">{coordinatorStatus.queueSize}</div>
+              <div className="text-2xl font-bold">{activeVehicles}</div>
               <div className="text-xs text-muted-foreground">
-                queued requests
+                of {vehicles.length} total
               </div>
             </div>
           </CardContent>
@@ -238,79 +222,45 @@ export const GPS51RealTimeMonitor: React.FC<RealTimeMonitorProps> = ({
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <Users className="w-4 h-4" />
-              <span>Vehicle Polling Strategy</span>
+              <span>Emergency Mode Status</span>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">High Priority</span>
-              <Badge variant="destructive">{strategyCounts.high}</Badge>
+              <span className="text-sm text-muted-foreground">Rate Limiting</span>
+              <Badge variant="default">ACTIVE</Badge>
             </div>
             <Separator />
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Medium Priority</span>
-              <Badge variant="secondary">{strategyCounts.medium}</Badge>
+              <span className="text-sm text-muted-foreground">Batch Requests</span>
+              <Badge variant="default">ENABLED</Badge>
             </div>
             <Separator />
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Low Priority</span>
-              <Badge variant="secondary">{strategyCounts.low}</Badge>
+              <span className="text-sm text-muted-foreground">Caching</span>
+              <Badge variant="default">AGGRESSIVE</Badge>
             </div>
             <Separator />
             <div className="text-xs text-muted-foreground">
-              High: Real-time viewing or moving vehicles (10-15s intervals)<br/>
-              Medium: Dashboard monitoring (30s intervals)<br/>
-              Low: Background/idle vehicles (5min intervals)
+              🚨 Emergency mode: 2s delays, 2min refresh intervals, batch processing
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* WebSocket Status */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Radio className="w-4 h-4" />
-            <span>WebSocket Connection</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                {wsConnected ? (
-                  <CheckCircle className="w-4 h-4 text-success" />
-                ) : (
-                  <AlertTriangle className="w-4 h-4 text-destructive" />
-                )}
-                <span className="text-sm">
-                  {wsConnected ? 'Connected' : 'Disconnected'}
-                </span>
-              </div>
-              {reconnectAttempts > 0 && (
-                <div className="flex items-center space-x-2">
-                  <Clock className="w-4 h-4 text-warning" />
-                  <span className="text-sm text-muted-foreground">
-                    Reconnect attempts: {reconnectAttempts}
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="flex space-x-2">
-              {!wsConnected && (
-                <Button onClick={wsConnect} size="sm" variant="outline">
-                  Reconnect
-                </Button>
-              )}
-              {wsConnected && (
-                <Button onClick={wsDisconnect} size="sm" variant="outline">
-                  Disconnect
-                </Button>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {error && (
+        <Card className="border-destructive">
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2 text-destructive">
+              <AlertTriangle className="w-4 h-4" />
+              <span>System Error</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">{error}</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

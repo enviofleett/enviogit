@@ -437,19 +437,10 @@ export class GPS51OptimizedApiClient {
     durationMs: number,
     errorMessage?: string
   ): Promise<void> {
-    try {
-      await supabase.from('api_calls_monitor').insert({
-        endpoint: `GPS51-Optimized-${endpoint}`,
-        method: 'POST',
-        request_payload: requestPayload,
-        response_status: responseStatus,
-        response_body: responseBody,
-        duration_ms: durationMs,
-        error_message: errorMessage,
-        timestamp: new Date().toISOString()
-      });
-    } catch (logError) {
-      console.warn('Failed to log API call:', logError);
+    // EMERGENCY: Disable API logging to prevent feedback loops
+    // Only critical errors are logged to console
+    if (errorMessage) {
+      console.error(`GPS51-Optimized-${endpoint} failed:`, errorMessage);
     }
   }
 

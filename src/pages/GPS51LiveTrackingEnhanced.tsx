@@ -5,20 +5,36 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { MapPin, Search, Filter, Download, RefreshCw } from 'lucide-react';
-import { useGPS51LiveData, LiveDataOptions } from '@/hooks/useGPS51LiveData';
+import { useGPS51Data } from '@/hooks/useGPS51Data';
 
 const GPS51LiveTrackingEnhanced: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState('all');
 
-  const liveDataOptions: LiveDataOptions = {
-    enabled: true,
-    refreshInterval: 15000, // More frequent updates for live tracking
-    maxRetries: 5
+  const { vehicles, vehiclePositions, loading, error, refresh } = useGPS51Data();
+  
+  // Transform GPS51 data to match expected format
+  const positions = vehiclePositions.map(pos => ({
+    deviceid: pos.vehicle_id,
+    callat: pos.latitude,
+    callon: pos.longitude,
+    speed: pos.speed,
+    moving: pos.isMoving ? 1 : 0,
+    strstatus: pos.status,
+    updatetime: new Date(pos.timestamp).getTime() / 1000,
+    course: pos.heading || 0,
+    altitude: 0,
+    radius: 5
+  }));
+  
+  const metrics = {
+    totalDevices: vehicles.length,
+    activeDevices: vehicles.filter(v => v.latest_position).length,
+    movingVehicles: vehiclePositions.filter(p => p.isMoving).length,
+    parkedDevices: vehiclePositions.filter(p => !p.isMoving).length,
+    offlineVehicles: vehicles.length - vehicles.filter(v => v.latest_position).length
   };
-
-  const { positions, metrics, loading, error, refresh } = useGPS51LiveData(liveDataOptions);
 
   const filteredPositions = positions.filter(position => {
     const matchesSearch = position.deviceid.toLowerCase().includes(searchTerm.toLowerCase());

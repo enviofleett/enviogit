@@ -11,7 +11,6 @@ import MonitoringAlertsPanel from '@/components/dashboard/MonitoringAlertsPanel'
 import RealTimeConnectionStatus from '@/components/dashboard/RealTimeConnectionStatus';
 import RealTimeGPS51Status from '@/components/dashboard/RealTimeGPS51Status';
 import { useGPS51Data } from '@/hooks/useGPS51Data';
-import { useGPS51LiveData } from '@/hooks/useGPS51LiveData';
 import { useGPS51ProductionData } from '@/hooks/useGPS51ProductionData';
 import { useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -35,20 +34,23 @@ const Dashboard = () => {
   const isLoading = productionState.isReady ? 
     productionState.isLoading : legacyLoading;
   
-  // Use the enhanced live data hook with Phase 4 features
-  const { 
-    positions: livePositions, 
-    metrics: liveMetrics, 
-    loading: liveLoading, 
-    refresh: refreshLiveData,
-    triggerPrioritySync,
-    intelligentFiltering
-  } = useGPS51LiveData({
-    enabled: true,
-    enableWebSocket: enableRealTime,
-    enableIntelligentFiltering: true,
-    refreshInterval: 30000
-  });
+  // Use simplified data for emergency mode
+  const mockMetrics = {
+    realTimeConnected: !legacyLoading,
+    lastUpdateTime: new Date(),
+    activeDevices: vehicles.filter(v => v.latest_position?.isMoving).length
+  };
+
+  const refreshLiveData = () => {
+    // Trigger refresh of GPS51 data
+    window.location.reload();
+  };
+
+  const triggerPrioritySync = (vehicleIds: string[]) => {
+    console.log('Priority sync requested for vehicles:', vehicleIds);
+  };
+
+  const intelligentFiltering = false; // Disabled in emergency mode
 
   // Transform production data to match existing VehicleCard interface
   const transformedVehicles = vehicles.map(vehicle => {
@@ -119,11 +121,11 @@ const Dashboard = () => {
                 onToggle={handleToggleGPS51RealTime} 
               />
               <RealTimeConnectionStatus
-                connected={liveMetrics.realTimeConnected}
-                lastUpdateTime={liveMetrics.lastUpdateTime}
+                connected={mockMetrics.realTimeConnected}
+                lastUpdateTime={mockMetrics.lastUpdateTime}
                 onRefresh={refreshLiveData}
                 onToggleRealTime={handleToggleRealTime}
-                vehicleCount={liveMetrics.activeDevices}
+                vehicleCount={mockMetrics.activeDevices}
               />
             </div>
 

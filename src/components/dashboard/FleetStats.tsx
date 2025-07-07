@@ -3,13 +3,9 @@ import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Monitor, Zap, Shield, Settings, MapPin } from 'lucide-react';
 import { useGPS51Data } from '@/hooks/useGPS51Data';
-import { useGPS51LiveData } from '@/hooks/useGPS51LiveData';
 
 const FleetStats = () => {
-  const { vehicles, loading: vehiclesLoading } = useGPS51Data();
-  const { metrics, loading: metricsLoading } = useGPS51LiveData();
-
-  const loading = vehiclesLoading || metricsLoading;
+  const { vehicles, loading } = useGPS51Data();
 
   // Calculate additional stats from vehicle data
   const totalVehicles = vehicles.length;

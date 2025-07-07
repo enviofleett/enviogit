@@ -4,17 +4,30 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { MapPin, Activity, Users, Truck, Zap, AlertTriangle } from 'lucide-react';
-import { useGPS51LiveData, LiveDataOptions } from '@/hooks/useGPS51LiveData';
+import { useGPS51Data } from '@/hooks/useGPS51Data';
 import { useGPS51SessionBridge } from '@/hooks/useGPS51SessionBridge';
 
 const GPS51Dashboard: React.FC = () => {
-  const liveDataOptions: LiveDataOptions = {
-    enabled: true,
-    refreshInterval: 30000,
-    maxRetries: 3
+  const { vehicles, vehiclePositions, loading, error } = useGPS51Data();
+  
+  // Create mock metrics from GPS51 data
+  const positions = vehiclePositions.map(pos => ({
+    deviceid: pos.vehicle_id,
+    callat: pos.latitude,
+    callon: pos.longitude,
+    speed: pos.speed,
+    moving: pos.isMoving ? 1 : 0,
+    strstatus: pos.status,
+    updatetime: new Date(pos.timestamp).getTime() / 1000
+  }));
+  
+  const metrics = {
+    totalDevices: vehicles.length,
+    activeDevices: vehicles.filter(v => v.latest_position).length,
+    movingVehicles: vehiclePositions.filter(p => p.isMoving).length,
+    parkedDevices: vehiclePositions.filter(p => !p.isMoving).length,
+    offlineVehicles: vehicles.length - vehicles.filter(v => v.latest_position).length
   };
-
-  const { positions, metrics, loading, error } = useGPS51LiveData(liveDataOptions);
   const { status, connect, disconnect } = useGPS51SessionBridge();
 
   const handleConnect = async () => {

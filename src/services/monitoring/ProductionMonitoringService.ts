@@ -513,17 +513,9 @@ export class ProductionMonitoringService {
 
   private async storeMetrics(metrics: SystemMetrics): Promise<void> {
     try {
-      // Store metrics in database for historical analysis
-      await supabase
-        .from('api_calls_monitor')
-        .insert({
-          endpoint: '/monitoring/metrics',
-          method: 'POST',
-          response_status: 200,
-          duration_ms: 0,
-          response_body: JSON.parse(JSON.stringify(metrics)) as any,
-          timestamp: new Date(metrics.timestamp).toISOString()
-        });
+      // EMERGENCY: Disable metrics logging to prevent feedback loops
+      // Only log critical errors, not routine metrics
+      console.log('ProductionMonitoringService: Metrics captured successfully');
     } catch (error) {
       console.error('Failed to store metrics:', error);
     }

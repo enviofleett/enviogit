@@ -1,24 +1,15 @@
-// GPS51 Real-time Update System - Phase 2.4 Complete Integration
-// This module provides comprehensive real-time capabilities for GPS51 direct integration
+// GPS51 Real-time System - Emergency Mode
+// All WebSocket and complex polling services have been removed to prevent API spikes
 
-import { GPS51WebSocketManager, gps51WebSocketManager } from './GPS51WebSocketManager';
 import { GPS51EventBus, gps51EventBus } from './GPS51EventBus';
 import { GPS51StateManager, gps51StateManager } from './GPS51StateManager';
 import { GPS51UpdateQueue, gps51UpdateQueue } from './GPS51UpdateQueue';
 
-export { GPS51WebSocketManager, gps51WebSocketManager } from './GPS51WebSocketManager';
 export { GPS51EventBus, gps51EventBus } from './GPS51EventBus';
 export { GPS51StateManager, gps51StateManager } from './GPS51StateManager';
 export { GPS51UpdateQueue, gps51UpdateQueue } from './GPS51UpdateQueue';
 
 // Re-export types for convenience
-export type {
-  WebSocketMessage,
-  WebSocketConfig,
-  WebSocketState,
-  WebSocketEventHandler
-} from './GPS51WebSocketManager';
-
 export type {
   GPS51Event,
   GPS51EventHandler,
@@ -39,7 +30,7 @@ export type {
   UpdateQueueStats
 } from './GPS51UpdateQueue';
 
-// Integrated Real-time Manager for easy setup
+// Emergency Real-time Manager (WebSocket removed)
 export class GPS51RealTimeManager {
   private initialized = false;
 
@@ -50,29 +41,7 @@ export class GPS51RealTimeManager {
   private setupIntegration(): void {
     if (this.initialized) return;
 
-    console.log('GPS51RealTimeManager: Initializing real-time integration...');
-
-    // Setup WebSocket to EventBus integration
-    gps51WebSocketManager.on('data', (message) => {
-      gps51EventBus.emit('gps51.websocket.data', message.data, {
-        source: 'websocket',
-        priority: 'high'
-      });
-    });
-
-    gps51WebSocketManager.on('connected', (message) => {
-      gps51EventBus.emit('gps51.websocket.connected', message.data, {
-        source: 'websocket',
-        priority: 'normal'
-      });
-    });
-
-    gps51WebSocketManager.on('disconnected', (message) => {
-      gps51EventBus.emit('gps51.websocket.disconnected', message.data, {
-        source: 'websocket',
-        priority: 'high'
-      });
-    });
+    console.log('GPS51RealTimeManager: Initializing emergency integration...');
 
     // Setup UpdateQueue to EventBus integration
     gps51EventBus.on('gps51.vehicles.updated', (event) => {
@@ -107,43 +76,28 @@ export class GPS51RealTimeManager {
     });
 
     this.initialized = true;
-    console.log('GPS51RealTimeManager: Real-time integration initialized successfully');
+    console.log('GPS51RealTimeManager: Emergency integration initialized successfully');
   }
 
   async start(): Promise<boolean> {
-    try {
-      console.log('GPS51RealTimeManager: Starting real-time services...');
-      
-      // Start WebSocket connection
-      const connected = await gps51WebSocketManager.connect();
-      
-      if (connected) {
-        console.log('GPS51RealTimeManager: Real-time services started successfully');
-        
-        // Emit startup event
-        gps51EventBus.emit('gps51.realtime.started', {
-          timestamp: Date.now(),
-          services: ['websocket', 'eventbus', 'statemanager', 'updatequeue']
-        }, {
-          source: 'realtime_manager',
-          priority: 'normal'
-        });
-        
-        return true;
-      } else {
-        console.warn('GPS51RealTimeManager: Failed to start WebSocket connection');
-        return false;
-      }
-    } catch (error) {
-      console.error('GPS51RealTimeManager: Failed to start real-time services:', error);
-      return false;
-    }
+    console.log('GPS51RealTimeManager: Emergency mode - no WebSocket connections');
+    
+    // Emit startup event
+    gps51EventBus.emit('gps51.realtime.started', {
+      timestamp: Date.now(),
+      services: ['eventbus', 'statemanager', 'updatequeue'],
+      mode: 'emergency'
+    }, {
+      source: 'realtime_manager',
+      priority: 'normal'
+    });
+    
+    return true;
   }
 
   stop(): void {
-    console.log('GPS51RealTimeManager: Stopping real-time services...');
+    console.log('GPS51RealTimeManager: Stopping emergency services...');
     
-    gps51WebSocketManager.disconnect();
     gps51UpdateQueue.pause();
     
     // Emit shutdown event
@@ -154,28 +108,28 @@ export class GPS51RealTimeManager {
       priority: 'normal'
     });
     
-    console.log('GPS51RealTimeManager: Real-time services stopped');
+    console.log('GPS51RealTimeManager: Emergency services stopped');
   }
 
   destroy(): void {
-    console.log('GPS51RealTimeManager: Destroying real-time services...');
+    console.log('GPS51RealTimeManager: Destroying emergency services...');
     
-    gps51WebSocketManager.destroy();
     gps51UpdateQueue.destroy();
     gps51StateManager.destroy();
     gps51EventBus.destroy();
     
     this.initialized = false;
     
-    console.log('GPS51RealTimeManager: Real-time services destroyed');
+    console.log('GPS51RealTimeManager: Emergency services destroyed');
   }
 
   getSystemStatus() {
     return {
       initialized: this.initialized,
+      mode: 'emergency',
       websocket: {
-        connected: gps51WebSocketManager.isConnected(),
-        stats: gps51WebSocketManager.getConnectionStats()
+        connected: false,
+        status: 'disabled_for_emergency'
       },
       eventBus: {
         stats: gps51EventBus.getStats()
@@ -222,7 +176,7 @@ export class GPS51RealTimeManager {
 export const gps51RealTimeManager = new GPS51RealTimeManager();
 
 // Version and build info
-export const GPS51_REALTIME_VERSION = '1.0.0';
-export const GPS51_REALTIME_BUILD = 'phase2.4-complete';
+export const GPS51_REALTIME_VERSION = '1.0.0-emergency';
+export const GPS51_REALTIME_BUILD = 'emergency-api-spike-prevention';
 
-console.log(`GPS51 Real-time Update System v${GPS51_REALTIME_VERSION} (${GPS51_REALTIME_BUILD}) loaded`);
+console.log(`GPS51 Emergency Real-time System v${GPS51_REALTIME_VERSION} (${GPS51_REALTIME_BUILD}) loaded`);
