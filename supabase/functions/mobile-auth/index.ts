@@ -41,7 +41,7 @@ const secureHandler = async (req: Request): Promise<Response> => {
       deviceInfo
     });
 
-    // Authenticate with GPS51 via proxy
+    // Authenticate with GPS51 via proxy (GPS51-first approach)
     const { data: proxyResponse, error: proxyError } = await supabaseClient.functions.invoke('gps51-proxy', {
       body: {
         action: 'login',
@@ -76,8 +76,8 @@ const secureHandler = async (req: Request): Promise<Response> => {
       hasUser: !!proxyResponse.user
     });
 
-    // Get user profile from Supabase
-    const { data: userProfile, error: profileError } = await supabaseClient
+    // Try to get existing user profile, create if doesn't exist
+    let { data: userProfile, error: profileError } = await supabaseClient
       .from('profiles')
       .select(`
         *,
@@ -87,11 +87,49 @@ const secureHandler = async (req: Request): Promise<Response> => {
         )
       `)
       .eq('email', email)
-      .single();
+      .maybeSingle();
 
-    if (profileError) {
-      console.error('User profile not found:', profileError);
-      throw new Error('User profile not found. Please register first.');
+    // If profile doesn't exist, create it for GPS51-only account
+    if (!userProfile && !profileError) {
+      console.log('Creating new profile for GPS51-only account:', email);
+      
+      // Create profile from GPS51 user data
+      const { data: newProfile, error: createError } = await supabaseClient
+        .from('profiles')
+        .insert({
+          email: email,
+          name: proxyResponse.user?.username || email.split('@')[0],
+          role: 'user',
+          status: 'active'
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Failed to create user profile:', createError);
+        // Continue anyway - GPS51 auth was successful
+        userProfile = {
+          id: crypto.randomUUID(),
+          email: email,
+          name: proxyResponse.user?.username || email.split('@')[0],
+          role: 'user',
+          status: 'active',
+          user_subscriptions: []
+        };
+      } else {
+        userProfile = newProfile;
+      }
+    } else if (profileError) {
+      console.error('Error fetching user profile:', profileError);
+      // Create minimal profile for GPS51-only account
+      userProfile = {
+        id: crypto.randomUUID(),
+        email: email,
+        name: proxyResponse.user?.username || email.split('@')[0],
+        role: 'user',
+        status: 'active',
+        user_subscriptions: []
+      };
     }
 
     // Get user's vehicles

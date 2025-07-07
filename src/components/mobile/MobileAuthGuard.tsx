@@ -28,46 +28,40 @@ export function MobileAuthGuard({ onAuthenticated }: MobileAuthGuardProps) {
 
     try {
       if (isLogin) {
-        // Login flow
-        const { data: authResult, error } = await supabase.auth.signInWithPassword({
-          email: formData.email,
-          password: formData.password
+        // GPS51-first authentication - skip Supabase auth
+        const { data: gps51Auth, error } = await supabase.functions.invoke('mobile-auth', {
+          body: {
+            email: formData.email,
+            password: formData.password,
+            deviceInfo: {
+              platform: 'web',
+              deviceId: 'mobile-web-app',
+              appVersion: '1.0.0'
+            }
+          }
         });
 
-        if (error) throw error;
+        if (error) {
+          throw new Error(error.message || 'Authentication failed');
+        }
 
-        if (authResult.session?.user) {
-          // Authenticate with GPS51
-          const { data: gps51Auth } = await supabase.functions.invoke('mobile-auth', {
-            body: {
-              email: formData.email,
-              password: formData.password,
-              deviceInfo: {
-                platform: 'web',
-                deviceId: 'mobile-web-app',
-                appVersion: '1.0.0'
-              }
-            }
+        if (gps51Auth?.success) {
+          onAuthenticated({
+            user: gps51Auth.user,
+            gps51Token: gps51Auth.auth.gps51Token,
+            subscription: gps51Auth.subscription,
+            vehicles: gps51Auth.vehicles
           });
-
-          if (gps51Auth?.success) {
-            onAuthenticated({
-              user: gps51Auth.user,
-              gps51Token: gps51Auth.auth.gps51Token,
-              subscription: gps51Auth.subscription,
-              vehicles: gps51Auth.vehicles
-            });
-            
-            toast({
-              title: "Login Successful",
-              description: `Welcome back, ${gps51Auth.user.name}!`
-            });
-          } else {
-            throw new Error(gps51Auth?.error || 'GPS51 authentication failed');
-          }
+          
+          toast({
+            title: "Login Successful",
+            description: `Welcome back, ${gps51Auth.user.name}!`
+          });
+        } else {
+          throw new Error(gps51Auth?.error || 'GPS51 authentication failed');
         }
       } else {
-        // Registration flow
+        // Registration flow - create Supabase account first
         if (formData.password !== formData.confirmPassword) {
           throw new Error('Passwords do not match');
         }
