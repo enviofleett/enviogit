@@ -26,60 +26,82 @@ const Settings = () => {
       </div>
       
       <Tabs defaultValue="emergency" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-13">
-          <TabsTrigger value="emergency" className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-red-500" />
-            EMERGENCY
-          </TabsTrigger>
-          <TabsTrigger value="gps51-health" className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4" />
-            GPS51 Health
-          </TabsTrigger>
-          <TabsTrigger value="monitoring" className="flex items-center gap-2">
-            <Activity className="h-4 w-4" />
-            Monitor
-          </TabsTrigger>
-          <TabsTrigger value="readiness" className="flex items-center gap-2">
-            <Shield className="h-4 w-4" />
-            Readiness
-          </TabsTrigger>
-          <TabsTrigger value="marketplace" className="flex items-center gap-2">
-            <Store className="h-4 w-4" />
-            Marketplace
-          </TabsTrigger>
-          <TabsTrigger value="security" className="flex items-center gap-2">
-            <Lock className="h-4 w-4" />
-            Security
-          </TabsTrigger>
-          <TabsTrigger value="mobile" className="flex items-center gap-2">
-            <Smartphone className="h-4 w-4" />
-            Mobile
-          </TabsTrigger>
-          <TabsTrigger value="subscriptions" className="flex items-center gap-2">
-            <Package className="h-4 w-4" />
-            Subscriptions
-          </TabsTrigger>
-          <TabsTrigger value="credentials" className="flex items-center gap-2">
-            <Key className="h-4 w-4" />
-            API Keys
-          </TabsTrigger>
-          <TabsTrigger value="gps51" className="flex items-center gap-2">
-            <SettingsIcon className="h-4 w-4" />
-            GPS51
-          </TabsTrigger>
-          <TabsTrigger value="email" className="flex items-center gap-2">
-            <Mail className="h-4 w-4" />
-            Email
-          </TabsTrigger>
-          <TabsTrigger value="partners" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            Partners
-          </TabsTrigger>
-          <TabsTrigger value="chatbot" className="flex items-center gap-2">
-            <Brain className="h-4 w-4" />
-            AI Chatbot
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex flex-col space-y-2">
+          <TabsList className="grid w-full grid-cols-6 lg:grid-cols-7">
+            <TabsTrigger value="emergency" className="flex items-center gap-1 text-xs">
+              <AlertTriangle className="h-3 w-3 text-red-500" />
+              <span className="hidden sm:inline">EMERGENCY</span>
+              <span className="sm:hidden">EMG</span>
+            </TabsTrigger>
+            <TabsTrigger value="gps51-health" className="flex items-center gap-1 text-xs">
+              <AlertTriangle className="h-3 w-3" />
+              <span className="hidden sm:inline">GPS51 Health</span>
+              <span className="sm:hidden">Health</span>
+            </TabsTrigger>
+            <TabsTrigger value="monitoring" className="flex items-center gap-1 text-xs">
+              <Activity className="h-3 w-3" />
+              <span className="hidden sm:inline">Monitor</span>
+              <span className="sm:hidden">Mon</span>
+            </TabsTrigger>
+            <TabsTrigger value="readiness" className="flex items-center gap-1 text-xs">
+              <Shield className="h-3 w-3" />
+              <span className="hidden sm:inline">Readiness</span>
+              <span className="sm:hidden">Ready</span>
+            </TabsTrigger>
+            <TabsTrigger value="marketplace" className="flex items-center gap-1 text-xs">
+              <Store className="h-3 w-3" />
+              <span className="hidden sm:inline">Marketplace</span>
+              <span className="sm:hidden">Store</span>
+            </TabsTrigger>
+            <TabsTrigger value="security" className="flex items-center gap-1 text-xs">
+              <Lock className="h-3 w-3" />
+              <span className="hidden sm:inline">Security</span>
+              <span className="sm:hidden">Sec</span>
+            </TabsTrigger>
+            <TabsTrigger value="gps51" className="flex items-center gap-1 text-xs lg:hidden">
+              <SettingsIcon className="h-3 w-3" />
+              <span className="hidden sm:inline">GPS51</span>
+              <span className="sm:hidden">GPS</span>
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsList className="grid w-full grid-cols-6">
+            <TabsTrigger value="mobile" className="flex items-center gap-1 text-xs">
+              <Smartphone className="h-3 w-3" />
+              <span className="hidden sm:inline">Mobile</span>
+              <span className="sm:hidden">Mob</span>
+            </TabsTrigger>
+            <TabsTrigger value="subscriptions" className="flex items-center gap-1 text-xs">
+              <Package className="h-3 w-3" />
+              <span className="hidden sm:inline">Subscriptions</span>
+              <span className="sm:hidden">Subs</span>
+            </TabsTrigger>
+            <TabsTrigger value="credentials" className="flex items-center gap-1 text-xs">
+              <Key className="h-3 w-3" />
+              <span className="hidden sm:inline">API Keys</span>
+              <span className="sm:hidden">API</span>
+            </TabsTrigger>
+            <TabsTrigger value="gps51" className="hidden lg:flex items-center gap-1 text-xs">
+              <SettingsIcon className="h-3 w-3" />
+              <span>GPS51</span>
+            </TabsTrigger>
+            <TabsTrigger value="email" className="flex items-center gap-1 text-xs">
+              <Mail className="h-3 w-3" />
+              <span className="hidden sm:inline">Email</span>
+              <span className="sm:hidden">Mail</span>
+            </TabsTrigger>
+            <TabsTrigger value="partners" className="flex items-center gap-1 text-xs">
+              <Users className="h-3 w-3" />
+              <span className="hidden sm:inline">Partners</span>
+              <span className="sm:hidden">Part</span>
+            </TabsTrigger>
+            <TabsTrigger value="chatbot" className="flex items-center gap-1 text-xs">
+              <Brain className="h-3 w-3" />
+              <span className="hidden sm:inline">AI Chatbot</span>
+              <span className="sm:hidden">AI</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
         
         <TabsContent value="emergency">
           <GPS51EmergencyControls />
