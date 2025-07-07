@@ -85,6 +85,12 @@ export class ProductionMonitoringService {
 
     const config = getEnvironmentConfig();
     
+    // EMERGENCY SPIKE ELIMINATION: Disable monitoring to stop API call floods
+    console.log('ProductionMonitoringService: EMERGENCY MODE - Monitoring disabled to prevent API spikes');
+    return;
+
+    // Original monitoring code disabled for emergency spike elimination
+    /*
     if (!config.monitoring.enabled) {
       console.log('ProductionMonitoringService: Monitoring disabled in current environment');
       return;
@@ -103,6 +109,7 @@ export class ProductionMonitoringService {
 
     this.isInitialized = true;
     console.log('ProductionMonitoringService: Production monitoring initialized');
+    */
   }
 
   private async startMetricsCollection(): Promise<void> {
@@ -112,15 +119,17 @@ export class ProductionMonitoringService {
       clearInterval(this.monitoringInterval);
     }
 
-    this.monitoringInterval = setInterval(async () => {
-      try {
-        const metrics = await this.collectSystemMetrics();
-        this.processMetrics(metrics);
-        await this.storeMetrics(metrics);
-      } catch (error) {
-        console.error('ProductionMonitoringService: Failed to collect metrics:', error);
-      }
-    }, config.monitoring.metricsCollectionInterval);
+    // EMERGENCY SPIKE ELIMINATION: Disable metrics collection interval
+    // this.monitoringInterval = setInterval(async () => {
+    //   try {
+    //     const metrics = await this.collectSystemMetrics();
+    //     this.processMetrics(metrics);
+    //     await this.storeMetrics(metrics);
+    //   } catch (error) {
+    //     console.error('ProductionMonitoringService: Failed to collect metrics:', error);
+    //   }
+    // }, config.monitoring.metricsCollectionInterval);
+    console.log('ProductionMonitoringService: Metrics collection disabled for emergency spike elimination');
 
     // Collect initial metrics
     const metrics = await this.collectSystemMetrics();

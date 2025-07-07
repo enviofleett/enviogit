@@ -71,21 +71,20 @@ serve(async (req) => {
         console.warn(`GPS51 Rate Limiter: Unknown action '${action}', defaulting to check_limits`);
         return handleCheckLimits();
     }
-  } catch (error) {
-    console.error('GPS51 Rate Limiter critical error:', error);
-    
-    // Return a safe fallback response that allows requests but logs the error
-    return new Response(
-      JSON.stringify({ 
-        shouldAllow: true,
-        reason: 'rate_limiter_error',
-        waitTime: 0,
-        message: 'Rate limiter error, allowing request as fallback',
-        error: error.message
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
+    } catch (error) {
+      console.error('GPS51 Rate Limiter critical error:', error);
+      
+      // EMERGENCY SPIKE ELIMINATION: Always allow requests and minimize logging
+      return new Response(
+        JSON.stringify({ 
+          shouldAllow: true,
+          reason: 'emergency_mode',
+          waitTime: 0,
+          message: 'Emergency mode: Rate limiter disabled to prevent spikes'
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 });
 
 async function handleCheckLimits(): Promise<Response> {

@@ -59,10 +59,11 @@ export class GPS51CoordinatorClient {
 
   private async executeRequest(request: CoordinatorRequest): Promise<CoordinatorResponse> {
     try {
-      console.log('GPS51CoordinatorClient: Sending request to coordinator:', {
-        action: request.action,
-        priority: request.priority || 'normal'
-      });
+      // EMERGENCY SPIKE ELIMINATION: Reduce logging to prevent API monitoring spikes
+      // console.log('GPS51CoordinatorClient: Sending request to coordinator:', {
+      //   action: request.action,
+      //   priority: request.priority || 'normal'
+      // });
 
       const { data, error } = await supabase.functions.invoke('gps51-coordinator', {
         body: {
