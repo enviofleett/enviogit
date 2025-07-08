@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { gps51CoordinatorClient } from '@/services/gps51/GPS51CoordinatorClient';
-import { GPS51Device, GPS51Position } from '@/services/gps51/types';
+import { gps51UnifiedLiveDataService, GPS51Vehicle, GPS51Position } from '@/services/gps51/GPS51UnifiedLiveDataService';
+import { GPS51Device } from '@/services/gps51/types';
 
 export interface GPS51UnifiedDataState {
-  devices: GPS51Device[];
+  devices: GPS51Vehicle[];
   positions: GPS51Position[];
   isLoading: boolean;
   error: string | null;
@@ -43,11 +43,8 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
     try {
       setState(prev => ({ ...prev, isLoading: true, error: null }));
 
-      // Direct lastposition API call with lastquerypositiontime
-      const result = await gps51CoordinatorClient.getRealtimePositions(
-        deviceIds || [],
-        lastQueryTime
-      );
+      // Use unified service instead of coordinator client
+      const result = await gps51UnifiedLiveDataService.fetchLivePositions(deviceIds);
 
       setState(prev => ({
         ...prev,
@@ -108,11 +105,9 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
     try {
       setState(prev => ({ ...prev, isLoading: true, error: null }));
 
-      // Fetch devices and positions
-      const [devices, positionsResult] = await Promise.all([
-        gps51CoordinatorClient.getDeviceList(),
-        gps51CoordinatorClient.getRealtimePositions([], 0) // Get all current data
-      ]);
+      // Fetch devices and positions using unified service
+      const devices = await gps51UnifiedLiveDataService.fetchUserDevices();
+      const positionsResult = await gps51UnifiedLiveDataService.fetchLivePositions();
 
       setState(prev => ({
         ...prev,
@@ -144,16 +139,16 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
     try {
       setState(prev => ({ ...prev, isLoading: true, error: null }));
 
-      // Check coordinator status
-      const status = await gps51CoordinatorClient.getCoordinatorStatus();
+      // Check unified service authentication status
+      const authState = gps51UnifiedLiveDataService.getAuthState();
       
       setState(prev => ({
         ...prev,
-        isAuthenticated: !status.circuitBreakerOpen,
+        isAuthenticated: authState.isAuthenticated,
         isLoading: false
       }));
 
-      return !status.circuitBreakerOpen;
+      return authState.isAuthenticated;
     } catch (error) {
       setState(prev => ({
         ...prev,

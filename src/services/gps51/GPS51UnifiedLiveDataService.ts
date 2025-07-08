@@ -23,16 +23,27 @@ export interface GPS51Vehicle {
 
 export interface GPS51Position {
   deviceid: string;
+  devicetime: number;
+  arrivedtime?: number;
+  updatetime: number;
   callat: number; // latitude
   callon: number; // longitude
-  speed: number;
-  course: number;
-  updatetime: number;
-  strstatusen: string; // English status
-  stralarmen: string; // English alarm
-  moving: number; // 1 = moving, 0 = stopped
   altitude: number;
   radius: number;
+  speed: number;
+  course: number;
+  totaldistance: number;
+  status: number;
+  moving: number; // 1 = moving, 0 = stopped
+  strstatus: string;
+  strstatusen: string; // English status
+  alarm?: number;
+  stralarm?: string;
+  stralarmen: string; // English alarm
+  totaloil?: number;
+  temp1?: number;
+  temp2?: number;
+  voltagepercent?: number;
 }
 
 export interface LiveDataResult {
@@ -198,16 +209,27 @@ export class GPS51UnifiedLiveDataService {
       // Extract positions from response
       const positions: GPS51Position[] = (positionResponse.records || []).map((record: any) => ({
         deviceid: record.deviceid,
+        devicetime: record.devicetime || record.updatetime || 0,
+        arrivedtime: record.arrivedtime,
+        updatetime: record.updatetime || 0,
         callat: record.callat || 0,
         callon: record.callon || 0,
+        altitude: record.altitude || 0,
+        radius: record.radius || 5,
         speed: record.speed || 0,
         course: record.course || 0,
-        updatetime: record.updatetime || 0,
-        strstatusen: record.strstatusen || 'Unknown',
-        stralarmen: record.stralarmen || 'No alarm',
+        totaldistance: record.totaldistance || 0,
+        status: record.status || 0,
         moving: record.moving || 0,
-        altitude: record.altitude || 0,
-        radius: record.radius || 5
+        strstatus: record.strstatus || record.strstatusen || 'Unknown',
+        strstatusen: record.strstatusen || 'Unknown',
+        alarm: record.alarm,
+        stralarm: record.stralarm,
+        stralarmen: record.stralarmen || 'No alarm',
+        totaloil: record.totaloil,
+        temp1: record.temp1,
+        temp2: record.temp2,
+        voltagepercent: record.voltagepercent
       }));
 
       // Update vehicles with position data

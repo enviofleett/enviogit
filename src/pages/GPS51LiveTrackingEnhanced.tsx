@@ -13,7 +13,7 @@ const GPS51LiveTrackingEnhanced: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('all');
 
   const { state, actions } = useGPS51LiveData({
-    autoStart: true,
+    autoStart: false, // Don't auto-start until authentication is handled
     enableSmartPolling: true
   });
 
@@ -196,7 +196,11 @@ const GPS51LiveTrackingEnhanced: React.FC = () => {
         <CardContent>
           {error && (
             <div className="text-red-600 p-4 bg-red-50 rounded-lg mb-4">
-              Error: {error}
+              <div className="font-medium">Connection Error</div>
+              <div className="text-sm mt-1">{error}</div>
+              <div className="text-xs mt-2 text-red-500">
+                Check GPS51 credentials in Settings or try refreshing the connection
+              </div>
             </div>
           )}
 

@@ -1,6 +1,6 @@
 
 import { GPS51Device, GPS51Position } from './types';
-import { gps51CoordinatorClient } from './GPS51CoordinatorClient';
+import { gps51UnifiedLiveDataService, GPS51Position as UnifiedGPS51Position } from './GPS51UnifiedLiveDataService';
 
 export interface LiveDataServiceOptions {
   pollingInterval?: number;
@@ -39,14 +39,14 @@ export class GPS51LiveDataService {
   }
 
   /**
-   * Direct API call using coordinator client
+   * Direct API call using unified service
    */
   async fetchLiveData(): Promise<LiveDataState> {
     try {
-      console.log('GPS51LiveDataService: Direct coordinator call');
+      console.log('GPS51LiveDataService: Direct unified service call');
       
-      // Direct call to coordinator for positions
-      const result = await gps51CoordinatorClient.getRealtimePositions([], this.currentState.lastQueryPositionTime);
+      // Direct call to unified service for positions
+      const result = await gps51UnifiedLiveDataService.fetchLivePositions();
       
       this.currentState = {
         devices: this.currentState.devices,
@@ -90,22 +90,22 @@ export class GPS51LiveDataService {
     return this.currentState.devices.find(d => d.deviceid === deviceId);
   }
 
-  /**
-   * Get position by device ID
-   */
-  getPositionByDeviceId(deviceId: string): GPS51Position | undefined {
-    return this.currentState.positions.find(p => p.deviceid === deviceId);
-  }
+   /**
+    * Get position by device ID
+    */
+   getPositionByDeviceId(deviceId: string): GPS51Position | undefined {
+     return this.currentState.positions.find(p => p.deviceid === deviceId);
+   }
 
-  /**
-   * Get devices with their latest positions
-   */
-  getDevicesWithPositions(): Array<{device: GPS51Device, position?: GPS51Position}> {
-    return this.currentState.devices.map(device => ({
-      device,
-      position: this.currentState.positions.find(p => p.deviceid === device.deviceid)
-    }));
-  }
+   /**
+    * Get devices with their latest positions
+    */
+   getDevicesWithPositions(): Array<{device: GPS51Device, position?: GPS51Position}> {
+     return this.currentState.devices.map(device => ({
+       device,
+       position: this.currentState.positions.find(p => p.deviceid === device.deviceid)
+     }));
+   }
 
   /**
    * Get current live data state
