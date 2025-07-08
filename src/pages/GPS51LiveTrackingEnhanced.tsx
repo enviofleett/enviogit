@@ -5,54 +5,56 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { MapPin, Search, Filter, Download, RefreshCw } from 'lucide-react';
-import { useGPS51LiveTracking } from '@/hooks/useGPS51LiveTracking';
+import { useGPS51LiveData } from '@/hooks/useGPS51LiveData';
 
 const GPS51LiveTrackingEnhanced: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState('all');
 
+  const { state, actions } = useGPS51LiveData({
+    autoStart: true,
+    enableSmartPolling: true
+  });
+
   const {
     vehicles,
+    positions,
     isLoading,
     error,
-    refreshNow,
-    activeVehicleCount,
-    movingVehicleCount,
-    offlineVehicleCount,
-    parkedVehicleCount,
-    movingVehicles,
-    parkedVehicles,
-    offlineVehicles
-  } = useGPS51LiveTracking({
-    autoStart: true,
-    baseInterval: 30000,
-    adaptiveRefresh: true
-  });
+    isPolling,
+    lastUpdate,
+    pollingInterval
+  } = state;
   
-  // Transform GPS51 live data to expected format
-  const positions = vehicles.map(vehicle => ({
-    deviceid: vehicle.device.deviceid,
+  // Transform GPS51 live data to expected format for UI compatibility
+  const transformedPositions = vehicles.map(vehicle => ({
+    deviceid: vehicle.deviceid,
     callat: vehicle.position?.callat || 0,
     callon: vehicle.position?.callon || 0,
     speed: vehicle.speed,
     moving: vehicle.isMoving ? 1 : 0,
     strstatus: vehicle.status,
-    updatetime: vehicle.lastUpdate / 1000,
+    updatetime: vehicle.lastUpdate.getTime() / 1000,
     course: vehicle.position?.course || 0,
     altitude: vehicle.position?.altitude || 0,
     radius: 5
   }));
   
+  // Calculate metrics from current vehicles
+  const movingVehicles = vehicles.filter(v => v.isMoving);
+  const parkedVehicles = vehicles.filter(v => !v.isMoving && v.status !== 'offline');
+  const offlineVehicles = vehicles.filter(v => v.status === 'offline');
+  
   const metrics = {
     totalDevices: vehicles.length,
-    activeDevices: activeVehicleCount,
-    movingVehicles: movingVehicleCount,
-    parkedDevices: parkedVehicleCount,
-    offlineVehicles: offlineVehicleCount
+    activeDevices: vehicles.filter(v => v.status !== 'offline').length,
+    movingVehicles: movingVehicles.length,
+    parkedDevices: parkedVehicles.length,
+    offlineVehicles: offlineVehicles.length
   };
 
-  const filteredPositions = positions.filter(position => {
+  const filteredPositions = transformedPositions.filter(position => {
     const matchesSearch = position.deviceid.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = filterStatus === 'all' || 
       (filterStatus === 'moving' && position.moving === 1) ||
@@ -82,9 +84,16 @@ const GPS51LiveTrackingEnhanced: React.FC = () => {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900">GPS51 Live Tracking</h1>
         <div className="flex items-center space-x-2">
-          <Button onClick={refreshNow} variant="outline" size="sm" disabled={isLoading}>
+          <Button onClick={actions.refreshData} variant="outline" size="sm" disabled={isLoading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
+          </Button>
+          <Button 
+            onClick={isPolling ? actions.stopPolling : () => actions.startPolling()} 
+            variant={isPolling ? "destructive" : "default"} 
+            size="sm"
+          >
+            {isPolling ? 'Stop Live' : 'Start Live'}
           </Button>
           <Button variant="outline" size="sm">
             <Download className="h-4 w-4 mr-2" />
@@ -172,8 +181,16 @@ const GPS51LiveTrackingEnhanced: React.FC = () => {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            <span>Live Device Positions ({filteredPositions.length})</span>
-            {isLoading && <RefreshCw className="h-4 w-4 animate-spin" />}
+            <div className="flex items-center space-x-4">
+              <span>Live Device Positions ({filteredPositions.length})</span>
+              {isPolling && <Badge variant="default" className="bg-green-500">LIVE</Badge>}
+            </div>
+            <div className="flex items-center space-x-2">
+              {isLoading && <RefreshCw className="h-4 w-4 animate-spin" />}
+              <span className="text-sm text-gray-500">
+                Interval: {pollingInterval/1000}s
+              </span>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -199,9 +216,9 @@ const GPS51LiveTrackingEnhanced: React.FC = () => {
                     }`}></div>
                     <div>
                       <p className="font-medium">Device {position.deviceid}</p>
-                      <p className="text-sm text-gray-500">
-                        Last Update: {formatTimestamp(position.updatetime)}
-                      </p>
+                  <p className="text-sm text-gray-500">
+                    Last Update: {formatTimestamp(position.updatetime * 1000)}
+                  </p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-4">
