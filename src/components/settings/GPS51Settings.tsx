@@ -14,6 +14,7 @@ import { GPS51ConnectivityDiagnostics } from './GPS51ConnectivityDiagnostics';
 import { GPS51AuthDiagnosticsPanel } from './GPS51AuthDiagnosticsPanel';
 import { GPS51EmergencyRecoveryPanel } from './GPS51EmergencyRecoveryPanel';
 import { GPS51EmergencyControls } from './GPS51EmergencyControls';
+import { GPS51AuthDiagnostics } from '../debug/GPS51AuthDiagnostics';
 
 export const GPS51Settings = () => {
   return (
@@ -75,6 +76,7 @@ export const GPS51Settings = () => {
 
         <TabsContent value="debug">
           <div className="space-y-6">
+            <GPS51AuthDiagnostics />
             <GPS51AuthDiagnosticsPanel />
             <GPS51SupabaseSecretsTest />
             <GPS51DeviceRecoveryTool />

@@ -111,12 +111,25 @@ export class GPS51ProductionService {
    * Single source of truth for authentication
    */
   async authenticate(username: string, password: string): Promise<GPS51AuthState> {
+    const startTime = Date.now();
+    
     try {
-      console.log('GPS51ProductionService: Starting authentication for', username);
+      console.log('GPS51ProductionService: Starting authentication for', username, {
+        apiUrl: this.apiUrl,
+        timestamp: new Date().toISOString()
+      });
       
-      // Validate credentials format
+      // Enhanced credential validation
       if (!username || !password) {
         throw new Error('Username and password are required');
+      }
+
+      if (!username.includes('@')) {
+        throw new Error('Username must be a valid email address');
+      }
+
+      if (password.length < 6) {
+        throw new Error('Password must be at least 6 characters');
       }
 
       // Use performance optimizer for rate limiting and retry logic
@@ -129,12 +142,19 @@ export class GPS51ProductionService {
           }
         }
 
-        // Call GPS51 login API through Edge Function
-        const { supabase } = await import('@/integrations/supabase/client');
-        
         // Ensure password is MD5 hashed
         const { GPS51Utils } = await import('./GPS51Utils');
         const hashedPassword = await GPS51Utils.ensureMD5Hash(password);
+        
+        console.log('GPS51ProductionService: Calling Edge Function with validated credentials:', {
+          username,
+          hashedPasswordLength: hashedPassword.length,
+          isPasswordMD5: /^[a-f0-9]{32}$/i.test(hashedPassword),
+          apiUrl: this.apiUrl
+        });
+
+        // Call GPS51 login API through Edge Function
+        const { supabase } = await import('@/integrations/supabase/client');
         
         const { data, error } = await supabase.functions.invoke('gps51-auth', {
           body: {
@@ -144,27 +164,59 @@ export class GPS51ProductionService {
           }
         });
 
+        const processingTime = Date.now() - startTime;
+
+        // Enhanced error handling with detailed logging
         if (error) {
+          console.error('GPS51ProductionService: Edge Function invocation error:', {
+            error: error.message,
+            processingTime,
+            username
+          });
           throw new Error(`Edge Function error: ${error.message}`);
         }
 
-        if (!data || !data.success) {
-          const errorMsg = data?.error || 'Authentication failed - invalid response from server';
+        if (!data) {
+          console.error('GPS51ProductionService: No response from Edge Function:', {
+            processingTime,
+            username
+          });
+          throw new Error('No response from authentication service');
+        }
+
+        console.log('GPS51ProductionService: Edge Function response received:', {
+          success: data.success,
+          hasToken: !!data.access_token,
+          hasUser: !!data.user,
+          gps51Status: data.gps51_status,
+          requestId: data.request_id,
+          processingTime
+        });
+
+        if (!data.success) {
+          const errorMsg = data.error || 'Authentication failed - invalid response from server';
+          console.error('GPS51ProductionService: Authentication failed:', {
+            error: errorMsg,
+            errorCode: data.error_code,
+            requestId: data.request_id,
+            processingTime
+          });
           throw new Error(errorMsg);
         }
 
-      return data;
+        return data;
       });
 
-      // Update authentication state
+      // Update authentication state with enhanced logging
       this.authState = {
         isAuthenticated: true,
         token: result.access_token || result.token,
         username
       };
 
-      // Store username for other services
+      // Store credentials for session persistence
       localStorage.setItem('gps51_username', username);
+      localStorage.setItem('gps51_last_auth_success', new Date().toISOString());
       
       // Initialize user profile and polling
       await this.initializeUserProfile(username, result);
@@ -172,11 +224,20 @@ export class GPS51ProductionService {
       // Notify auth sync
       gps51SimpleAuthSync.notifyAuthSuccess(username);
 
-      console.log('GPS51ProductionService: Authentication successful');
+      const totalTime = Date.now() - startTime;
+      console.log('GPS51ProductionService: Authentication completed successfully:', {
+        username,
+        totalProcessingTime: totalTime,
+        hasToken: !!this.authState.token,
+        tokenLength: this.authState.token?.length
+      });
+      
       return this.authState;
 
     } catch (error) {
+      const totalTime = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
+      
       this.authState = {
         isAuthenticated: false,
         token: null,
@@ -184,11 +245,23 @@ export class GPS51ProductionService {
         error: errorMessage
       };
 
+      // Store failed attempt for analysis
+      localStorage.setItem('gps51_last_auth_error', JSON.stringify({
+        error: errorMessage,
+        timestamp: new Date().toISOString(),
+        username,
+        processingTime: totalTime
+      }));
+
       console.error('GPS51ProductionService: Authentication failed:', {
         error: errorMessage,
+        username,
         hasCredentials: !!username,
-        apiUrl: this.apiUrl
+        apiUrl: this.apiUrl,
+        totalProcessingTime: totalTime,
+        retryCount: this.retryCount
       });
+      
       throw new Error(errorMessage);
     }
   }
