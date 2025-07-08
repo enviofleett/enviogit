@@ -2,7 +2,8 @@
 import { GPS51LiveDataService, gps51LiveDataService } from './GPS51LiveDataService';
 import { GPS51ConnectionService } from './GPS51ConnectionService';
 import { supabase } from '@/integrations/supabase/client';
-import { gps51ConfigService } from '../gp51/GPS51ConfigService';
+import { gps51UnifiedService } from './unified/GPS51UnifiedService';
+import { GPS51ConfigStorage } from './configStorage';
 
 export class GPS51RealTimeActivationService {
   private liveDataService: GPS51LiveDataService;
@@ -34,9 +35,23 @@ export class GPS51RealTimeActivationService {
       console.log('🚀 GPS51 Real-Time Activation Service: Starting system activation...');
       
       // 1. Verify GPS51 configuration and authentication
-      const isConfigured = gps51ConfigService.isConfigured();
+      const isConfigured = GPS51ConfigStorage.isConfigured();
       if (!isConfigured) {
         throw new Error('GPS51 not configured. Please set up GPS51 credentials first.');
+      }
+
+      // Ensure authentication is active
+      if (!gps51UnifiedService.getAuthState().isAuthenticated) {
+        console.log('GPS51RealTimeActivationService: Attempting authentication...');
+        const config = GPS51ConfigStorage.getConfiguration();
+        if (config) {
+          const authResult = await gps51UnifiedService.authenticate(config.username, config.password);
+          if (!authResult.isAuthenticated) {
+            throw new Error(`Authentication failed: ${authResult.error}`);
+          }
+        } else {
+          throw new Error('GPS51 credentials not found');
+        }
       }
 
       // 2. Get total vehicle count from database

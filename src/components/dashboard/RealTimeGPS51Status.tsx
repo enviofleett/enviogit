@@ -2,8 +2,8 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Wifi, WifiOff, RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
-import { useGPS51Data } from '@/hooks/useGPS51Data';
+import { Wifi, WifiOff, RefreshCw, AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react';
+import { useGPS51UnifiedAuth } from '@/hooks/useGPS51UnifiedAuth';
 
 interface RealTimeGPS51StatusProps {
   enabled: boolean;
@@ -11,24 +11,24 @@ interface RealTimeGPS51StatusProps {
 }
 
 const RealTimeGPS51Status: React.FC<RealTimeGPS51StatusProps> = ({ enabled, onToggle }) => {
-  const { vehicles, loading, error, refresh } = useGPS51Data();
+  const { status, loading, refresh } = useGPS51UnifiedAuth();
 
   const getStatusIcon = () => {
     if (!enabled) return <WifiOff className="w-4 h-4 text-gray-400" />;
-    if (error) return <AlertCircle className="w-4 h-4 text-red-500" />;
-    if (!loading) return <CheckCircle className="w-4 h-4 text-green-500" />;
-    return <Wifi className="w-4 h-4 text-blue-500" />;
+    if (status.error) return <AlertCircle className="w-4 h-4 text-red-500" />;
+    if (status.isAuthenticated && status.deviceCount > 0) return <CheckCircle className="w-4 h-4 text-green-500" />;
+    if (loading) return <Wifi className="w-4 h-4 text-blue-500" />;
+    return <AlertTriangle className="w-4 h-4 text-yellow-500" />;
   };
 
   const getStatusBadge = () => {
     if (!enabled) return <Badge variant="secondary">Disabled</Badge>;
-    if (error) return <Badge variant="destructive">Error</Badge>;
-    if (!loading && vehicles.length > 0) return <Badge className="bg-green-100 text-green-800">Connected</Badge>;
+    if (status.error) return <Badge variant="destructive">Error</Badge>;
+    if (!status.isConfigured) return <Badge variant="outline">Not Configured</Badge>;
+    if (status.isAuthenticated && status.deviceCount > 0) return <Badge className="bg-green-100 text-green-800">Connected</Badge>;
     if (loading) return <Badge variant="outline">Loading...</Badge>;
     return <Badge variant="outline">No Data</Badge>;
   };
-
-  const activeDevices = vehicles.filter(v => v.latest_position?.isMoving).length;
 
   return (
     <Card className="border-slate-200">
@@ -44,22 +44,34 @@ const RealTimeGPS51Status: React.FC<RealTimeGPS51StatusProps> = ({ enabled, onTo
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <span className="text-slate-500">Active Devices:</span>
-            <p className="font-medium">{activeDevices}</p>
+            <span className="text-slate-500">Moving Vehicles:</span>
+            <p className="font-medium">{status.movingVehicles}</p>
           </div>
           <div>
-            <span className="text-slate-500">Total Vehicles:</span>
-            <p className="font-medium">{vehicles.length}</p>
+            <span className="text-slate-500">Total Devices:</span>
+            <p className="font-medium">{status.deviceCount}</p>
           </div>
         </div>
 
-        {error && (
+        {status.error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
             <div className="flex items-start space-x-2">
               <AlertCircle className="w-4 h-4 text-red-500 mt-0.5" />
               <div>
                 <p className="text-sm font-medium text-red-800">Connection Error</p>
-                <p className="text-xs text-red-600 mt-1">{error}</p>
+                <p className="text-xs text-red-600 mt-1">{status.error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!status.isConfigured && (
+          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-start space-x-2">
+              <AlertTriangle className="w-4 h-4 text-yellow-500 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-yellow-800">Configuration Required</p>
+                <p className="text-xs text-yellow-600 mt-1">Please configure GPS51 credentials in Settings</p>
               </div>
             </div>
           </div>
@@ -97,7 +109,11 @@ const RealTimeGPS51Status: React.FC<RealTimeGPS51StatusProps> = ({ enabled, onTo
 
         <div className="text-xs text-slate-500 border-t pt-2">
           {enabled ? (
-            <p>🚨 Emergency mode: Rate-limited GPS51 integration with caching</p>
+            status.isAuthenticated ? (
+              <p>✅ GPS51 unified service active ({status.username})</p>
+            ) : (
+              <p>🚨 GPS51 enabled but not authenticated</p>
+            )
           ) : (
             <p>🔌 GPS51 integration disabled</p>
           )}

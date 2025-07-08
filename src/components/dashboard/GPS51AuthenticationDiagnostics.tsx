@@ -14,9 +14,8 @@ import {
   Info
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { gps51UnifiedAuthService } from '@/services/gps51/GPS51UnifiedAuthService';
-import { gps51AuthStateSync } from '@/services/gps51/GPS51AuthStateSync';
-import { GPS51EmergencyManager } from '@/services/gps51/GPS51EmergencyManager';
+import { gps51UnifiedService } from '@/services/gps51/unified/GPS51UnifiedService';
+import { GPS51ConfigStorage } from '@/services/gps51/configStorage';
 
 interface DiagnosticInfo {
   service: string;
@@ -36,78 +35,71 @@ export const GPS51AuthenticationDiagnostics = () => {
     const results: DiagnosticInfo[] = [];
 
     try {
-      // 1. Check Unified Auth Service
-      const unifiedStatus = gps51UnifiedAuthService.getAuthenticationStatus();
+      // 1. Check Configuration Storage
+      const isConfigured = GPS51ConfigStorage.isConfigured();
+      const config = GPS51ConfigStorage.getConfiguration();
       results.push({
-        service: 'Unified Auth Service',
-        status: unifiedStatus.isAuthenticated ? 'success' : 'warning',
-        message: unifiedStatus.isAuthenticated 
-          ? `Authenticated as ${unifiedStatus.user?.username || 'Unknown'}`
-          : 'Not authenticated',
-        details: unifiedStatus.diagnostics
-      });
-
-      // 2. Check Auth State Synchronization
-      const syncState = gps51AuthStateSync.getCurrentState();
-      results.push({
-        service: 'Auth State Sync',
-        status: syncState.isAuthenticated ? 'success' : 'warning',
-        message: syncState.isAuthenticated 
-          ? `Synchronized (${syncState.source}): ${syncState.username}`
-          : 'No synchronized state',
+        service: 'Configuration Storage',
+        status: isConfigured ? 'success' : 'error',
+        message: isConfigured 
+          ? `Configured for ${config?.username || 'Unknown'}`
+          : 'GPS51 credentials not configured',
         details: {
-          source: syncState.source,
-          timestamp: new Date(syncState.timestamp).toISOString(),
-          isValid: gps51AuthStateSync.isAuthenticationValid()
+          hasApiUrl: !!config?.apiUrl,
+          hasUsername: !!config?.username,
+          hasPassword: !!config?.password,
+          apiUrl: config?.apiUrl,
+          from: config?.from,
+          type: config?.type
         }
       });
 
-      // 3. Check Emergency Manager
-      const emergencyManager = GPS51EmergencyManager.getInstance();
-      const emergencyAuth = emergencyManager.isAuthenticated();
+      // 2. Check Unified Service Auth State
+      const authState = gps51UnifiedService.getAuthState();
       results.push({
-        service: 'Emergency Manager',
-        status: emergencyAuth ? 'success' : 'warning',
-        message: emergencyAuth 
-          ? `Emergency auth active: ${emergencyManager.getUsername()}`
-          : 'Emergency authentication not active',
-        details: emergencyManager.getDiagnostics()
-      });
-
-      // 4. Check GPS51 Client State
-      const client = gps51UnifiedAuthService.getClient();
-      const clientAuth = client.isAuthenticated();
-      results.push({
-        service: 'GPS51 Client',
-        status: clientAuth ? 'success' : 'error',
-        message: clientAuth 
-          ? `Client authenticated with user: ${client.getUser()?.username || 'Missing username'}`
-          : 'GPS51 Client not authenticated',
+        service: 'Unified Service',
+        status: authState.isAuthenticated ? 'success' : 'warning',
+        message: authState.isAuthenticated 
+          ? `Authenticated as ${authState.username || 'Unknown'}`
+          : 'Not authenticated - credentials may need validation',
         details: {
-          hasToken: !!client.getToken(),
-          hasUser: !!client.getUser(),
-          username: client.getUser()?.username
+          isAuthenticated: authState.isAuthenticated,
+          hasToken: !!authState.token,
+          username: authState.username,
+          error: authState.error
         }
       });
 
-      // 5. Test Connection Health
-      try {
-        const connectionTest = await gps51UnifiedAuthService.testConnection();
-        results.push({
-          service: 'Connection Health',
-          status: connectionTest.success ? 'success' : 'error',
-          message: connectionTest.success 
-            ? `Connection healthy (${connectionTest.responseTime}ms)`
-            : `Connection failed: ${connectionTest.error}`,
-          details: connectionTest
-        });
-      } catch (error) {
-        results.push({
-          service: 'Connection Health',
-          status: 'error',
-          message: `Connection test failed: ${error.message}`,
-          details: { error: error.message }
-        });
+      // 3. Check Service Status
+      const serviceStatus = gps51UnifiedService.getServiceStatus();
+      results.push({
+        service: 'Service Status',
+        status: serviceStatus.isAuthenticated ? 'success' : 'warning',
+        message: `${serviceStatus.deviceCount} devices, ${serviceStatus.movingVehicles} moving`,
+        details: serviceStatus
+      });
+
+      // 4. Test Authentication if configured but not authenticated
+      if (isConfigured && !authState.isAuthenticated) {
+        try {
+          console.log('GPS51AuthenticationDiagnostics: Testing authentication...');
+          const authResult = await gps51UnifiedService.authenticate(config?.username || '', config?.password || '');
+          results.push({
+            service: 'Authentication Test',
+            status: authResult.isAuthenticated ? 'success' : 'error',
+            message: authResult.isAuthenticated 
+              ? `Authentication successful`
+              : `Authentication failed: ${authResult.error}`,
+            details: authResult
+          });
+        } catch (error) {
+          results.push({
+            service: 'Authentication Test',
+            status: 'error',
+            message: `Authentication test failed: ${error.message}`,
+            details: { error: error.message }
+          });
+        }
       }
 
       setDiagnostics(results);
