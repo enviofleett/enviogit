@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { GPS51LiveMap } from './GPS51LiveMap';
 import { LiveFleetMonitoringPanel } from './LiveFleetMonitoringPanel';
+import { RealTimeAlertsPanel } from './RealTimeAlertsPanel';
 import { useGPS51LiveTracking } from '@/hooks/useGPS51LiveTracking';
 
 export const GPS51RealTimePanel: React.FC = () => {
@@ -157,9 +158,10 @@ export const GPS51RealTimePanel: React.FC = () => {
 
       {/* Main Dashboard Tabs */}
       <Tabs defaultValue="map" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="map">Live Map</TabsTrigger>
           <TabsTrigger value="monitoring">Fleet Monitoring</TabsTrigger>
+          <TabsTrigger value="alerts">Real-Time Alerts</TabsTrigger>
           <TabsTrigger value="vehicles">Vehicle Details</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
@@ -176,6 +178,11 @@ export const GPS51RealTimePanel: React.FC = () => {
         {/* Fleet Monitoring Tab */}
         <TabsContent value="monitoring">
           <LiveFleetMonitoringPanel />
+        </TabsContent>
+
+        {/* Real-Time Alerts Tab */}
+        <TabsContent value="alerts">
+          <RealTimeAlertsPanel />
         </TabsContent>
 
         {/* Vehicle Details Tab */}
