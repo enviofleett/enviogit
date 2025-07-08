@@ -129,7 +129,7 @@ export function useGPS51DirectAuth(): UseGPS51DirectAuthReturn {
     }));
 
     try {
-      console.log('useGPS51DirectAuth: Starting authentication...');
+      console.log('useGPS51DirectAuth: Starting authentication with enhanced error handling...');
       
       const result = await gps51DirectManager.auth.authenticate(credentials);
       
@@ -153,9 +153,27 @@ export function useGPS51DirectAuth(): UseGPS51DirectAuthReturn {
         // Start health monitoring
         startHealthMonitoring();
       } else {
+        // Enhanced error messaging
+        let errorTitle = "Authentication Failed";
+        let errorDescription = result.error || 'Please check your credentials';
+        
+        if (result.error?.includes('Network connection failed')) {
+          errorTitle = "Connection Error";
+          errorDescription = "Unable to connect to GPS51 services. Please check your internet connection.";
+        } else if (result.error?.includes('temporarily unavailable')) {
+          errorTitle = "Service Unavailable";
+          errorDescription = "GPS51 services are temporarily unavailable. Please try again in a few moments.";
+        } else if (result.error?.includes('Edge Function error')) {
+          errorTitle = "Service Error";
+          errorDescription = "GPS51 authentication service is experiencing issues. Please try again later.";
+        } else if (result.error?.includes('wrong credentials') || result.error?.includes('login failed')) {
+          errorTitle = "Invalid Credentials";
+          errorDescription = "Please verify your username and password are correct.";
+        }
+        
         toast({
-          title: "Authentication Failed",
-          description: result.error || 'Please check your credentials',
+          title: errorTitle,
+          description: errorDescription,
           variant: "destructive",
         });
       }
@@ -163,6 +181,11 @@ export function useGPS51DirectAuth(): UseGPS51DirectAuthReturn {
       return result;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Authentication error';
+      
+      console.error('useGPS51DirectAuth: Authentication exception:', {
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined
+      });
       
       setState(prev => ({
         ...prev,
@@ -175,7 +198,7 @@ export function useGPS51DirectAuth(): UseGPS51DirectAuthReturn {
 
       toast({
         title: "Authentication Error",
-        description: errorMessage,
+        description: "An unexpected error occurred during authentication. Please try again.",
         variant: "destructive",
       });
 
