@@ -15,14 +15,17 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { gps51Client, GPS51Device } from '@/services/gps51/GPS51Client';
-import { GPS51DeviceDiagnostics } from '@/services/gps51/GPS51DeviceDiagnostics';
-import { DeviceTable } from './components/DeviceTable';
-import { DeviceStats } from './components/DeviceStats';
+import { gps51ProductionService, GPS51Vehicle } from '@/services/gps51/GPS51ProductionService';
+
+// Simplified diagnostics interface
+interface GPS51DeviceDiagnostics {
+  discoverDevices(): Promise<DiagnosticResult>;
+}
+// Using simple device display instead of complex components
 
 interface DiagnosticResult {
   success: boolean;
-  devices: GPS51Device[];
+  devices: GPS51Vehicle[];
   diagnostics: {
     authStatus: any;
     apiResponses: any[];
@@ -35,16 +38,35 @@ interface DiagnosticResult {
 
 export const GPS51EnhancedDeviceManager: React.FC = () => {
   const { toast } = useToast();
-  const [devices, setDevices] = useState<GPS51Device[]>([]);
+  const [devices, setDevices] = useState<GPS51Vehicle[]>([]);
   const [loading, setLoading] = useState(false);
   const [diagnosticResult, setDiagnosticResult] = useState<DiagnosticResult | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [lastSync, setLastSync] = useState<Date | null>(null);
 
-  const diagnosticsService = new GPS51DeviceDiagnostics(gps51Client);
+  // Mock diagnostics service using GPS51ProductionService
+  const diagnosticsService = {
+    async discoverDevices(): Promise<DiagnosticResult> {
+      const authState = gps51ProductionService.getAuthState();
+      const devices = await gps51ProductionService.fetchUserDevices();
+      return {
+        success: devices.length > 0,
+        devices,
+        diagnostics: {
+          authStatus: authState,
+          apiResponses: [],
+          attemptedMethods: ['GPS51ProductionService.fetchUserDevices'],
+          possibleIssues: devices.length === 0 ? ['No devices found'] : [],
+          recommendations: devices.length === 0 ? ['Check GPS51 credentials'] : []
+        },
+        fallbackDataAvailable: false
+      };
+    }
+  };
 
   const runComprehensiveDiagnostics = async () => {
-    if (!gps51Client.isAuthenticated()) {
+    const authState = gps51ProductionService.getAuthState();
+    if (!authState.isAuthenticated) {
       toast({
         title: "Authentication Required",
         description: "Please configure GPS51 credentials first.",
@@ -87,7 +109,8 @@ export const GPS51EnhancedDeviceManager: React.FC = () => {
   };
 
   const quickDeviceRefresh = async () => {
-    if (!gps51Client.isAuthenticated()) {
+    const authState = gps51ProductionService.getAuthState();
+    if (!authState.isAuthenticated) {
       toast({
         title: "Authentication Required",
         description: "Please configure GPS51 credentials first.",
@@ -99,7 +122,7 @@ export const GPS51EnhancedDeviceManager: React.FC = () => {
     setLoading(true);
     try {
       console.log('⚡ Quick device refresh...');
-      const devices = await gps51Client.getDeviceList();
+      const devices = await gps51ProductionService.fetchUserDevices();
       setDevices(devices);
       setLastSync(new Date());
 
@@ -124,7 +147,8 @@ export const GPS51EnhancedDeviceManager: React.FC = () => {
 
   // Auto-run diagnostics on mount if authenticated
   useEffect(() => {
-    if (gps51Client.isAuthenticated()) {
+    const authState = gps51ProductionService.getAuthState();
+    if (authState.isAuthenticated) {
       runComprehensiveDiagnostics();
     }
   }, []);
@@ -161,7 +185,7 @@ export const GPS51EnhancedDeviceManager: React.FC = () => {
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={runComprehensiveDiagnostics}
-              disabled={loading || !gps51Client.isAuthenticated()}
+              disabled={loading || !gps51ProductionService.getAuthState().isAuthenticated}
               className="flex items-center"
             >
               {loading ? (
@@ -175,7 +199,7 @@ export const GPS51EnhancedDeviceManager: React.FC = () => {
             <Button
               variant="outline"
               onClick={quickDeviceRefresh}
-              disabled={loading || !gps51Client.isAuthenticated()}
+              disabled={loading || !gps51ProductionService.getAuthState().isAuthenticated}
               className="flex items-center"
             >
               <RefreshCw className="h-4 w-4 mr-2" />
@@ -189,7 +213,7 @@ export const GPS51EnhancedDeviceManager: React.FC = () => {
             </div>
           </div>
 
-          {!gps51Client.isAuthenticated() && (
+          {!gps51ProductionService.getAuthState().isAuthenticated && (
             <Alert>
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
@@ -229,18 +253,22 @@ export const GPS51EnhancedDeviceManager: React.FC = () => {
                       />
                     </div>
 
-                    {/* Device Table */}
-                    <DeviceTable
-                      devices={devices}
-                      loading={loading}
-                      searchTerm={searchTerm}
-                    />
-
-                    {/* Device Stats */}
-                    <DeviceStats
-                      devices={devices}
-                      filteredDevices={filteredDevices}
-                    />
+                    {/* Simple Device List */}
+                    <div className="space-y-2">
+                      {filteredDevices.map(device => (
+                        <div key={device.deviceid} className="p-3 border rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-medium">{device.devicename}</div>
+                              <div className="text-sm text-muted-foreground">ID: {device.deviceid}</div>
+                            </div>
+                            <div className="text-sm">
+                              Status: {device.isMoving ? 'Moving' : 'Parked'}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
 
                     {/* Success Alert */}
                     {diagnosticResult?.fallbackDataAvailable && (

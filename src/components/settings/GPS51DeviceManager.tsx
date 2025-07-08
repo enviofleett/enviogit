@@ -2,15 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Monitor } from 'lucide-react';
-import { gps51Client, GPS51Device } from '@/services/gps51/GPS51Client';
+import { gps51ProductionService, GPS51Vehicle } from '@/services/gps51/GPS51ProductionService';
 import { GPS51Position } from '@/services/gps51/types';
 import { useToast } from '@/hooks/use-toast';
 import { DeviceSearchControls } from './components/DeviceSearchControls';
-import { DeviceTable } from './components/DeviceTable';
-import { DeviceStats } from './components/DeviceStats';
 import { DeviceErrorDisplay } from './components/DeviceErrorDisplay';
 
-interface EnhancedDeviceData extends GPS51Device {
+interface EnhancedDeviceData extends GPS51Vehicle {
   lastPosition?: GPS51Position;
 }
 
@@ -33,7 +31,8 @@ const GPS51DeviceManager: React.FC = () => {
   });
 
   const fetchDevices = async () => {
-    if (!gps51Client.isAuthenticated()) {
+    const authState = gps51ProductionService.getAuthState();
+    if (!authState.isAuthenticated) {
       setState(prev => ({ 
         ...prev, 
         error: 'Not authenticated. Please configure GPS51 credentials first.' 
@@ -45,41 +44,8 @@ const GPS51DeviceManager: React.FC = () => {
 
     try {
       console.log('Fetching GPS51 device list and recent positions...');
-      const devices = await gps51Client.getDeviceList();
-      
-      // Fetch recent positions for devices that have location data
-      const deviceIds = devices.filter(d => d.callat && d.callon).map(d => d.deviceid);
-      let enhancedDevices: EnhancedDeviceData[] = devices;
-      
-      if (deviceIds.length > 0) {
-        try {
-          // Fetch recent positions (last 24 hours) for devices with location data
-          const oneHourAgo = Math.floor((Date.now() - (60 * 60 * 1000)) / 1000);
-          const recentPositions = await gps51Client.getRealtimePositions(deviceIds, oneHourAgo);
-          
-          // Create a map of device ID to most recent position
-          const positionMap = new Map<string, GPS51Position>();
-          recentPositions.positions.forEach(pos => {
-            const existing = positionMap.get(pos.deviceid);
-            if (!existing || pos.updatetime > existing.updatetime) {
-              positionMap.set(pos.deviceid, pos);
-            }
-          });
-          
-          // Enhance devices with position data
-          enhancedDevices = devices.map(device => ({
-            ...device,
-            lastPosition: positionMap.get(device.deviceid)
-          }));
-          
-          console.log('Enhanced devices with position data:', {
-            devicesWithPositions: positionMap.size,
-            totalDevices: devices.length
-          });
-        } catch (positionError) {
-          console.warn('Failed to fetch recent positions, continuing with device data only:', positionError);
-        }
-      }
+      const devices = await gps51ProductionService.fetchUserDevices();
+      const enhancedDevices: EnhancedDeviceData[] = devices;
       
       setState(prev => ({
         ...prev,
@@ -96,7 +62,7 @@ const GPS51DeviceManager: React.FC = () => {
 
       console.log('Device fetch successful:', {
         deviceCount: devices.length,
-        devices: devices.map(d => ({ id: d.deviceid, name: d.devicename, type: d.devicetype }))
+        devices: devices.map(d => ({ id: d.deviceid, name: d.devicename }))
       });
     } catch (error) {
       console.error('Failed to fetch devices:', error);
@@ -118,15 +84,15 @@ const GPS51DeviceManager: React.FC = () => {
 
   useEffect(() => {
     // Auto-fetch devices if authenticated
-    if (gps51Client.isAuthenticated()) {
+    const authState = gps51ProductionService.getAuthState();
+    if (authState.isAuthenticated) {
       fetchDevices();
     }
   }, []);
 
   const filteredDevices = state.devices.filter(device => 
     device.devicename.toLowerCase().includes(state.searchTerm.toLowerCase()) ||
-    device.deviceid.toLowerCase().includes(state.searchTerm.toLowerCase()) ||
-    device.devicetype.toLowerCase().includes(state.searchTerm.toLowerCase())
+    device.deviceid.toLowerCase().includes(state.searchTerm.toLowerCase())
   );
 
   const handleSearchChange = (searchTerm: string) => {
@@ -151,22 +117,31 @@ const GPS51DeviceManager: React.FC = () => {
             onSearchChange={handleSearchChange}
             onRefresh={fetchDevices}
             loading={state.loading}
-            isAuthenticated={gps51Client.isAuthenticated()}
+            isAuthenticated={gps51ProductionService.getAuthState().isAuthenticated}
             lastSync={state.lastSync}
           />
 
           {state.error && <DeviceErrorDisplay error={state.error} />}
 
-          <DeviceTable
-            devices={state.devices}
-            loading={state.loading}
-            searchTerm={state.searchTerm}
-          />
-
-          <DeviceStats
-            devices={state.devices}
-            filteredDevices={filteredDevices}
-          />
+          {/* Simple device list */}
+          <div className="space-y-2">
+            <h4 className="font-medium">Devices ({state.devices.length})</h4>
+            <div className="grid gap-2">
+              {filteredDevices.map(device => (
+                <div key={device.deviceid} className="p-3 border rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{device.devicename}</div>
+                      <div className="text-sm text-muted-foreground">ID: {device.deviceid}</div>
+                    </div>
+                    <div className="text-sm">
+                      Status: {device.isMoving ? 'Moving' : 'Parked'}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

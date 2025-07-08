@@ -4,7 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock } from 'lucide-react';
 import { EnhancedFleetMetrics } from '@/hooks/useGPS51FleetMetrics';
-import { LiveDataState } from '@/services/gps51/GPS51LiveDataService';
+// Using simple interface instead of deleted service
+interface LiveDataState {
+  lastQueryPositionTime: number;
+}
 
 interface DataStatusCardProps {
   metrics: EnhancedFleetMetrics;
