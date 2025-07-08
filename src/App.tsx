@@ -18,7 +18,7 @@ import Referrals from "./pages/Referrals";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import GPS51LiveTrackingEnhanced from "./pages/GPS51LiveTrackingEnhanced";
-import { gps51ProductionBootstrap } from "./services/production/GPS51ProductionBootstrap";
+// GPS51ProductionBootstrap removed - using simplified approach
 
 const queryClient = new QueryClient();
 

@@ -12,28 +12,19 @@ import RealTimeConnectionStatus from '@/components/dashboard/RealTimeConnectionS
 import RealTimeGPS51Status from '@/components/dashboard/RealTimeGPS51Status';
 import { GPS51RealTimePanel } from '@/components/dashboard/GPS51RealTimePanel';
 import { useGPS51Data } from '@/hooks/useGPS51Data';
-import { useGPS51ProductionData } from '@/hooks/useGPS51ProductionData';
 import { useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const Dashboard = () => {
-  // PRODUCTION FIX: Use production-grade data hook
-  const { 
-    state: productionState, 
-    actions: productionActions 
-  } = useGPS51ProductionData();
-  
-  // Fallback to legacy hook for compatibility
+  // Use legacy hook for compatibility
   const { vehicles: legacyVehicles, vehiclePositions, loading: legacyLoading } = useGPS51Data();
   
   const [enableRealTime, setEnableRealTime] = useState(true);
   const [enableGPS51RealTime, setEnableGPS51RealTime] = useState(true);
 
-  // Use production data if available, fallback to legacy data
-  const vehicles = productionState.isReady ? 
-    productionState.vehicles : legacyVehicles;
-  const isLoading = productionState.isReady ? 
-    productionState.isLoading : legacyLoading;
+  // Use legacy data
+  const vehicles = legacyVehicles;
+  const isLoading = legacyLoading;
   
   // Use simplified data for emergency mode
   const mockMetrics = {

@@ -1,20 +1,17 @@
 
 import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { GPS51UnifiedCredentialsPanel } from './GPS51UnifiedCredentialsPanel';
+import { GPS51CredentialsForm } from './GPS51CredentialsForm';
 import GPS51DeviceManager from './GPS51DeviceManager';
 import { GPS51EnhancedDeviceManager } from './GPS51EnhancedDeviceManager';
 import { GPS51CronJobManager } from './GPS51CronJobManager';
-import { GPS51RealTimeActivationPanel } from './GPS51RealTimeActivationPanel';
+// GPS51RealTimeActivationPanel removed
 import { GPS51DebugPanel } from './GPS51DebugPanel';
-import { GPS51RealTimeTestPanel } from './GPS51RealTimeTestPanel';
-import { GPS51OfflineDeviceDiagnostics } from './GPS51OfflineDeviceDiagnostics';
 import { GPS51DeviceRecoveryTool } from './GPS51DeviceRecoveryTool';
 import { GPS51SupabaseSecretsTest } from './GPS51SupabaseSecretsTest';
 import { GPS51BatchSyncPanel } from './GPS51BatchSyncPanel';
 import { GPS51ConnectivityDiagnostics } from './GPS51ConnectivityDiagnostics';
 import { GPS51AuthDiagnosticsPanel } from './GPS51AuthDiagnosticsPanel';
-import { GPS51ProductionReadinessPanel } from './GPS51ProductionReadinessPanel';
 import { GPS51EmergencyRecoveryPanel } from './GPS51EmergencyRecoveryPanel';
 import { GPS51EmergencyControls } from './GPS51EmergencyControls';
 
@@ -45,12 +42,14 @@ export const GPS51Settings = () => {
         </TabsContent>
 
         <TabsContent value="activation">
-          <GPS51RealTimeActivationPanel />
+          <div className="text-center py-8">
+            <p className="text-muted-foreground">Real-time activation moved to Production Control Center in Debug tab</p>
+          </div>
         </TabsContent>
 
         <TabsContent value="credentials">
           <div className="space-y-6">
-            <GPS51UnifiedCredentialsPanel />
+            <GPS51CredentialsForm />
             <GPS51ConnectivityDiagnostics />
           </div>
         </TabsContent>
@@ -76,11 +75,8 @@ export const GPS51Settings = () => {
 
         <TabsContent value="debug">
           <div className="space-y-6">
-            <GPS51ProductionReadinessPanel />
             <GPS51AuthDiagnosticsPanel />
             <GPS51SupabaseSecretsTest />
-            <GPS51RealTimeTestPanel />
-            <GPS51OfflineDeviceDiagnostics />
             <GPS51DeviceRecoveryTool />
             <GPS51DebugPanel />
           </div>

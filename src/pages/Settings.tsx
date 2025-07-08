@@ -7,8 +7,7 @@ import { SubscriptionManagementPanel } from '@/components/settings/SubscriptionM
 import { APICredentialsPanel } from '@/components/settings/APICredentialsPanel';
 import { PINManagement } from '@/components/settings/PINManagement';
 import { SuperAdminSetup } from '@/components/settings/SuperAdminSetup';
-import { ProductionDashboard } from '@/components/monitoring/ProductionDashboard';
-import { ProductionReadinessDashboard } from '@/components/monitoring/ProductionReadinessDashboard';
+// Production monitoring components removed
 import { MarketplaceAdminPanel } from '@/components/marketplace/MarketplaceAdminPanel';
 import { TechnicalPartnerAdminPanel } from '@/components/settings/TechnicalPartnerAdminPanel';
 import { GPS51HealthDashboard } from '@/components/monitoring/GPS51HealthDashboard';
@@ -22,7 +21,7 @@ import { EmergencyGPS51Panel } from '@/components/settings/EmergencyGPS51Panel';
 import { GPS51ConnectionDiagnostics } from '@/components/settings/GPS51ConnectionDiagnostics';
 import { GPS51AuthenticationDiagnostics } from '@/components/dashboard/GPS51AuthenticationDiagnostics';
 import { GPS51SecretsSetup } from '@/components/settings/GPS51SecretsSetup';
-import { GPS51OfflineDeviceDiagnostics } from '@/components/settings/GPS51OfflineDeviceDiagnostics';
+// GPS51OfflineDeviceDiagnostics removed
 
 const Settings = () => {
   return (
@@ -126,11 +125,15 @@ const Settings = () => {
         </TabsContent>
         
         <TabsContent value="monitoring">
-          <ProductionDashboard />
+          <div className="text-center py-8">
+            <p className="text-muted-foreground">Production monitoring dashboard removed - using simplified approach</p>
+          </div>
         </TabsContent>
         
         <TabsContent value="readiness">
-          <ProductionReadinessDashboard />
+          <div className="text-center py-8">
+            <p className="text-muted-foreground">Production readiness dashboard removed - using simplified approach</p>
+          </div>
         </TabsContent>
         
         <TabsContent value="marketplace">
@@ -159,7 +162,6 @@ const Settings = () => {
         <TabsContent value="gps51" className="space-y-6">
           <GPS51SecretsSetup />
           <GPS51Settings />
-          <GPS51OfflineDeviceDiagnostics />
         </TabsContent>
         
         <TabsContent value="email">

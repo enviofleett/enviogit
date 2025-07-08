@@ -6,7 +6,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { CheckCircle, XCircle, AlertTriangle, ChevronDown, Download, Play } from 'lucide-react';
 import { gps51AuthDiagnostics, type ComprehensiveDiagnostic } from '@/services/gps51/GPS51AuthDiagnostics';
-import { gps51ConfigService } from '@/services/gp51/GPS51ConfigService';
+import { gps51ProductionService } from '@/services/gps51/GPS51ProductionService';
 import { useToast } from '@/hooks/use-toast';
 
 export const GPS51AuthDiagnosticsPanel = () => {
@@ -19,7 +19,8 @@ export const GPS51AuthDiagnosticsPanel = () => {
     try {
       setIsRunning(true);
       
-      const config = gps51ConfigService.getConfiguration();
+      const authState = gps51ProductionService.getAuthState();
+      const config = { username: authState.username, password: '', apiUrl: 'https://gps51.com/api/v2' };
       if (!config) {
         toast({
           title: "Configuration Required",

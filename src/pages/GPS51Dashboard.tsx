@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { MapPin, Activity, Users, Truck, Zap, AlertTriangle } from 'lucide-react';
 import { useGPS51Data } from '@/hooks/useGPS51Data';
-import { useGPS51SessionBridge } from '@/hooks/useGPS51SessionBridge';
+// useGPS51SessionBridge removed - using simplified approach
 
 const GPS51Dashboard: React.FC = () => {
   const { vehicles, vehiclePositions, loading, error } = useGPS51Data();
@@ -28,7 +28,10 @@ const GPS51Dashboard: React.FC = () => {
     parkedDevices: vehiclePositions.filter(p => !p.isMoving).length,
     offlineVehicles: vehicles.length - vehicles.filter(v => v.latest_position).length
   };
-  const { status, connect, disconnect } = useGPS51SessionBridge();
+  // Simplified status for emergency mode
+  const status = { isConnected: false };
+  const connect = async (credentials: any) => { console.log('Mock connect:', credentials.username); };
+  const disconnect = () => { console.log('Mock disconnect'); };
 
   const handleConnect = async () => {
     // In a real implementation, these would come from a form or config

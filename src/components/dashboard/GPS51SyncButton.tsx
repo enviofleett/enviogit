@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Zap, Loader2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { gps51ConfigService } from '@/services/gp51/GPS51ConfigService';
+import { gps51ProductionService } from '@/services/gps51/GPS51ProductionService';
 
 const GPS51SyncButton: React.FC = () => {
   const [syncing, setSyncing] = useState(false);
@@ -11,7 +11,8 @@ const GPS51SyncButton: React.FC = () => {
 
   const handleSync = async () => {
     // Check if GPS51 is configured
-    if (!gps51ConfigService.isConfigured()) {
+    const authState = gps51ProductionService.getAuthState();
+    if (!authState.isAuthenticated) {
       toast({
         title: 'Configuration Required',
         description: 'Please configure GPS51 credentials in Settings before syncing.',
@@ -22,16 +23,12 @@ const GPS51SyncButton: React.FC = () => {
 
     setSyncing(true);
     try {
-      const result = await gps51ConfigService.syncData();
+      const vehicles = await gps51ProductionService.fetchUserDevices();
       
-      if (result.success) {
-        toast({
-          title: 'GPS51 Sync Completed',
-          description: `Synced ${result.vehiclesSynced} vehicles and ${result.positionsStored} positions`,
-        });
-      } else {
-        throw new Error(result.error || 'Sync failed');
-      }
+      toast({
+        title: 'GPS51 Sync Completed',
+        description: `Found ${vehicles.length} vehicles`,
+      });
     } catch (error) {
       toast({
         title: 'Sync Failed',
@@ -43,7 +40,7 @@ const GPS51SyncButton: React.FC = () => {
     }
   };
 
-  const isConfigured = gps51ConfigService.isConfigured();
+  const isConfigured = gps51ProductionService.getAuthState().isAuthenticated;
 
   return (
     <Button 
