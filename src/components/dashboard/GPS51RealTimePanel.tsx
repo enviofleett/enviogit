@@ -17,6 +17,7 @@ import {
 import { GPS51LiveMap } from './GPS51LiveMap';
 import { LiveFleetMonitoringPanel } from './LiveFleetMonitoringPanel';
 import { RealTimeAlertsPanel } from './RealTimeAlertsPanel';
+import { LiveAnalyticsDashboard } from './LiveAnalyticsDashboard';
 import { useGPS51LiveTracking } from '@/hooks/useGPS51LiveTracking';
 
 export const GPS51RealTimePanel: React.FC = () => {
@@ -271,112 +272,8 @@ export const GPS51RealTimePanel: React.FC = () => {
         </TabsContent>
 
         {/* Analytics Tab */}
-        <TabsContent value="analytics" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Tracking Stats */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Activity className="w-5 h-5" />
-                  <span>Tracking Stats</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex justify-between">
-                  <span className="text-sm">Total Updates:</span>
-                  <span className="font-medium">{totalUpdates}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm">Tracking Status:</span>
-                  <Badge variant={isTracking ? "default" : "secondary"}>
-                    {isTracking ? "Active" : "Inactive"}
-                  </Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm">Update Frequency:</span>
-                  <span className="font-medium">30s</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm">Data Points:</span>
-                  <span className="font-medium">{vehicles.length * totalUpdates}</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Fleet Overview */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Car className="w-5 h-5" />
-                  <span>Fleet Overview</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-green-500 rounded-full" />
-                      <span className="text-sm">Moving</span>
-                    </div>
-                    <span className="font-medium">{movingVehicleCount}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-blue-500 rounded-full" />
-                      <span className="text-sm">Parked</span>
-                    </div>
-                    <span className="font-medium">{parkedVehicleCount}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-gray-400 rounded-full" />
-                      <span className="text-sm">Offline</span>
-                    </div>
-                    <span className="font-medium">{offlineVehicleCount}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Performance Metrics */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Zap className="w-5 h-5" />
-                  <span>Performance</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex justify-between">
-                  <span className="text-sm">Active Rate:</span>
-                  <span className="font-medium">
-                    {vehicles.length > 0 ? Math.round((activeVehicleCount / vehicles.length) * 100) : 0}%
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm">Movement Rate:</span>
-                  <span className="font-medium">
-                    {activeVehicleCount > 0 ? Math.round((movingVehicleCount / activeVehicleCount) * 100) : 0}%
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm">Avg Speed:</span>
-                  <span className="font-medium">
-                    {movingVehicles.length > 0 
-                      ? Math.round(movingVehicles.reduce((sum, v) => sum + v.speed, 0) / movingVehicles.length)
-                      : 0
-                    } km/h
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm">Data Freshness:</span>
-                  <Badge variant="outline" className="text-xs">
-                    {lastUpdate ? 'Fresh' : 'Stale'}
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+        <TabsContent value="analytics">
+          <LiveAnalyticsDashboard />
         </TabsContent>
       </Tabs>
     </div>
