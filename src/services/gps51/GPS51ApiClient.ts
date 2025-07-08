@@ -1,4 +1,3 @@
-
 import { GPS51ApiResponse } from './GPS51Types';
 import { GPS51_DEFAULTS } from './GPS51Constants';
 import { GPS51RateLimitError } from './GPS51RateLimitError';
@@ -25,7 +24,6 @@ export class GPS51ApiClient {
     method: 'GET' | 'POST' = 'POST'
   ): Promise<GPS51ApiResponse> {
     const startTime = Date.now();
-    const requestId = `${action}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
     const logApiCall = async (
       endpoint: string,
@@ -41,179 +39,54 @@ export class GPS51ApiClient {
         console.error(`GPS51-${endpoint} failed:`, errorMessage);
       }
     };
-    // Build URL with action and token as query parameters
-    const url = new URL(this.baseURL);
-    url.searchParams.append('action', action);
-    
-    // Only add token for non-login actions
-    if (action !== 'login') {
-      url.searchParams.append('token', token);
-    }
-    
-    // Add undocumented parameters for lastposition action
-    if (action === 'lastposition') {
-      url.searchParams.append('streamtype', 'proto');
-      url.searchParams.append('send', '2');
-    }
 
     try {
       console.log(`GPS51 API Request: ${action}`, { 
-        url: url.toString(), 
         method,
         params,
         baseURL: this.baseURL
       });
       
-      const requestOptions: RequestInit = {
-        method: method,
-        headers: {
-          'Accept': 'application/json',
+      // CRITICAL FIX: Use Supabase Edge Function proxy instead of direct fetch
+      // This prevents CORS "Failed to fetch" errors
+      console.log('GPS51ApiClient: Routing request through Supabase Edge Function proxy...');
+      
+      const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('gps51-proxy', {
+        body: {
+          action,
+          token: action === 'login' ? undefined : token,
+          params,
+          method,
+          apiUrl: this.baseURL
         }
-      };
-
-      // For POST requests, use JSON for login, form-encoded for others
-      if (method === 'POST' && Object.keys(params).length > 0) {
-        if (action === 'login') {
-          // Use JSON for login requests to OpenAPI endpoint
-          requestOptions.headers = {
-            ...requestOptions.headers,
-            'Content-Type': 'application/json',
-          };
-          requestOptions.body = JSON.stringify(params);
-          
-          console.log('GPS51 JSON Login Request Details:', {
-            url: url.toString(),
-            method: 'POST',
-            headers: requestOptions.headers,
-            bodyObject: params
-          });
-        } else {
-          // Use form-encoded for other requests
-          requestOptions.headers = {
-            ...requestOptions.headers,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          };
-          
-          const formParams = new URLSearchParams();
-          Object.entries(params).forEach(([key, value]) => {
-            if (Array.isArray(value)) {
-              formParams.append(key, value.join(','));
-            } else {
-              // CRITICAL FIX: Ensure timestamps are properly formatted
-              if (key === 'lastquerypositiontime' && typeof value === 'number') {
-                // GPS51 API expects timestamps as strings
-                formParams.append(key, value.toString());
-              } else {
-                formParams.append(key, String(value));
-              }
-            }
-          });
-          requestOptions.body = formParams.toString();
-          
-          console.log('GPS51 Form POST Request Details:', {
-            url: url.toString(),
-            method: 'POST',
-            headers: requestOptions.headers,
-            body: requestOptions.body,
-            bodyObject: params,
-            timestampFormatting: params.lastquerypositiontime ? {
-              originalValue: params.lastquerypositiontime,
-              formattedValue: String(params.lastquerypositiontime),
-              type: typeof params.lastquerypositiontime
-            } : 'No timestamp parameter'
-          });
-        }
-      }
-      
-      const response = await fetch(url.toString(), requestOptions);
-      
-      const contentType = response.headers.get('Content-Type') || '';
-      const contentLength = response.headers.get('Content-Length') || '0';
-      
-      console.log(`GPS51 API Raw Response (${action}):`, {
-        status: response.status,
-        statusText: response.statusText,
-        contentType,
-        contentLength,
-        url: url.toString()
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+      if (proxyError) {
+        throw new Error(`Proxy request failed: ${proxyError.message}`);
       }
 
-      // Handle different content types
-      let data: GPS51ApiResponse;
+      if (!proxyResponse) {
+        throw new Error('No data received from proxy');
+      }
+
+      // Return the proxy response as GPS51ApiResponse
+      const data = proxyResponse;
       
-      if (contentType.includes('application/octet-stream') || contentType.includes('binary')) {
-        console.warn(`GPS51 API: Received binary/octet-stream response for ${action}. This may indicate API parameter issues.`);
-        
-        // Try to read as text first
-        const responseText = await response.text();
-        console.log(`GPS51 API Binary Response Details:`, {
-          action,
-          contentLength,
-          bodyLength: responseText.length,
-          isEmpty: responseText.length === 0,
-          firstChars: responseText.substring(0, 100)
-        });
-        
-        if (responseText.length === 0) {
-          // Empty response - return empty data structure
-          data = {
-            status: 1,
-            message: 'Empty response received',
-            data: [],
-            records: []
-          };
-        } else {
-          // Try to parse as JSON despite content-type
-          try {
-            data = JSON.parse(responseText);
-          } catch (parseError) {
-            console.warn('GPS51 API: Binary response is not valid JSON');
-            data = {
-              status: 0,
-              message: 'Binary response received, cannot parse as JSON',
-              data: responseText
-            };
-          }
-        }
-      } else {
-        // Standard JSON response handling
-        const responseText = await response.text();
-        console.log(`GPS51 API Response Body (${action}):`, {
-          bodyLength: responseText.length,
-          isJSON: responseText.trim().startsWith('{') || responseText.trim().startsWith('['),
-          isEmpty: responseText.length === 0,
-          preview: responseText.substring(0, 200)
-        });
-        
-        try {
-          data = JSON.parse(responseText);
-          console.log(`GPS51 API Parsed Response (${action}):`, {
-            status: data.status,
-            message: data.message,
-            cause: data.cause,
-            hasToken: !!data.token,
-            hasUser: !!data.user,
-            hasData: !!data.data,
-            hasGroups: !!data.groups,
-            hasRecords: !!data.records,
-            dataType: Array.isArray(data.data) ? 'array' : typeof data.data,
-            dataLength: Array.isArray(data.data) ? data.data.length : undefined,
-            groupsLength: Array.isArray(data.groups) ? data.groups.length : undefined,
-            recordsLength: Array.isArray(data.records) ? data.records.length : undefined
-          });
-        } catch (parseError) {
-          console.warn('GPS51 API: Non-JSON response received:', responseText);
-          data = {
-            status: 0,
-            message: responseText || 'Empty response',
-            data: responseText
-          };
-        }
+      console.log(`GPS51 API Proxy Response (${action}):`, {
+        status: data.status,
+        message: data.message,
+        cause: data.cause,
+        hasToken: !!data.token,
+        hasUser: !!data.user,
+        hasData: !!data.data,
+        hasGroups: !!data.groups,
+        hasRecords: !!data.records,
+        proxyMetadata: data.proxy_metadata
+      });
+
+      // Validate proxy response
+      if (data.proxy_error) {
+        throw new Error(`Proxy error: ${data.error || 'Unknown proxy error'}`);
       }
 
       // Check for rate limiting status 8902
@@ -232,13 +105,12 @@ export class GPS51ApiClient {
 
       // Log successful API call
       const duration = Date.now() - startTime;
-      await logApiCall(action, params, response.status, data, duration);
+      await logApiCall(action, params, 200, data, duration);
 
       return data;
     } catch (error) {
       console.error(`GPS51 API Error (${action}):`, {
         error: error.message,
-        url: url.toString(),
         params,
         retryCount: this.retryCount,
         maxRetries: this.maxRetries

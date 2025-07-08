@@ -41,7 +41,7 @@ export class GPS51IntelligentConnectionManager {
     this.strategies.set('direct', {
       name: 'direct',
       priority: 2,
-      isAvailable: false // Will be enabled based on CORS detection
+      isAvailable: false // DISABLED: Direct connection causes CORS errors
     });
     
     console.log('GPS51IntelligentConnectionManager: Initialized with strategies:', 
@@ -130,17 +130,13 @@ export class GPS51IntelligentConnectionManager {
           user: authResult.user
         };
       } else {
-        // Direct connection (for future CORS-free environments)
-        // For now, this will use the proxy client but with direct mode
-        const authResult = await this.authService.authenticate(credentials);
-        
+        // DISABLED: Direct connection causes CORS "Failed to fetch" errors
+        // All requests must go through proxy to avoid browser CORS restrictions
         return {
-          success: authResult.success,
+          success: false,
           strategy: 'direct',
-          error: authResult.error,
-          responseTime: Date.now() - startTime,
-          token: authResult.token,
-          user: authResult.user
+          error: 'Direct connection disabled due to CORS restrictions. Use proxy connection.',
+          responseTime: Date.now() - startTime
         };
       }
     } catch (error) {

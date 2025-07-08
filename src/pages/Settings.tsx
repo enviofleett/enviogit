@@ -19,6 +19,7 @@ import { GPS51EmergencyControls } from '@/components/settings/GPS51EmergencyCont
 import { GPS51OptimizationStatus } from '@/components/settings/GPS51OptimizationStatus';
 import { GPS51ProductionValidator } from '@/components/settings/GPS51ProductionValidator/GPS51ProductionValidator';
 import { EmergencyGPS51Panel } from '@/components/settings/EmergencyGPS51Panel';
+import { GPS51ConnectionDiagnostics } from '@/components/settings/GPS51ConnectionDiagnostics';
 
 const Settings = () => {
   return (
@@ -108,6 +109,7 @@ const Settings = () => {
         
         <TabsContent value="emergency">
           <div className="space-y-6">
+            <GPS51ConnectionDiagnostics />
             <GPS51OptimizationStatus />
             <GPS51ProductionValidator />
             <GPS51EmergencyControls />

@@ -1,19 +1,20 @@
 import { GPS51ProxyClient } from './GPS51ProxyClient';
+import { GPS51Credentials } from '../gp51/GPS51CredentialsManager';
 import { GPS51Utils } from './GPS51Utils';
-import { GPS51_STATUS } from './GPS51Constants';
 
 export interface GPS51AuthenticationResult {
   success: boolean;
   token?: string;
   user?: any;
   error?: string;
-  diagnostics?: {
-    requestDuration: number;
-    responseStatus: number;
-    proxyMetadata?: any;
-  };
+  responseTime?: number;
 }
 
+/**
+ * GPS51 Authentication Service - Proxy-Only Implementation
+ * This service handles GPS51 authentication exclusively through Supabase Edge Functions
+ * to avoid CORS "Failed to fetch" errors from direct API calls
+ */
 export class GPS51AuthenticationService {
   private static instance: GPS51AuthenticationService;
   private proxyClient: GPS51ProxyClient;
@@ -29,223 +30,127 @@ export class GPS51AuthenticationService {
     return GPS51AuthenticationService.instance;
   }
 
-  async authenticate(credentials: {
-    username: string;
-    password: string;
-    apiUrl?: string;
-    from?: string;
-    type?: string;
-  }): Promise<GPS51AuthenticationResult> {
+  /**
+   * Authenticate using proxy-only approach to prevent CORS errors
+   */
+  async authenticate(credentials: GPS51Credentials): Promise<GPS51AuthenticationResult> {
     const startTime = Date.now();
     
     try {
-      console.log('GPS51AuthenticationService: Starting enhanced authentication...');
+      console.log('GPS51AuthenticationService: Starting proxy-only authentication...');
       
-      // Validate and prepare credentials with async MD5 hashing
-      const loginParams = await this.prepareLoginParams(credentials);
+      // Validate credentials format
+      if (!credentials.username || !credentials.password || !credentials.apiUrl) {
+        return {
+          success: false,
+          error: 'Username, password, and API URL are required',
+          responseTime: Date.now() - startTime
+        };
+      }
+
+      // Ensure password is MD5 hashed
+      const hashedPassword = await GPS51Utils.ensureMD5Hash(credentials.password);
       
-      console.log('GPS51AuthenticationService: Login parameters prepared:', {
+      // Normalize API URL
+      let apiUrl = credentials.apiUrl;
+      if (apiUrl.includes('/webapi')) {
+        console.warn('GPS51AuthenticationService: Auto-migrating API URL from /webapi to /openapi');
+        apiUrl = apiUrl.replace('/webapi', '/openapi');
+      }
+
+      const loginParams = {
+        username: credentials.username,
+        password: hashedPassword,
+        from: credentials.from || 'WEB',
+        type: credentials.type || 'USER'
+      };
+
+      console.log('GPS51AuthenticationService: Making proxy authentication request:', {
         username: loginParams.username,
-        passwordIsHashed: GPS51Utils.validateMD5Hash(loginParams.password),
-        passwordLength: loginParams.password.length,
+        hasPassword: !!loginParams.password,
+        passwordIsMD5: GPS51Utils.validateMD5Hash(loginParams.password),
+        apiUrl,
         from: loginParams.from,
-        type: loginParams.type,
-        apiUrl: credentials.apiUrl || 'https://api.gps51.com/openapi'
+        type: loginParams.type
       });
 
-      // Make authentication request through proxy
+      // CRITICAL: Use proxy client instead of direct API calls
       const response = await this.proxyClient.makeRequest(
         'login',
-        '', // No token needed for login
+        '', // No token for login
         loginParams,
         'POST',
-        credentials.apiUrl || 'https://api.gps51.com/openapi'
+        apiUrl
       );
 
-      const duration = Date.now() - startTime;
-      
-      console.log('GPS51AuthenticationService: Authentication response received:', {
+      const responseTime = Date.now() - startTime;
+
+      console.log('GPS51AuthenticationService: Proxy authentication response:', {
         status: response.status,
-        statusType: typeof response.status,
         message: response.message,
         cause: response.cause,
         hasToken: !!response.token,
         hasUser: !!response.user,
-        tokenLength: response.token?.length || 0,
-        duration: `${duration}ms`,
-        proxyMetadata: (response as any).proxy_metadata
+        responseTime
       });
 
-      // Analyze response for success/failure
-      const result = this.analyzeAuthenticationResponse(response, duration);
-      
-      if (result.success) {
-        console.log('GPS51AuthenticationService: Authentication successful:', {
-          token: result.token?.substring(0, 8) + '...',
-          user: result.user?.username,
-          duration: `${duration}ms`
-        });
-      } else {
-        console.error('GPS51AuthenticationService: Authentication failed:', {
-          error: result.error,
-          status: response.status,
-          duration: `${duration}ms`
-        });
-      }
-
-      return result;
-
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      
-      console.error('GPS51AuthenticationService: Authentication exception:', {
-        error: error.message,
-        duration: `${duration}ms`,
-        credentials: {
-          username: credentials.username,
-          hasPassword: !!credentials.password,
-          apiUrl: credentials.apiUrl
-        }
-      });
-
-      return {
-        success: false,
-        error: `Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        diagnostics: {
-          requestDuration: duration,
-          responseStatus: 0
-        }
-      };
-    }
-  }
-
-  private async prepareLoginParams(credentials: any): Promise<any> {
-    console.log('GPS51AuthenticationService: Preparing login parameters...');
-    
-    // Validate input credentials
-    if (!credentials) {
-      throw new Error('Credentials object is required');
-    }
-    
-    if (!credentials.username) {
-      throw new Error('Username is required for authentication');
-    }
-    
-    if (!credentials.password) {
-      throw new Error('Password is required for authentication');
-    }
-
-    // Ensure password is MD5 hashed using async method
-    const hashedPassword = await GPS51Utils.ensureMD5Hash(credentials.password);
-    
-    const params = {
-      username: credentials.username,
-      password: hashedPassword,
-      from: credentials.from || 'WEB',
-      type: credentials.type || 'USER'
-    };
-
-    console.log('GPS51AuthenticationService: Login parameters prepared:', {
-      username: params.username,
-      passwordLength: params.password.length,
-      isValidMD5: GPS51Utils.validateMD5Hash(params.password),
-      from: params.from,
-      type: params.type
-    });
-
-    return params;
-  }
-
-  private analyzeAuthenticationResponse(response: any, duration: number): GPS51AuthenticationResult {
-    const diagnostics = {
-      requestDuration: duration,
-      responseStatus: (response as any).proxy_metadata?.responseStatus || 0,
-      proxyMetadata: (response as any).proxy_metadata
-    };
-
-    // Check for proxy errors first
-    if (response.proxy_error) {
-      return {
-        success: false,
-        error: `Proxy error: ${response.error || 'Unknown proxy error'}`,
-        diagnostics
-      };
-    }
-
-    // Check GPS51 API response status
-    const status = parseInt(response.status);
-    
-    if (status === GPS51_STATUS.SUCCESS || status === 0) {
-      // Success case - validate we have required data
-      if (response.token) {
+      if (response.status === 0 && response.token) {
         return {
           success: true,
           token: response.token,
           user: response.user,
-          diagnostics
+          responseTime
         };
       } else {
-        // Success status but no token - this indicates parameter issues
+        let errorMessage = response.message || response.cause || `Authentication failed with status: ${response.status}`;
+        
+        if (response.status === 8901) {
+          errorMessage += ' (GPS51 parameter validation failed - check credentials format)';
+        } else if (response.status === 1) {
+          errorMessage += ' (GPS51 login failed - verify username and password)';
+        }
+        
         return {
           success: false,
-          error: 'Authentication succeeded but no token received. This may indicate GPS51 API parameter issues.',
-          diagnostics
+          error: errorMessage,
+          responseTime
         };
       }
-    } else {
-      // Error case - provide specific error messages
-      let errorMessage = response.message || response.cause || `Authentication failed with status: ${status}`;
+    } catch (error) {
+      const responseTime = Date.now() - startTime;
       
-      if (status === 8901) {
-        errorMessage = 'Authentication parameter validation failed. Check username, password hash, from, and type parameters.';
-      } else if (status === 1) {
-        errorMessage = 'Login failed. Verify credentials and account status.';
-      } else if (status === 8902) {
-        errorMessage = 'User account is disabled or suspended.';
-      } else if (status === 8903) {
-        errorMessage = 'Invalid user type or permissions.';
+      console.error('GPS51AuthenticationService: Authentication failed:', {
+        error: error.message,
+        stack: error.stack,
+        responseTime
+      });
+      
+      // Enhanced error handling for common issues
+      let errorMessage = error instanceof Error ? error.message : 'Unknown authentication error';
+      
+      if (errorMessage.includes('Failed to fetch')) {
+        errorMessage = 'Network connection failed. Please check your internet connection and try again.';
+      } else if (errorMessage.includes('Proxy request failed')) {
+        errorMessage = 'GPS51 service temporarily unavailable. Please try again in a few moments.';
       }
-
+      
       return {
         success: false,
         error: errorMessage,
-        diagnostics
+        responseTime
       };
     }
   }
 
+  /**
+   * Test proxy connection health
+   */
   async testConnection(apiUrl?: string): Promise<{
     success: boolean;
     responseTime: number;
     error?: string;
+    healthStatus?: any;
   }> {
-    const testUrl = apiUrl || 'https://api.gps51.com/openapi';
-    
-    try {
-      console.log(`GPS51AuthenticationService: Testing connection to ${testUrl}`);
-      
-      const result = await this.proxyClient.testConnection(testUrl);
-      
-      console.log('GPS51AuthenticationService: Connection test result:', {
-        success: result.success,
-        responseTime: result.responseTime,
-        error: result.error
-      });
-      
-      return result;
-    } catch (error) {
-      console.error('GPS51AuthenticationService: Connection test failed:', error);
-      
-      return {
-        success: false,
-        responseTime: 0,
-        error: error instanceof Error ? error.message : 'Connection test failed'
-      };
-    }
+    return await this.proxyClient.testConnection(apiUrl);
   }
 }
-
-export const gps51AuthenticationService = GPS51AuthenticationService.getInstance();
-
-// Legacy alias for backwards compatibility
-export const gps51AuthService = gps51AuthenticationService;
