@@ -72,54 +72,17 @@ const FleetDashboard: React.FC = () => {
     enableSmartPolling: true
   });
 
-  // Auto-refresh logic
+  // AGGRESSIVE AUTO-REFRESH: Start polling as soon as possible
   useEffect(() => {
-    if (autoRefresh && authState.isAuthenticated && !isPolling) {
+    if (autoRefresh && !isPolling && vehicles.length > 0) {
+      // Start polling if we have vehicles, regardless of auth state display
       startPolling();
     } else if (!autoRefresh && isPolling) {
       stopPolling();
     }
-  }, [autoRefresh, authState.isAuthenticated]);
+  }, [autoRefresh, isPolling, vehicles.length, startPolling, stopPolling]);
 
-  // PRODUCTION FIX: Handle authentication using unified system
-  const handleAuthenticate = async () => {
-    try {
-      // Check if configuration exists first
-      if (!GPS51ConfigStorage.isConfigured()) {
-        toast({
-          title: "GPS51 Setup Required",
-          description: "Redirecting to Settings to configure GPS51 credentials...",
-          variant: "default"
-        });
-        // Redirect to settings page with GPS51 setup
-        navigate('/settings?tab=gps51');
-        return;
-      }
-
-      const config = GPS51ConfigStorage.getConfiguration();
-      if (!config) {
-        throw new Error('Failed to load GPS51 configuration');
-      }
-
-      await authenticate(config.username, config.password);
-      toast({
-        title: "Connected to GPS51",
-        description: "Successfully authenticated and ready to track vehicles.",
-      });
-    } catch (error) {
-      console.error('Fleet Dashboard authentication error:', error);
-      toast({
-        title: "Authentication Failed",
-        description: error instanceof Error ? error.message : "Failed to connect to GPS51",
-        variant: "destructive"
-      });
-    }
-  };
-
-  // PRODUCTION FIX: Direct setup navigation
-  const handleSetupGPS51 = () => {
-    navigate('/settings?tab=gps51');
-  };
+  // REMOVED: No more manual authentication handlers - everything is automatic
 
   // Calculate fleet metrics
   const fleetMetrics = React.useMemo(() => {
@@ -306,15 +269,24 @@ const FleetDashboard: React.FC = () => {
                        <div className="text-center py-8 text-gray-500">
                          <RefreshCw className="w-12 h-12 mx-auto mb-4 text-gray-300 animate-spin" />
                          <p>Loading vehicles...</p>
-                         <p className="text-sm">Connecting to GPS51 and fetching fleet data</p>
+                         <p className="text-sm">Fetching your fleet data...</p>
                        </div>
                      ) : vehicles.length === 0 ? (
                        <div className="text-center py-8 text-gray-500">
                          <Car className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                         <p>No vehicles available</p>
+                         <p>No vehicles found</p>
                          <p className="text-sm">
-                           {!authState.isAuthenticated ? 'Authenticating with GPS51...' : 'Fleet data will appear here once loaded'}
+                           {error ? error : 'Your fleet data will appear here once available'}
                          </p>
+                         {error?.includes('not configured') && (
+                           <Button 
+                             variant="outline" 
+                             className="mt-4"
+                             onClick={() => navigate('/settings?tab=gps51')}
+                           >
+                             Configure GPS51
+                           </Button>
+                         )}
                        </div>
                      ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

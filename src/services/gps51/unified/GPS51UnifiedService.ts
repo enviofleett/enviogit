@@ -41,7 +41,7 @@ export class GPS51UnifiedService {
   }
 
   /**
-   * Authenticate user - PRODUCTION FIX: Save credentials to storage
+   * Authenticate user - PRODUCTION FIX: Save credentials and auto-fetch devices
    */
   async authenticate(username: string, password: string): Promise<GPS51AuthState> {
     // CRITICAL: Save credentials first for persistence
@@ -54,7 +54,20 @@ export class GPS51UnifiedService {
       type: 'USER'
     });
     
-    return await this.authManager.authenticate(username, password);
+    const authState = await this.authManager.authenticate(username, password);
+    
+    // AGGRESSIVE: Immediately fetch devices after authentication
+    if (authState.isAuthenticated) {
+      try {
+        await this.fetchUserDevices();
+        console.log('GPS51UnifiedService: Auto-fetched devices after authentication');
+      } catch (error) {
+        console.warn('GPS51UnifiedService: Failed to auto-fetch devices:', error);
+        // Don't fail authentication if device fetch fails
+      }
+    }
+    
+    return authState;
   }
 
   /**
