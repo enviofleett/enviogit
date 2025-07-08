@@ -312,53 +312,86 @@ export const useGPS51LiveData = (options: UseGPS51LiveDataOptions = {}): UseGPS5
   }, []);
 
   /**
-   * PRODUCTION FIX: Auto-authenticate with stored credentials - AGGRESSIVE AUTO-START
+   * PRODUCTION FIX: Auto-authenticate with stored credentials - BETTER ERROR HANDLING
    */
   useEffect(() => {
     const initializeAuth = async () => {
       console.log('useGPS51LiveData: Initializing authentication...');
       
-      // Check if GPS51 is already configured
-      const { GPS51ConfigStorage } = await import('@/services/gps51/configStorage');
-      
-      if (GPS51ConfigStorage.isConfigured()) {
-        const config = GPS51ConfigStorage.getConfiguration();
+      try {
+        // Check if GPS51 is already configured
+        const { GPS51ConfigStorage } = await import('@/services/gps51/configStorage');
         
+        if (!GPS51ConfigStorage.isConfigured()) {
+          // Not configured - show helpful message
+          console.log('useGPS51LiveData: GPS51 not configured');
+          setState(prev => ({
+            ...prev,
+            isLoading: false,
+            error: 'GPS51 not configured. Please go to Settings → GPS51 Configuration to enter your credentials.'
+          }));
+          return;
+        }
+
+        const config = GPS51ConfigStorage.getConfiguration();
+        if (!config) {
+          console.log('useGPS51LiveData: No configuration available');
+          setState(prev => ({
+            ...prev,
+            isLoading: false,
+            error: 'Invalid GPS51 configuration. Please check your settings.'
+          }));
+          return;
+        }
+
         // Check current auth state
         const currentAuthState = gps51UnifiedLiveDataService.getAuthState();
         
-        if (!currentAuthState.isAuthenticated && config) {
+        if (!currentAuthState.isAuthenticated) {
           console.log('useGPS51LiveData: Auto-authenticating with stored credentials...');
           try {
             const success = await authenticate(config.username, config.password);
             if (success) {
-              console.log('useGPS51LiveData: Auto-authentication successful, starting polling...');
-              // AGGRESSIVE: Always start polling immediately after auth
-              startPolling(deviceIds);
+              console.log('useGPS51LiveData: Auto-authentication successful');
+              // Don't auto-start polling here, let the polling effect handle it
+            } else {
+              console.warn('useGPS51LiveData: Auto-authentication failed - invalid credentials');
+              setState(prev => ({
+                ...prev,
+                error: 'GPS51 authentication failed. Please check your credentials in Settings.',
+                isLoading: false
+              }));
             }
           } catch (error) {
-            console.warn('useGPS51LiveData: Auto-authentication failed:', error);
-            // Set error state but don't block the UI
+            console.warn('useGPS51LiveData: Auto-authentication error:', error);
+            const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
+            
+            // Better error message for common issues
+            let userFriendlyError = errorMessage;
+            if (errorMessage.includes('Proxy request failed')) {
+              userFriendlyError = 'GPS51 connection failed. Please check your credentials and try again.';
+            } else if (errorMessage.includes('Edge Function')) {
+              userFriendlyError = 'GPS51 service unavailable. Please try again later.';
+            }
+            
             setState(prev => ({
               ...prev,
-              error: error instanceof Error ? error.message : 'Authentication failed',
+              error: userFriendlyError,
               isLoading: false
             }));
           }
-        } else if (currentAuthState.isAuthenticated) {
-          // Already authenticated, fetch devices and start polling immediately
-          console.log('useGPS51LiveData: Already authenticated, fetching devices and starting polling...');
+        } else {
+          // Already authenticated, fetch devices
+          console.log('useGPS51LiveData: Already authenticated, fetching devices...');
           try {
             await gps51UnifiedLiveDataService.fetchUserDevices();
             setState(prev => ({
               ...prev,
               authState: currentAuthState,
               vehicles: gps51UnifiedLiveDataService.getDevices(),
-              isLoading: false
+              isLoading: false,
+              error: null // Clear any previous errors
             }));
-            
-            // AGGRESSIVE: Always start polling when authenticated
-            startPolling(deviceIds);
           } catch (error) {
             console.warn('useGPS51LiveData: Device fetch failed:', error);
             setState(prev => ({
@@ -367,39 +400,30 @@ export const useGPS51LiveData = (options: UseGPS51LiveDataOptions = {}): UseGPS5
               isLoading: false
             }));
           }
-        } else {
-          // No valid auth and no config - still try to show basic UI
-          console.log('useGPS51LiveData: No authentication available');
-          setState(prev => ({
-            ...prev,
-            isLoading: false,
-            error: 'GPS51 credentials not configured'
-          }));
         }
-      } else {
-        // Not configured - show error but don't block
-        console.log('useGPS51LiveData: GPS51 not configured');
+      } catch (error) {
+        console.error('useGPS51LiveData: Initialization error:', error);
         setState(prev => ({
           ...prev,
-          isLoading: false,
-          error: 'GPS51 not configured - please set up credentials in Settings'
+          error: 'Failed to initialize GPS51 connection',
+          isLoading: false
         }));
       }
     };
 
-    // AGGRESSIVE AUTO-START: Always initialize regardless of autoStart flag
+    // Initialize based on provided credentials or stored config
     if (username && password) {
       console.log('useGPS51LiveData: Auto-starting with provided credentials');
       authenticate(username, password).then(success => {
-        if (success) {
-          startPolling(deviceIds);
-        }
+        // Polling will be handled by the autoRefresh effect
+      }).catch(error => {
+        console.error('useGPS51LiveData: Provided credentials failed:', error);
       });
     } else {
-      // Always try to auto-initialize
+      // Try to auto-initialize with stored credentials
       initializeAuth();
     }
-  }, [username, password, deviceIds, authenticate, startPolling]); // Removed autoStart dependency
+  }, [username, password, authenticate]); // Removed deviceIds and startPolling dependencies
 
   /**
    * Cleanup on unmount

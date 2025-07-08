@@ -59,6 +59,19 @@ export class GPS51PollingManager {
    * Get detailed polling statistics
    */
   getPollingStats(devices: GPS51Vehicle[]): PollingStats {
+    // PRODUCTION FIX: Handle undefined/null devices array
+    if (!devices || !Array.isArray(devices)) {
+      console.warn('GPS51PollingManager: getPollingStats called with invalid devices:', devices);
+      return {
+        recommendedInterval: this.PRODUCTION_INTERVAL,
+        priority1Count: 0,
+        priority2Count: 0,
+        priority3Count: 0,
+        totalVehicles: 0,
+        averageSpeed: 0
+      };
+    }
+    
     const moving = devices.filter(d => d.isMoving);
     const speeds = devices.map(d => d.speed || 0);
     const averageSpeed = speeds.reduce((sum, speed) => sum + speed, 0) / (devices.length || 1);

@@ -184,8 +184,32 @@ export class GPS51UnifiedLiveDataService {
    * ENHANCED: Now uses request coordinator to prevent rate limiting
    */
   async fetchLivePositions(deviceIds?: string[]): Promise<LiveDataResult> {
-    if (!this.authState.isAuthenticated) {
-      throw new Error('Not authenticated - call authenticate() first');
+    // PRODUCTION FIX: Check multiple auth sources to prevent false negatives
+    const hasStoredUsername = localStorage.getItem('gps51_username');
+    const isAuthenticated = this.authState.isAuthenticated || !!hasStoredUsername;
+    
+    if (!isAuthenticated) {
+      console.warn('GPS51UnifiedLiveDataService: Not authenticated - attempting auto-recovery...');
+      
+      // Try to restore authentication from stored credentials
+      const { GPS51ConfigStorage } = await import('./configStorage');
+      if (GPS51ConfigStorage.isConfigured()) {
+        const config = GPS51ConfigStorage.getConfiguration();
+        if (config) {
+          try {
+            console.log('GPS51UnifiedLiveDataService: Attempting auto-authentication...');
+            await this.authenticate(config.username, config.password);
+            console.log('GPS51UnifiedLiveDataService: Auto-authentication successful');
+          } catch (error) {
+            console.error('GPS51UnifiedLiveDataService: Auto-authentication failed:', error);
+            throw new Error('Authentication failed - please check your GPS51 credentials in Settings');
+          }
+        } else {
+          throw new Error('GPS51 not configured - please set up credentials in Settings');
+        }
+      } else {
+        throw new Error('GPS51 not configured - please set up credentials in Settings');
+      }
     }
 
     try {

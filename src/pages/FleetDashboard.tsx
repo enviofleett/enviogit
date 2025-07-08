@@ -272,22 +272,31 @@ const FleetDashboard: React.FC = () => {
                          <p className="text-sm">Fetching your fleet data...</p>
                        </div>
                      ) : vehicles.length === 0 ? (
-                       <div className="text-center py-8 text-gray-500">
-                         <Car className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                         <p>No vehicles found</p>
-                         <p className="text-sm">
-                           {error ? error : 'Your fleet data will appear here once available'}
-                         </p>
-                         {error?.includes('not configured') && (
-                           <Button 
-                             variant="outline" 
-                             className="mt-4"
-                             onClick={() => navigate('/settings?tab=gps51')}
-                           >
-                             Configure GPS51
-                           </Button>
-                         )}
-                       </div>
+                        <div className="text-center py-8 text-gray-500">
+                          <Car className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                          <p>No vehicles found</p>
+                          <p className="text-sm">
+                            {error ? error : 'Your fleet data will appear here once available'}
+                          </p>
+                          {(error?.includes('not configured') || error?.includes('GPS51 not configured')) && (
+                            <Button 
+                              variant="outline" 
+                              className="mt-4"
+                              onClick={() => navigate('/settings?tab=gps51')}
+                            >
+                              Configure GPS51
+                            </Button>
+                          )}
+                          {error?.includes('connection failed') && (
+                            <Button 
+                              variant="outline" 
+                              className="mt-4"
+                              onClick={refreshData}
+                            >
+                              Retry Connection
+                            </Button>
+                          )}
+                        </div>
                      ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {vehicles.map((vehicle) => (
