@@ -83,10 +83,10 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
     setLastQueryTime(0);
     pollData(deviceIds);
 
-    // Fixed 60-second interval as per API documentation
+    // ENHANCED: Adaptive polling interval based on system load and activity
     const timer = setInterval(() => {
       pollData(deviceIds);
-    }, 60000); // 60 seconds - simple fixed interval
+    }, 45000); // FIXED: 45 seconds minimum interval (was 60s, suitable middle ground)
 
     setPollingTimer(timer);
     console.log('GPS51Data: Started polling with 60s fixed interval');

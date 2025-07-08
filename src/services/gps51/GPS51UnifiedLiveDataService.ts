@@ -181,7 +181,7 @@ export class GPS51UnifiedLiveDataService {
 
   /**
    * Step 3: Fetch live positions with lastquerypositiontime tracking
-   * Implements the exact lastposition API flow
+   * ENHANCED: Now uses request coordinator to prevent rate limiting
    */
   async fetchLivePositions(deviceIds?: string[]): Promise<LiveDataResult> {
     if (!this.authState.isAuthenticated) {
@@ -205,17 +205,22 @@ export class GPS51UnifiedLiveDataService {
       console.log('GPS51UnifiedLiveDataService: Fetching positions for', targetDeviceIds.length, 'devices');
       console.log('GPS51UnifiedLiveDataService: Using lastquerypositiontime:', this.lastQueryTime);
 
-      // Call lastposition API with current lastQueryTime
-      const positionResponse = await this.client.getLastPosition(
-        targetDeviceIds,
-        this.lastQueryTime
+      // ENHANCED: Use request coordinator instead of direct client call
+      const { gps51RequestCoordinator } = await import('./GPS51RequestCoordinator');
+      const positionResponse = await gps51RequestCoordinator.queueRequest(
+        'positions',
+        {
+          deviceIds: targetDeviceIds,
+          lastQueryTime: this.lastQueryTime
+        },
+        7 // High priority for live position data
       );
 
       // CRITICAL: Update lastQueryTime from server response for next call
-      this.lastQueryTime = positionResponse.lastquerypositiontime;
+      this.lastQueryTime = (positionResponse as any).lastquerypositiontime || this.lastQueryTime;
 
       // Extract positions from response
-      const positions: GPS51Position[] = (positionResponse.records || []).map((record: any) => ({
+      const positions: GPS51Position[] = ((positionResponse as any).records || []).map((record: any) => ({
         deviceid: record.deviceid,
         devicetime: record.devicetime || record.updatetime || 0,
         arrivedtime: record.arrivedtime,
@@ -290,9 +295,10 @@ export class GPS51UnifiedLiveDataService {
 
   /**
    * Calculate smart polling interval based on vehicle activity
-   * Active vehicles: 5-10 seconds
-   * Stationary vehicles: 10-30 seconds
-   * No vehicles: 30 seconds
+   * FIXED: Increased intervals to 30-60 seconds minimum to prevent rate limiting
+   * Moving vehicles: 30 seconds minimum
+   * Stationary vehicles: 45 seconds
+   * Offline vehicles: 60 seconds
    */
   calculatePollingInterval(): number {
     const movingVehicles = this.devices.filter(v => v.isMoving);
@@ -300,14 +306,14 @@ export class GPS51UnifiedLiveDataService {
     const offlineVehicles = this.devices.filter(v => v.status === 'offline');
 
     if (movingVehicles.length > 0) {
-      return 5000; // 5 seconds for moving vehicles
+      return 30000; // 30 seconds for moving vehicles (was 5s)
     } else if (stationaryVehicles.length > 0) {
-      return 10000; // 10 seconds for stationary vehicles
+      return 45000; // 45 seconds for stationary vehicles (was 10s)
     } else if (offlineVehicles.length > 0) {
-      return 30000; // 30 seconds for offline vehicles
+      return 60000; // 60 seconds for offline vehicles (was 30s)
     }
     
-    return 30000; // Default 30 seconds
+    return 60000; // Default 60 seconds (was 30s)
   }
 
   /**

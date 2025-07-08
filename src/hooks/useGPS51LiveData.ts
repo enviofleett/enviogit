@@ -60,7 +60,7 @@ export const useGPS51LiveData = (options: UseGPS51LiveDataOptions = {}): UseGPS5
     error: null,
     authState: gps51UnifiedLiveDataService.getAuthState(),
     lastUpdate: null,
-    pollingInterval: 10000,
+    pollingInterval: 45000, // FIXED: 45 seconds default (was 10s)
     retryCount: 0
   });
 
