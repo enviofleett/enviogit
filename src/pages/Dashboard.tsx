@@ -11,6 +11,7 @@ import MonitoringAlertsPanel from '@/components/dashboard/MonitoringAlertsPanel'
 import RealTimeConnectionStatus from '@/components/dashboard/RealTimeConnectionStatus';
 import RealTimeGPS51Status from '@/components/dashboard/RealTimeGPS51Status';
 import { GPS51RealTimePanel } from '@/components/dashboard/GPS51RealTimePanel';
+import { GPS51PerformanceMonitor } from '@/components/dashboard/GPS51PerformanceMonitor';
 import { useGPS51Data } from '@/hooks/useGPS51Data';
 import { useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -120,10 +121,11 @@ const Dashboard = () => {
 
             {/* Enhanced Dashboard Tabs */}
             <Tabs defaultValue="overview" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="realtime">Real-time Tracking</TabsTrigger>
                 <TabsTrigger value="monitoring">Monitoring & Alerts</TabsTrigger>
+                <TabsTrigger value="performance">Performance</TabsTrigger>
                 <TabsTrigger value="analytics">Analytics</TabsTrigger>
               </TabsList>
 
@@ -212,6 +214,10 @@ const Dashboard = () => {
 
               <TabsContent value="monitoring" className="space-y-6">
                 <MonitoringAlertsPanel />
+              </TabsContent>
+
+              <TabsContent value="performance" className="space-y-6">
+                <GPS51PerformanceMonitor />
               </TabsContent>
 
               <TabsContent value="analytics" className="space-y-6">

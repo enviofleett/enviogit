@@ -7,6 +7,7 @@
 import { GPS51ConfigStorage } from './configStorage';
 import { GPS51CredentialChecker } from './GPS51CredentialChecker';
 import { gps51SimpleAuthSync } from './GPS51SimpleAuthSync';
+import { gps51PerformanceOptimizer } from './GPS51PerformanceOptimizer';
 
 export interface GPS51Vehicle {
   deviceid: string;
@@ -108,33 +109,43 @@ export class GPS51ProductionService {
         throw new Error('Username and password are required');
       }
 
-      // Ensure minimum interval between requests
-      await this.enforceRateLimit();
-
-      // Call GPS51 login API through Edge Function
-      const { supabase } = await import('@/integrations/supabase/client');
-      const { data, error } = await supabase.functions.invoke('gps51-auth', {
-        body: {
-          action: 'login',
-          username,
-          password,
-          from: 'WEB',
-          type: 'USER'
+      // Use performance optimizer for rate limiting and retry logic
+      const result = await gps51PerformanceOptimizer.retryWithBackoff(async () => {
+        if (!gps51PerformanceOptimizer.canMakeRequest()) {
+          const waitTime = gps51PerformanceOptimizer.getNextAvailableRequestTime();
+          if (waitTime > 0) {
+            console.log(`GPS51ProductionService: Rate limiting - waiting ${waitTime}ms`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          }
         }
+
+        // Call GPS51 login API through Edge Function
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { data, error } = await supabase.functions.invoke('gps51-auth', {
+          body: {
+            action: 'login',
+            username,
+            password,
+            from: 'WEB',
+            type: 'USER'
+          }
+        });
+
+        if (error) {
+          throw new Error(`Authentication failed: ${error.message}`);
+        }
+
+        if (!data?.success) {
+          throw new Error(data?.error || 'Authentication failed');
+        }
+
+        return data;
       });
-
-      if (error) {
-        throw new Error(`Authentication failed: ${error.message}`);
-      }
-
-      if (!data?.success) {
-        throw new Error(data?.error || 'Authentication failed');
-      }
 
       // Update authentication state
       this.authState = {
         isAuthenticated: true,
-        token: data.token,
+        token: result.token,
         username
       };
 
