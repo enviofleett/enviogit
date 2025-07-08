@@ -15,6 +15,7 @@ import { GPS51AuthDiagnosticsPanel } from './GPS51AuthDiagnosticsPanel';
 import { GPS51EmergencyRecoveryPanel } from './GPS51EmergencyRecoveryPanel';
 import { GPS51EmergencyControls } from './GPS51EmergencyControls';
 import { GPS51AuthDiagnostics } from '../debug/GPS51AuthDiagnostics';
+import { GPS51APITester } from '../debug/GPS51APITester';
 
 export const GPS51Settings = () => {
   return (
@@ -27,7 +28,7 @@ export const GPS51Settings = () => {
       </div>
 
       <Tabs defaultValue="emergency" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-8">
+        <TabsList className="grid w-full grid-cols-9">
           <TabsTrigger value="emergency">Emergency</TabsTrigger>
           <TabsTrigger value="activation">Real-Time</TabsTrigger>
           <TabsTrigger value="credentials">Credentials</TabsTrigger>
@@ -35,6 +36,7 @@ export const GPS51Settings = () => {
           <TabsTrigger value="sync">Sync</TabsTrigger>
           <TabsTrigger value="recovery">Recovery</TabsTrigger>
           <TabsTrigger value="scheduler">Scheduler</TabsTrigger>
+          <TabsTrigger value="api-tester">API Tester</TabsTrigger>
           <TabsTrigger value="debug">Debug</TabsTrigger>
         </TabsList>
 
@@ -72,6 +74,10 @@ export const GPS51Settings = () => {
 
         <TabsContent value="scheduler">
           <GPS51CronJobManager />
+        </TabsContent>
+
+        <TabsContent value="api-tester">
+          <GPS51APITester />
         </TabsContent>
 
         <TabsContent value="debug">
