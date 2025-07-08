@@ -45,7 +45,7 @@ const FleetDashboard: React.FC = () => {
   const [mapView, setMapView] = useState<'satellite' | 'street'>('street');
   const [autoRefresh, setAutoRefresh] = useState(true);
 
-  // Use the refactored GPS51 live data hook
+  // Use the refactored GPS51 live data hook - FORCE AUTO-START
   const {
     state: {
       vehicles,
@@ -68,7 +68,7 @@ const FleetDashboard: React.FC = () => {
     },
     serviceStatus
   } = useGPS51LiveData({
-    autoStart: true, // PRODUCTION FIX: Enable auto-start to use stored credentials
+    autoStart: true, // FORCE auto-start to bypass authentication barriers
     enableSmartPolling: true
   });
 
@@ -145,89 +145,7 @@ const FleetDashboard: React.FC = () => {
     return vehicles.find(v => v.deviceid === vehicleId);
   };
 
-  // PRODUCTION FIX: Show loading state while checking authentication
-  if (!authState.isAuthenticated && isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-              <Car className="w-6 h-6 text-blue-600" />
-            </div>
-            <CardTitle>Fleet Dashboard</CardTitle>
-            <CardDescription>
-              Connecting to GPS51 system...
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex items-center justify-center py-8">
-            <div className="flex items-center space-x-3">
-              <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
-              <span className="text-gray-600">Initializing GPS51 connection...</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Only show manual connection if not authenticated AND not loading
-  if (!authState.isAuthenticated && !isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-              <Car className="w-6 h-6 text-blue-600" />
-            </div>
-            <CardTitle>Fleet Dashboard</CardTitle>
-            <CardDescription>
-              GPS51 integration required for live fleet monitoring
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {GPS51ConfigStorage.isConfigured() ? (
-              <Button 
-                onClick={handleAuthenticate} 
-                className="w-full"
-                disabled={isLoading}
-              >
-                <Wifi className="w-4 h-4 mr-2" />
-                Connect to GPS51
-              </Button>
-            ) : (
-              <Button 
-                onClick={handleSetupGPS51} 
-                className="w-full"
-                variant="default"
-              >
-                <Settings className="w-4 h-4 mr-2" />
-                Setup GPS51 Credentials
-              </Button>
-            )}
-            
-            {error && (
-              <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">
-                {error}
-              </div>
-            )}
-            
-            <div className="text-xs text-gray-500 text-center space-y-2">
-              <p>You need GPS51 credentials to access live vehicle data</p>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={handleSetupGPS51}
-                className="text-blue-600 hover:text-blue-800"
-              >
-                <Wrench className="w-3 h-3 mr-1" />
-                Configure in Settings
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  // REMOVED: No more authentication barriers - always show dashboard
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -384,13 +302,21 @@ const FleetDashboard: React.FC = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {vehicles.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
-                        <Car className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                        <p>No vehicles found</p>
-                        <p className="text-sm">Refresh to load vehicle data</p>
-                      </div>
-                    ) : (
+                     {isLoading && vehicles.length === 0 ? (
+                       <div className="text-center py-8 text-gray-500">
+                         <RefreshCw className="w-12 h-12 mx-auto mb-4 text-gray-300 animate-spin" />
+                         <p>Loading vehicles...</p>
+                         <p className="text-sm">Connecting to GPS51 and fetching fleet data</p>
+                       </div>
+                     ) : vehicles.length === 0 ? (
+                       <div className="text-center py-8 text-gray-500">
+                         <Car className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                         <p>No vehicles available</p>
+                         <p className="text-sm">
+                           {!authState.isAuthenticated ? 'Authenticating with GPS51...' : 'Fleet data will appear here once loaded'}
+                         </p>
+                       </div>
+                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {vehicles.map((vehicle) => (
                           <Card 
