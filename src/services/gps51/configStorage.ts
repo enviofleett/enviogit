@@ -65,6 +65,12 @@ export class GPS51ConfigStorage {
       const from = localStorage.getItem('gps51_from') as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN';
       const type = localStorage.getItem('gps51_type') as 'USER' | 'DEVICE';
 
+      // Set default API URL if missing
+      if (!apiUrl) {
+        apiUrl = 'https://api.gps51.com/openapi';
+        console.log('GPS51ConfigStorage: Using default API URL');
+      }
+
       // Migrate old webapi endpoint to new openapi endpoint
       if (apiUrl && apiUrl.includes('/webapi')) {
         console.warn('GPS51ConfigStorage: Auto-migrating stored API URL from /webapi to /openapi');
@@ -72,6 +78,7 @@ export class GPS51ConfigStorage {
         localStorage.setItem('gps51_api_url', apiUrl);
       }
 
+      // CRITICAL FIX: Return config even if password is empty, but log the issue
       if (apiUrl && username) {
         const config = {
           apiUrl: apiUrl,
@@ -86,10 +93,12 @@ export class GPS51ConfigStorage {
           hasApiUrl: !!config.apiUrl,
           hasUsername: !!config.username,
           hasPassword: !!config.password,
+          passwordLength: config.password.length,
           hasApiKey: !!config.apiKey,
           from: config.from,
           type: config.type,
-          usingNewEndpoint: config.apiUrl.includes('/openapi')
+          usingNewEndpoint: config.apiUrl.includes('/openapi'),
+          isValid: !!(config.apiUrl && config.username && config.password)
         });
         
         return config;
@@ -98,6 +107,7 @@ export class GPS51ConfigStorage {
       console.error('GPS51ConfigStorage: Failed to load configuration:', error);
     }
 
+    console.log('GPS51ConfigStorage: No valid configuration found');
     return null;
   }
 
@@ -118,13 +128,14 @@ export class GPS51ConfigStorage {
 
   static isConfigured(): boolean {
     const config = GPS51ConfigStorage.getConfiguration();
-    const isConfigured = !!(config?.apiUrl && config?.username && config?.password);
+    const isConfigured = !!(config?.apiUrl && config?.username && config?.password && config.password.length > 0);
     
     console.log('GPS51ConfigStorage: Configuration check:', {
       hasConfig: !!config,
       hasApiUrl: !!config?.apiUrl,
       hasUsername: !!config?.username,
       hasPassword: !!config?.password,
+      passwordLength: config?.password?.length || 0,
       isConfigured
     });
     

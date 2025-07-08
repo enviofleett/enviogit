@@ -319,27 +319,30 @@ export const useGPS51LiveData = (options: UseGPS51LiveDataOptions = {}): UseGPS5
       console.log('useGPS51LiveData: Initializing authentication...');
       
       try {
-        // Check if GPS51 is already configured
+        // Check if GPS51 is already configured using new credential checker
+        const { GPS51CredentialChecker } = await import('@/services/gps51/GPS51CredentialChecker');
         const { GPS51ConfigStorage } = await import('@/services/gps51/configStorage');
         
-        if (!GPS51ConfigStorage.isConfigured()) {
-          // Not configured - show helpful message
-          console.log('useGPS51LiveData: GPS51 not configured');
+        const credentialStatus = GPS51CredentialChecker.checkCredentials();
+        
+        if (!credentialStatus.isConfigured) {
+          const errorMessage = GPS51CredentialChecker.getCredentialErrorMessage();
+          console.log('useGPS51LiveData: GPS51 credentials not properly configured:', credentialStatus);
           setState(prev => ({
             ...prev,
             isLoading: false,
-            error: 'GPS51 not configured. Please go to Settings → GPS51 Configuration to enter your credentials.'
+            error: errorMessage
           }));
           return;
         }
 
         const config = GPS51ConfigStorage.getConfiguration();
-        if (!config) {
-          console.log('useGPS51LiveData: No configuration available');
+        if (!config || !config.password || config.password.length === 0) {
+          console.log('useGPS51LiveData: Configuration incomplete');
           setState(prev => ({
             ...prev,
             isLoading: false,
-            error: 'Invalid GPS51 configuration. Please check your settings.'
+            error: 'GPS51 configuration incomplete. Please ensure username and password are set in Settings.'
           }));
           return;
         }

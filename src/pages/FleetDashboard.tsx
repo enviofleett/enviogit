@@ -278,24 +278,42 @@ const FleetDashboard: React.FC = () => {
                           <p className="text-sm">
                             {error ? error : 'Your fleet data will appear here once available'}
                           </p>
-                          {(error?.includes('not configured') || error?.includes('GPS51 not configured')) && (
-                            <Button 
-                              variant="outline" 
-                              className="mt-4"
-                              onClick={() => navigate('/settings?tab=gps51')}
-                            >
-                              Configure GPS51
-                            </Button>
-                          )}
-                          {error?.includes('connection failed') && (
-                            <Button 
-                              variant="outline" 
-                              className="mt-4"
-                              onClick={refreshData}
-                            >
-                              Retry Connection
-                            </Button>
-                          )}
+                           {(error?.includes('not configured') || 
+                             error?.includes('GPS51 not configured') || 
+                             error?.includes('Missing') ||
+                             error?.includes('incomplete') ||
+                             error?.includes('credentials')) && (
+                             <div className="space-y-2">
+                               <Button 
+                                 variant="outline" 
+                                 className="mt-4"
+                                 onClick={() => navigate('/settings?tab=gps51')}
+                               >
+                                 <Settings className="w-4 h-4 mr-2" />
+                                 Configure GPS51
+                               </Button>
+                               <p className="text-xs text-gray-400">
+                                 Set up your GPS51 username and password to access vehicle data
+                               </p>
+                             </div>
+                           )}
+                           {(error?.includes('connection failed') || 
+                             error?.includes('proxy') || 
+                             error?.includes('CORS')) && (
+                             <div className="space-y-2">
+                               <Button 
+                                 variant="outline" 
+                                 className="mt-4"
+                                 onClick={refreshData}
+                               >
+                                 <RefreshCw className="w-4 h-4 mr-2" />
+                                 Retry Connection
+                               </Button>
+                               <p className="text-xs text-gray-400">
+                                 Check your internet connection and try again
+                               </p>
+                             </div>
+                           )}
                         </div>
                      ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

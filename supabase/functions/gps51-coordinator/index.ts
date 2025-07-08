@@ -45,7 +45,9 @@ serve(async (req) => {
   }
 
   try {
-    const { action, params, priority = 'normal', requesterId } = await req.json();
+    const requestBody = await req.json();
+    console.log('GPS51Coordinator: Request body received:', requestBody);
+    const { action, params, priority = 'normal', requesterId } = requestBody;
 
     // Check rate limiter first with fallback
     let rateLimitCheck;
@@ -151,7 +153,8 @@ serve(async (req) => {
     console.error('GPS51Coordinator error:', error);
     return new Response(JSON.stringify({
       success: false,
-      error: error.message
+      error: error.message || 'Unknown coordinator error',
+      cors_issue: false
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

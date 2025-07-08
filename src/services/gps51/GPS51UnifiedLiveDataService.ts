@@ -195,7 +195,7 @@ export class GPS51UnifiedLiveDataService {
       const { GPS51ConfigStorage } = await import('./configStorage');
       if (GPS51ConfigStorage.isConfigured()) {
         const config = GPS51ConfigStorage.getConfiguration();
-        if (config) {
+        if (config && config.password && config.password.length > 0) {
           try {
             console.log('GPS51UnifiedLiveDataService: Attempting auto-authentication...');
             await this.authenticate(config.username, config.password);
@@ -205,7 +205,7 @@ export class GPS51UnifiedLiveDataService {
             throw new Error('Authentication failed - please check your GPS51 credentials in Settings');
           }
         } else {
-          throw new Error('GPS51 not configured - please set up credentials in Settings');
+          throw new Error('GPS51 credentials incomplete - please configure username and password in Settings');
         }
       } else {
         throw new Error('GPS51 not configured - please set up credentials in Settings');
