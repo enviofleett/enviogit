@@ -141,8 +141,12 @@ export class GPS51Client {
         tokenLength: this.token?.length || 0
       });
 
+      if (!this.user?.username) {
+        throw new Error('GPS51Client: Username is required for device list query');
+      }
+
       const response = await this.apiClient.makeRequest('querymonitorlist', this.token!, { 
-        username: this.user?.username || 'octopus' 
+        username: this.user.username 
       });
       
       console.log('GPS51 Device List Response Analysis:', {

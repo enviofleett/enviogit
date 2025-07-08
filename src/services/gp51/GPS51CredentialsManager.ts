@@ -80,22 +80,11 @@ export class GPS51CredentialsManager {
       let passwordHash = localStorage.getItem('gps51_password_hash');
       let apiUrl = localStorage.getItem('gps51_api_url');
       
-      // If no credentials found, try default test credentials for demo purposes
+      // Check if all required credentials are present
       if (!username || !passwordHash || !apiUrl) {
-        console.log('GPS51CredentialsManager: No stored credentials found, checking for demo credentials...');
-        
-        // Check for demo credentials in localStorage (commonly stored as "octopus")
-        const demoUsername = localStorage.getItem('octopus');
-        if (demoUsername) {
-          console.log('GPS51CredentialsManager: Found demo credentials, using as default...');
-          username = demoUsername;
-          passwordHash = 'octopus'; // Will be hashed below
-          apiUrl = 'https://api.gps51.com/openapi';
-          
-          // Save these as the default credentials
-          localStorage.setItem('gps51_username', username);
-          localStorage.setItem('gps51_api_url', apiUrl);
-        }
+        console.log('GPS51CredentialsManager: Missing required credentials - user must provide GPS51 credentials');
+        this.credentials = null;
+        return;
       }
       
       if (username && passwordHash && apiUrl) {
@@ -153,22 +142,9 @@ export class GPS51CredentialsManager {
         console.log('GPS51CredentialsManager: No valid credentials found in storage');
       }
       
-      // As a last resort, provide default test credentials if none exist
+      // No automatic credential creation - user must provide valid GPS51 credentials
       if (!this.credentials) {
-        console.log('GPS51CredentialsManager: Setting up default test credentials...');
-        const { GPS51Utils } = await import('../gps51/GPS51Utils');
-        
-        this.credentials = {
-          username: 'octopus',
-          password: await GPS51Utils.ensureMD5Hash('octopus'),
-          apiUrl: 'https://api.gps51.com/openapi',
-          from: 'WEB',
-          type: 'USER'
-        };
-        
-        // Save these default credentials
-        this.saveCredentialsToStorage(this.credentials);
-        console.log('GPS51CredentialsManager: Default test credentials configured');
+        console.log('GPS51CredentialsManager: No credentials available - authentication required');
       }
       
       console.log('GPS51CredentialsManager: Credentials loading completed');
