@@ -136,20 +136,50 @@ export class GPS51CoordinatorClient {
   }
 
   /**
-   * Get device list through coordinator
+   * Get device list through coordinator with enhanced error handling
    */
   async getDeviceList(): Promise<GPS51Device[]> {
+    console.log('GPS51CoordinatorClient: Requesting device list through coordinator...');
+    
     const response = await this.sendRequest({
       action: 'getDeviceList',
       params: {},
       priority: 'normal'
     });
 
+    console.log('GPS51CoordinatorClient: Device list response:', {
+      success: response.success,
+      hasData: !!response.data,
+      dataType: Array.isArray(response.data) ? 'array' : typeof response.data,
+      deviceCount: Array.isArray(response.data) ? response.data.length : 0,
+      fromCache: response.fromCache,
+      error: response.error
+    });
+
     if (!response.success) {
-      throw new Error(response.error || 'Failed to get device list');
+      throw new Error(response.error || 'Failed to get device list through coordinator');
     }
 
-    return response.data || [];
+    // Handle different response formats
+    let devices: GPS51Device[] = [];
+    
+    if (response.data) {
+      if (Array.isArray(response.data)) {
+        devices = response.data;
+      } else if (response.data.groups && Array.isArray(response.data.groups)) {
+        // Extract devices from groups structure
+        response.data.groups.forEach((group: any) => {
+          if (group.devices && Array.isArray(group.devices)) {
+            devices = devices.concat(group.devices);
+          }
+        });
+      } else if (response.data.devices && Array.isArray(response.data.devices)) {
+        devices = response.data.devices;
+      }
+    }
+
+    console.log(`GPS51CoordinatorClient: Extracted ${devices.length} devices from coordinator response`);
+    return devices;
   }
 
   /**

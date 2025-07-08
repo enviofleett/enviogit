@@ -3,6 +3,7 @@ import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GPS51UnifiedCredentialsPanel } from './GPS51UnifiedCredentialsPanel';
 import GPS51DeviceManager from './GPS51DeviceManager';
+import { GPS51EnhancedDeviceManager } from './GPS51EnhancedDeviceManager';
 import { GPS51CronJobManager } from './GPS51CronJobManager';
 import { GPS51RealTimeActivationPanel } from './GPS51RealTimeActivationPanel';
 import { GPS51DebugPanel } from './GPS51DebugPanel';
@@ -55,7 +56,10 @@ export const GPS51Settings = () => {
         </TabsContent>
 
         <TabsContent value="devices">
-          <GPS51DeviceManager />
+          <div className="space-y-6">
+            <GPS51EnhancedDeviceManager />
+            <GPS51DeviceManager />
+          </div>
         </TabsContent>
 
         <TabsContent value="sync">

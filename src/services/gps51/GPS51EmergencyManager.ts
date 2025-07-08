@@ -116,17 +116,55 @@ export class GPS51EmergencyManager {
       
       const response = await this.client.getDeviceList(this.authState.username, forceRefresh);
       
-      // Extract devices from groups structure
+      // Enhanced device extraction with multiple fallback strategies (matching EmergencyGPS51Client)
       let devices: GPS51Device[] = [];
+      
+      console.log('🔍 GPS51EmergencyManager: Analyzing device response structure:', {
+        status: response.status,
+        hasGroups: !!response.groups,
+        groupsIsArray: Array.isArray(response.groups),
+        groupsLength: Array.isArray(response.groups) ? response.groups.length : 0,
+        hasDevices: !!response.devices,
+        devicesIsArray: Array.isArray(response.devices),
+        hasData: !!response.data,
+        responseKeys: Object.keys(response)
+      });
+      
+      // Strategy 1: Extract from groups structure
       if (response.groups && Array.isArray(response.groups)) {
         response.groups.forEach((group: any) => {
           if (group.devices && Array.isArray(group.devices)) {
             devices = devices.concat(group.devices);
           }
         });
+        console.log(`📱 Strategy 1 (groups): Found ${devices.length} devices`);
       }
       
-      console.log(`🟢 GPS51EmergencyManager: Retrieved ${devices.length} devices`);
+      // Strategy 2: Direct devices array
+      if (devices.length === 0 && response.devices && Array.isArray(response.devices)) {
+        devices = response.devices;
+        console.log(`📱 Strategy 2 (direct devices): Found ${devices.length} devices`);
+      }
+      
+      // Strategy 3: Data field
+      if (devices.length === 0 && response.data && Array.isArray(response.data)) {
+        devices = response.data;
+        console.log(`📱 Strategy 3 (data field): Found ${devices.length} devices`);
+      }
+      
+      // Strategy 4: Monitors field (some GPS51 variants)
+      if (devices.length === 0 && response.monitors && Array.isArray(response.monitors)) {
+        devices = response.monitors;
+        console.log(`📱 Strategy 4 (monitors): Found ${devices.length} devices`);
+      }
+      
+      console.log(`🟢 GPS51EmergencyManager: Final device extraction result: ${devices.length} devices`);
+      
+      if (devices.length === 0) {
+        console.warn('⚠️ GPS51EmergencyManager: No devices found despite successful API response');
+        console.warn('Full API response for debugging:', JSON.stringify(response, null, 2));
+      }
+      
       return devices;
       
     } catch (error) {

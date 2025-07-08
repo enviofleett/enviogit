@@ -135,6 +135,18 @@ export class EmergencyGPS51Client {
         throw new Error(data.cause || 'Failed to get device list');
       }
 
+      // Enhanced device extraction with multiple fallback strategies
+      console.log('🔍 EmergencyGPS51Client: Analyzing device response structure:', {
+        status: data.status,
+        hasGroups: !!data.groups,
+        groupsIsArray: Array.isArray(data.groups),
+        groupsLength: Array.isArray(data.groups) ? data.groups.length : 0,
+        hasDevices: !!data.devices,
+        devicesIsArray: Array.isArray(data.devices),
+        hasData: !!data.data,
+        responseKeys: Object.keys(data)
+      });
+
       // Cache device list for 10 minutes during emergency
       this.setCachedData(cacheKey, data, 600000);
       return data;
