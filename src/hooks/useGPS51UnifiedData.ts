@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { gps51UnifiedLiveDataService, GPS51Vehicle, GPS51Position } from '@/services/gps51/GPS51UnifiedLiveDataService';
+import { gps51ProductionService, GPS51Vehicle, GPS51Position } from '@/services/gps51/GPS51ProductionService';
 import { GPS51Device } from '@/services/gps51/types';
 
 export interface GPS51UnifiedDataState {
@@ -44,7 +44,7 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
       setState(prev => ({ ...prev, isLoading: true, error: null }));
 
       // Use unified service instead of coordinator client
-      const result = await gps51UnifiedLiveDataService.fetchLivePositions(deviceIds);
+      const result = await gps51ProductionService.fetchLivePositions(deviceIds);
 
       setState(prev => ({
         ...prev,
@@ -106,8 +106,8 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
       setState(prev => ({ ...prev, isLoading: true, error: null }));
 
       // Fetch devices and positions using unified service
-      const devices = await gps51UnifiedLiveDataService.fetchUserDevices();
-      const positionsResult = await gps51UnifiedLiveDataService.fetchLivePositions();
+      const devices = await gps51ProductionService.fetchUserDevices();
+      const positionsResult = await gps51ProductionService.fetchLivePositions();
 
       setState(prev => ({
         ...prev,
@@ -140,7 +140,7 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
       setState(prev => ({ ...prev, isLoading: true, error: null }));
 
       // Check unified service authentication status
-      const authState = gps51UnifiedLiveDataService.getAuthState();
+      const authState = gps51ProductionService.getAuthState();
       
       setState(prev => ({
         ...prev,

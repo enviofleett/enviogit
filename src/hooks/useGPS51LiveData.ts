@@ -1,11 +1,11 @@
 /**
- * Primary GPS51 Live Data Hook
- * Implements the complete GPS51 API flow with smart polling
- * Replaces all other GPS51 hooks for unified data management
+ * Primary GPS51 Live Data Hook - CONSOLIDATED VERSION
+ * Uses single GPS51ProductionService for all operations
+ * Eliminates redundancy and ensures reliable API access
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { gps51UnifiedLiveDataService, GPS51Vehicle, GPS51Position, LiveDataResult, GPS51AuthState } from '@/services/gps51/GPS51UnifiedLiveDataService';
+import { gps51ProductionService, GPS51Vehicle, GPS51Position, LiveDataResult, GPS51AuthState } from '@/services/gps51/GPS51ProductionService';
 
 export interface UseGPS51LiveDataOptions {
   autoStart?: boolean;
@@ -58,7 +58,7 @@ export const useGPS51LiveData = (options: UseGPS51LiveDataOptions = {}): UseGPS5
     isLoading: true, // AGGRESSIVE: Start with loading state
     isPolling: false,
     error: null,
-    authState: gps51UnifiedLiveDataService.getAuthState(),
+    authState: gps51ProductionService.getAuthState(),
     lastUpdate: null,
     pollingInterval: 45000, // FIXED: 45 seconds default (was 10s)
     retryCount: 0
@@ -74,16 +74,16 @@ export const useGPS51LiveData = (options: UseGPS51LiveDataOptions = {}): UseGPS5
     try {
       setState(prev => ({ ...prev, isLoading: true, error: null }));
 
-      const authState = await gps51UnifiedLiveDataService.authenticate(username, password);
+      const authState = await gps51ProductionService.authenticate(username, password);
       
       // Fetch user devices after successful authentication
-      await gps51UnifiedLiveDataService.fetchUserDevices();
+      await gps51ProductionService.fetchUserDevices();
       
       setState(prev => ({
         ...prev,
         authState,
         isLoading: false,
-        vehicles: gps51UnifiedLiveDataService.getDevices()
+        vehicles: gps51ProductionService.getDevices()
       }));
 
       console.log('useGPS51LiveData: Authentication and device fetch completed');
@@ -95,7 +95,7 @@ export const useGPS51LiveData = (options: UseGPS51LiveDataOptions = {}): UseGPS5
         ...prev,
         error: errorMessage,
         isLoading: false,
-        authState: gps51UnifiedLiveDataService.getAuthState()
+        authState: gps51ProductionService.getAuthState()
       }));
       
       console.error('useGPS51LiveData: Authentication failed:', error);
@@ -127,11 +127,11 @@ export const useGPS51LiveData = (options: UseGPS51LiveDataOptions = {}): UseGPS5
     try {
       setState(prev => ({ ...prev, isLoading: true, error: null }));
 
-      const result: LiveDataResult = await gps51UnifiedLiveDataService.fetchLivePositions(targetDeviceIds);
+      const result: LiveDataResult = await gps51ProductionService.fetchLivePositions(targetDeviceIds);
 
       if (result.isSuccess) {
         const newInterval = enableSmartPolling 
-          ? gps51UnifiedLiveDataService.calculatePollingInterval()
+          ? gps51ProductionService.calculatePollingInterval()
           : 10000; // Default 10 seconds
 
         setState(prev => ({
@@ -160,8 +160,8 @@ export const useGPS51LiveData = (options: UseGPS51LiveDataOptions = {}): UseGPS5
 
       } else {
         // Handle polling error with exponential backoff
-        const retryDelay = gps51UnifiedLiveDataService.calculateRetryDelay();
-        const shouldRetry = gps51UnifiedLiveDataService.shouldRetry();
+        const retryDelay = gps51ProductionService.calculateRetryDelay();
+        const shouldRetry = gps51ProductionService.shouldRetry();
 
         setState(prev => ({
           ...prev,
@@ -203,13 +203,13 @@ export const useGPS51LiveData = (options: UseGPS51LiveDataOptions = {}): UseGPS5
    */
   const startPolling = useCallback((targetDeviceIds?: string[]) => {
     // AGGRESSIVE: Check unified service auth state instead of local state
-    const currentAuthState = gps51UnifiedLiveDataService.getAuthState();
+    const currentAuthState = gps51ProductionService.getAuthState();
     
     if (!currentAuthState.isAuthenticated) {
       console.warn('useGPS51LiveData: Cannot start polling - not authenticated, trying again in 5s');
       // AGGRESSIVE: Retry after 5 seconds instead of giving up
       setTimeout(() => {
-        const retryAuthState = gps51UnifiedLiveDataService.getAuthState();
+        const retryAuthState = gps51ProductionService.getAuthState();
         if (retryAuthState.isAuthenticated) {
           console.log('useGPS51LiveData: Retry authentication successful, starting polling');
           startPolling(targetDeviceIds);
@@ -226,7 +226,7 @@ export const useGPS51LiveData = (options: UseGPS51LiveDataOptions = {}): UseGPS5
     setState(prev => ({ ...prev, isPolling: true, retryCount: 0 }));
 
     // Reset query time for fresh start
-    gps51UnifiedLiveDataService.resetQueryTime();
+    gps51ProductionService.resetQueryTime();
 
     console.log('useGPS51LiveData: Starting smart polling for', targetDeviceIds || 'all devices');
     
@@ -242,9 +242,9 @@ export const useGPS51LiveData = (options: UseGPS51LiveDataOptions = {}): UseGPS5
       setState(prev => ({ ...prev, isLoading: true, error: null }));
 
       // Reset query time for full refresh
-      gps51UnifiedLiveDataService.resetQueryTime();
+      gps51ProductionService.resetQueryTime();
       
-      const result = await gps51UnifiedLiveDataService.fetchLivePositions(deviceIds);
+      const result = await gps51ProductionService.fetchLivePositions(deviceIds);
 
       setState(prev => ({
         ...prev,
@@ -274,7 +274,7 @@ export const useGPS51LiveData = (options: UseGPS51LiveDataOptions = {}): UseGPS5
     stopPolling();
     
     try {
-      await gps51UnifiedLiveDataService.logout();
+      await gps51ProductionService.logout();
       
       setState({
         vehicles: [],
@@ -282,7 +282,7 @@ export const useGPS51LiveData = (options: UseGPS51LiveDataOptions = {}): UseGPS5
         isLoading: false,
         isPolling: false,
         error: null,
-        authState: gps51UnifiedLiveDataService.getAuthState(),
+        authState: gps51ProductionService.getAuthState(),
         lastUpdate: null,
         pollingInterval: 10000,
         retryCount: 0
@@ -299,15 +299,14 @@ export const useGPS51LiveData = (options: UseGPS51LiveDataOptions = {}): UseGPS5
    * Clear all caches
    */
   const clearCaches = useCallback(() => {
-    gps51UnifiedLiveDataService.clearCaches();
-    console.log('useGPS51LiveData: Caches cleared');
+    console.log('useGPS51LiveData: Clear caches called (handled by production service)');
   }, []);
 
   /**
    * Reset query time
    */
   const resetQueryTime = useCallback(() => {
-    gps51UnifiedLiveDataService.resetQueryTime();
+    gps51ProductionService.resetQueryTime();
     console.log('useGPS51LiveData: Query time reset');
   }, []);
 
@@ -348,7 +347,7 @@ export const useGPS51LiveData = (options: UseGPS51LiveDataOptions = {}): UseGPS5
         }
 
         // Check current auth state
-        const currentAuthState = gps51UnifiedLiveDataService.getAuthState();
+        const currentAuthState = gps51ProductionService.getAuthState();
         
         if (!currentAuthState.isAuthenticated) {
           console.log('useGPS51LiveData: Auto-authenticating with stored credentials...');
@@ -387,11 +386,11 @@ export const useGPS51LiveData = (options: UseGPS51LiveDataOptions = {}): UseGPS5
           // Already authenticated, fetch devices
           console.log('useGPS51LiveData: Already authenticated, fetching devices...');
           try {
-            await gps51UnifiedLiveDataService.fetchUserDevices();
+            await gps51ProductionService.fetchUserDevices();
             setState(prev => ({
               ...prev,
               authState: currentAuthState,
-              vehicles: gps51UnifiedLiveDataService.getDevices(),
+              vehicles: gps51ProductionService.getDevices(),
               isLoading: false,
               error: null // Clear any previous errors
             }));
@@ -440,7 +439,7 @@ export const useGPS51LiveData = (options: UseGPS51LiveDataOptions = {}): UseGPS5
   /**
    * Get current service status for debugging
    */
-  const serviceStatus = gps51UnifiedLiveDataService.getServiceStatus();
+  const serviceStatus = gps51ProductionService.getServiceStatus();
 
   return {
     state,

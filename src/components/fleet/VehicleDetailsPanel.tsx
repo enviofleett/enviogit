@@ -21,7 +21,7 @@ import {
   CheckCircle,
   Info
 } from 'lucide-react';
-import { GPS51Vehicle } from '@/services/gps51/GPS51UnifiedLiveDataService';
+import { GPS51Vehicle } from '@/services/gps51/GPS51ProductionService';
 
 interface VehicleDetailsPanelProps {
   vehicle: GPS51Vehicle | null;

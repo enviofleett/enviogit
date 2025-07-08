@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { MapPin, Navigation, Locate, ZoomIn, ZoomOut } from 'lucide-react';
-import { GPS51Vehicle, GPS51Position } from '@/services/gps51/GPS51UnifiedLiveDataService';
+import { GPS51Vehicle, GPS51Position } from '@/services/gps51/GPS51ProductionService';
 
 interface FleetMapProps {
   vehicles: GPS51Vehicle[];
