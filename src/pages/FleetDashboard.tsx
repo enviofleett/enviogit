@@ -25,11 +25,14 @@ import {
   Pause,
   RefreshCw,
   Car,
-  Activity
+  Activity,
+  Settings,
+  Wrench
 } from 'lucide-react';
 import { useGPS51LiveData } from '@/hooks/useGPS51LiveData';
 import { useToast } from '@/hooks/use-toast';
 import { GPS51ConfigStorage } from '@/services/gps51/configStorage';
+import { useNavigate } from 'react-router-dom';
 import FleetMap from '@/components/fleet/FleetMap';
 import VehicleDetailsPanel from '@/components/fleet/VehicleDetailsPanel';
 import FleetMetricsCards from '@/components/fleet/FleetMetricsCards';
@@ -37,6 +40,7 @@ import RealTimeStatusPanel from '@/components/fleet/RealTimeStatusPanel';
 
 const FleetDashboard: React.FC = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
   const [mapView, setMapView] = useState<'satellite' | 'street'>('street');
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -80,13 +84,15 @@ const FleetDashboard: React.FC = () => {
   // PRODUCTION FIX: Handle authentication using unified system
   const handleAuthenticate = async () => {
     try {
-      // Use GPS51ConfigStorage for consistent credential access
+      // Check if configuration exists first
       if (!GPS51ConfigStorage.isConfigured()) {
         toast({
-          title: "Configuration Required",
-          description: "Please configure GPS51 credentials in Settings first.",
-          variant: "destructive"
+          title: "GPS51 Setup Required",
+          description: "Redirecting to Settings to configure GPS51 credentials...",
+          variant: "default"
         });
+        // Redirect to settings page with GPS51 setup
+        navigate('/settings?tab=gps51');
         return;
       }
 
@@ -108,6 +114,11 @@ const FleetDashboard: React.FC = () => {
         variant: "destructive"
       });
     }
+  };
+
+  // PRODUCTION FIX: Direct setup navigation
+  const handleSetupGPS51 = () => {
+    navigate('/settings?tab=gps51');
   };
 
   // Calculate fleet metrics
@@ -170,18 +181,29 @@ const FleetDashboard: React.FC = () => {
             </div>
             <CardTitle>Fleet Dashboard</CardTitle>
             <CardDescription>
-              GPS51 credentials required for fleet monitoring
+              GPS51 integration required for live fleet monitoring
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button 
-              onClick={handleAuthenticate} 
-              className="w-full"
-              disabled={isLoading}
-            >
-              <Wifi className="w-4 h-4 mr-2" />
-              Connect to GPS51
-            </Button>
+            {GPS51ConfigStorage.isConfigured() ? (
+              <Button 
+                onClick={handleAuthenticate} 
+                className="w-full"
+                disabled={isLoading}
+              >
+                <Wifi className="w-4 h-4 mr-2" />
+                Connect to GPS51
+              </Button>
+            ) : (
+              <Button 
+                onClick={handleSetupGPS51} 
+                className="w-full"
+                variant="default"
+              >
+                <Settings className="w-4 h-4 mr-2" />
+                Setup GPS51 Credentials
+              </Button>
+            )}
             
             {error && (
               <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">
@@ -189,8 +211,17 @@ const FleetDashboard: React.FC = () => {
               </div>
             )}
             
-            <div className="text-xs text-gray-500 text-center">
-              Configure GPS51 credentials in Settings first
+            <div className="text-xs text-gray-500 text-center space-y-2">
+              <p>You need GPS51 credentials to access live vehicle data</p>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleSetupGPS51}
+                className="text-blue-600 hover:text-blue-800"
+              >
+                <Wrench className="w-3 h-3 mr-1" />
+                Configure in Settings
+              </Button>
             </div>
           </CardContent>
         </Card>
