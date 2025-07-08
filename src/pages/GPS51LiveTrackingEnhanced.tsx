@@ -199,7 +199,24 @@ const GPS51LiveTrackingEnhanced: React.FC = () => {
               <div className="font-medium">Connection Error</div>
               <div className="text-sm mt-1">{error}</div>
               <div className="text-xs mt-2 text-red-500">
-                Check GPS51 credentials in Settings or try refreshing the connection
+                {error.includes('Not authenticated') || error.includes('no valid token') ? (
+                  <>Authentication required: Go to Settings → GPS51 and verify your credentials</>
+                ) : error.includes('Failed to send a request to the Edge Function') ? (
+                  <>Edge Function error: Network connectivity issue or edge function unavailable</>
+                ) : error.includes('Proxy request failed') ? (
+                  <>GPS51 Proxy error: GPS51 API server may be temporarily unavailable</>
+                ) : (
+                  <>Check GPS51 credentials in Settings or try refreshing the connection</>
+                )}
+              </div>
+              <div className="mt-2">
+                <button 
+                  onClick={actions.refreshData}
+                  className="text-xs bg-red-100 hover:bg-red-200 px-2 py-1 rounded"
+                  disabled={isLoading}
+                >
+                  Retry Connection
+                </button>
               </div>
             </div>
           )}

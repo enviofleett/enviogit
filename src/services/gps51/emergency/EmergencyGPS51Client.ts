@@ -24,12 +24,49 @@ export class EmergencyGPS51Client {
   }
 
   private loadToken(): void {
+    // CRITICAL FIX: Synchronize with localStorage GPS51TokenManager
     this.token = sessionStorage.getItem('gps51_token');
+    
+    if (!this.token) {
+      // Try to get from GPS51TokenManager in localStorage
+      const storedToken = localStorage.getItem('gps51_token');
+      if (storedToken) {
+        try {
+          const tokenData = JSON.parse(storedToken);
+          const expiryDate = new Date(tokenData.expires_at);
+          
+          // Check if stored token is still valid
+          if (expiryDate.getTime() > Date.now()) {
+            this.token = tokenData.access_token;
+            // Sync to sessionStorage for consistency
+            sessionStorage.setItem('gps51_token', this.token);
+            console.log('🔄 EmergencyGPS51Client: Token synchronized from localStorage');
+          } else {
+            console.log('🟡 EmergencyGPS51Client: Stored token expired');
+            localStorage.removeItem('gps51_token');
+          }
+        } catch (e) {
+          console.warn('EmergencyGPS51Client: Failed to parse stored token');
+          localStorage.removeItem('gps51_token');
+        }
+      }
+    }
   }
 
   private saveToken(token: string): void {
     this.token = token;
     sessionStorage.setItem('gps51_token', token);
+    
+    // CRITICAL FIX: Also save to localStorage in GPS51TokenManager format
+    const tokenData = {
+      access_token: token,
+      token_type: 'Bearer',
+      expires_in: 24 * 60 * 60, // 24 hours
+      expires_at: new Date(Date.now() + (24 * 60 * 60 * 1000)).toISOString()
+    };
+    
+    localStorage.setItem('gps51_token', JSON.stringify(tokenData));
+    console.log('🔄 EmergencyGPS51Client: Token synchronized to localStorage');
   }
 
   private getCachedData(key: string): any | null {
@@ -107,9 +144,17 @@ export class EmergencyGPS51Client {
 
     console.log('🚨 EMERGENCY DEVICE LIST - Rate Limited');
 
+    // CRITICAL FIX: Refresh token before API calls
+    this.loadToken();
     if (!this.token) {
-      throw new Error('Not authenticated');
+      throw new Error('Not authenticated - no valid token available');
     }
+    
+    console.log('🔍 EmergencyGPS51Client: Device list request with token validation:', {
+      hasToken: !!this.token,
+      tokenLength: this.token?.length || 0,
+      username
+    });
 
     const result = await this.rateLimiter.addRequest(async () => {
       // CRITICAL FIX: Use Supabase Edge Function proxy instead of direct fetch
@@ -174,9 +219,18 @@ export class EmergencyGPS51Client {
 
     console.log(`🚨 EMERGENCY POSITION FETCH - ${deviceIds.length} devices - Rate Limited`);
 
+    // CRITICAL FIX: Refresh token before API calls
+    this.loadToken();
     if (!this.token) {
-      throw new Error('Not authenticated');
+      throw new Error('Not authenticated - no valid token available');
     }
+    
+    console.log('🔍 EmergencyGPS51Client: Position fetch request with token validation:', {
+      hasToken: !!this.token,
+      tokenLength: this.token?.length || 0,
+      deviceCount: deviceIds.length,
+      lastQueryTime
+    });
 
     // CRITICAL: Batch ALL devices in ONE request
     const result = await this.rateLimiter.addRequest(async () => {
@@ -227,9 +281,19 @@ export class EmergencyGPS51Client {
 
     console.log('🚨 EMERGENCY HISTORY TRACKS - Rate Limited');
 
+    // CRITICAL FIX: Refresh token before API calls
+    this.loadToken();
     if (!this.token) {
-      throw new Error('Not authenticated');
+      throw new Error('Not authenticated - no valid token available');
     }
+    
+    console.log('🔍 EmergencyGPS51Client: History tracks request with token validation:', {
+      hasToken: !!this.token,
+      tokenLength: this.token?.length || 0,
+      deviceId,
+      beginTime,
+      endTime
+    });
 
     const result = await this.rateLimiter.addRequest(async () => {
       // CRITICAL FIX: Use Supabase Edge Function proxy instead of direct fetch
@@ -321,6 +385,8 @@ export class EmergencyGPS51Client {
     
     this.token = null;
     sessionStorage.removeItem('gps51_token');
+    // CRITICAL FIX: Also clear localStorage token synchronization
+    localStorage.removeItem('gps51_token');
     this.clearAllCaches();
   }
 }

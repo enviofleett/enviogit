@@ -132,11 +132,37 @@ serve(async (req) => {
     const targetUrl = new URL(apiUrl);
     targetUrl.searchParams.append('action', requestData.action);
     
-    // Add token for all actions except login (even if empty for debugging)
+    // CRITICAL FIX: Enhanced token validation for all actions except login
     if (requestData.action !== 'login') {
-      const token = requestData.token || 'no-token';
-      targetUrl.searchParams.append('token', token);
-      console.log('GPS51 Proxy: Added token parameter:', { action: requestData.action, hasToken: !!requestData.token });
+      if (!requestData.token || requestData.token === 'no-token' || requestData.token.trim() === '') {
+        console.error('GPS51 Proxy: Missing or invalid token for authenticated action:', {
+          action: requestData.action,
+          tokenProvided: !!requestData.token,
+          tokenValue: requestData.token ? `${requestData.token.substring(0, 10)}...` : 'null'
+        });
+        
+        return new Response(
+          JSON.stringify({
+            error: 'Authentication required - no valid token provided',
+            proxy_error: true,
+            error_code: 'MISSING_TOKEN',
+            action: requestData.action,
+            suggestion: 'Please authenticate first using the login action'
+          }),
+          { 
+            status: 401, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+      
+      targetUrl.searchParams.append('token', requestData.token);
+      console.log('GPS51 Proxy: Added valid token parameter:', { 
+        action: requestData.action, 
+        hasToken: !!requestData.token,
+        tokenLength: requestData.token.length,
+        tokenPrefix: requestData.token.substring(0, 10) + '...'
+      });
     }
 
     // Add undocumented parameters for specific actions

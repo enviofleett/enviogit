@@ -8,6 +8,7 @@
  */
 
 import { EmergencyGPS51Client } from './emergency/EmergencyGPS51Client';
+import { gps51SimpleAuthSync } from './GPS51SimpleAuthSync';
 
 export interface GPS51Vehicle {
   deviceid: string;
@@ -104,6 +105,9 @@ export class GPS51UnifiedLiveDataService {
         token,
         username
       };
+
+      // CRITICAL FIX: Use simple auth sync to prevent circular loops
+      gps51SimpleAuthSync.notifyAuthSuccess(username);
 
       console.log('GPS51UnifiedLiveDataService: Authentication successful');
       return this.authState;
@@ -381,6 +385,9 @@ export class GPS51UnifiedLiveDataService {
     this.devices = [];
     this.lastQueryTime = 0;
     this.retryCount = 0;
+    
+    // CRITICAL FIX: Notify simple auth sync of logout
+    gps51SimpleAuthSync.notifyLogout();
     
     console.log('GPS51UnifiedLiveDataService: Logged out and reset');
   }
