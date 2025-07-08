@@ -13,7 +13,7 @@ import {
 
 const navigation = [
   { name: 'Fleet Overview', href: '/', icon: Monitor },
-  { name: 'Fleet', href: '/tracking', icon: MapPin },
+  { name: 'Fleet', href: '/fleet', icon: MapPin },
   { name: 'Marketplace', href: '/marketplace', icon: Store },
   { name: 'Partners', href: '/partners', icon: Users },
   { name: 'Referral Program', href: '/referrals', icon: Users },
