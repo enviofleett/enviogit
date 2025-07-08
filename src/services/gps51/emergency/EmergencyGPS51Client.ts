@@ -56,23 +56,33 @@ export class EmergencyGPS51Client {
     const cached = this.getCachedData(cacheKey);
     if (cached) return cached;
 
-    console.log('🚨 EMERGENCY LOGIN - Rate Limited');
+    console.log('🚨 EMERGENCY LOGIN - Using Supabase Proxy to avoid CORS');
     
     const hashedPassword = await this.md5Hash(password);
     
     const result = await this.rateLimiter.addRequest(async () => {
-      const response = await fetch(`${this.baseUrl}?action=login&token=`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username,
-          password: hashedPassword,
-          from: "WEB",
-          type: "USER"
-        })
+      // CRITICAL FIX: Use Supabase Edge Function proxy instead of direct fetch
+      const { supabase } = await import('@/integrations/supabase/client');
+      
+      const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('gps51-proxy', {
+        body: {
+          action: 'login',
+          params: {
+            username,
+            password: hashedPassword,
+            from: "WEB",
+            type: "USER"
+          },
+          method: 'POST',
+          apiUrl: this.baseUrl
+        }
       });
 
-      const data = await response.json();
+      if (proxyError) {
+        throw new Error(`Proxy request failed: ${proxyError.message}`);
+      }
+
+      const data = proxyResponse;
       
       if (data.status !== 0) {
         throw new Error(data.cause || 'Login failed');
@@ -102,13 +112,24 @@ export class EmergencyGPS51Client {
     }
 
     const result = await this.rateLimiter.addRequest(async () => {
-      const response = await fetch(`${this.baseUrl}?action=querymonitorlist&token=${this.token}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username })
+      // CRITICAL FIX: Use Supabase Edge Function proxy instead of direct fetch
+      const { supabase } = await import('@/integrations/supabase/client');
+      
+      const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('gps51-proxy', {
+        body: {
+          action: 'querymonitorlist',
+          token: this.token,
+          params: { username },
+          method: 'POST',
+          apiUrl: this.baseUrl
+        }
       });
 
-      const data = await response.json();
+      if (proxyError) {
+        throw new Error(`Proxy request failed: ${proxyError.message}`);
+      }
+
+      const data = proxyResponse;
       
       if (data.status !== 0) {
         throw new Error(data.cause || 'Failed to get device list');
@@ -147,16 +168,27 @@ export class EmergencyGPS51Client {
 
     // CRITICAL: Batch ALL devices in ONE request
     const result = await this.rateLimiter.addRequest(async () => {
-      const response = await fetch(`${this.baseUrl}?action=lastposition&token=${this.token}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          deviceids: deviceIds, // Send ALL device IDs in one request
-          lastquerypositiontime: lastQueryTime
-        })
+      // CRITICAL FIX: Use Supabase Edge Function proxy instead of direct fetch
+      const { supabase } = await import('@/integrations/supabase/client');
+      
+      const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('gps51-proxy', {
+        body: {
+          action: 'lastposition',
+          token: this.token,
+          params: {
+            deviceids: deviceIds.join(','), // GPS51 API expects comma-separated string
+            lastquerypositiontime: lastQueryTime
+          },
+          method: 'POST',
+          apiUrl: this.baseUrl
+        }
       });
 
-      const data = await response.json();
+      if (proxyError) {
+        throw new Error(`Proxy request failed: ${proxyError.message}`);
+      }
+
+      const data = proxyResponse;
       
       if (data.status !== 0) {
         throw new Error(data.cause || 'Failed to get positions');
@@ -188,18 +220,29 @@ export class EmergencyGPS51Client {
     }
 
     const result = await this.rateLimiter.addRequest(async () => {
-      const response = await fetch(`${this.baseUrl}?action=querytracks&token=${this.token}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          deviceid: deviceId,
-          begintime: beginTime,
-          endtime: endTime,
-          timezone
-        })
+      // CRITICAL FIX: Use Supabase Edge Function proxy instead of direct fetch
+      const { supabase } = await import('@/integrations/supabase/client');
+      
+      const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('gps51-proxy', {
+        body: {
+          action: 'querytracks',
+          token: this.token,
+          params: {
+            deviceid: deviceId,
+            begintime: beginTime,
+            endtime: endTime,
+            timezone
+          },
+          method: 'POST',
+          apiUrl: this.baseUrl
+        }
       });
 
-      const data = await response.json();
+      if (proxyError) {
+        throw new Error(`Proxy request failed: ${proxyError.message}`);
+      }
+
+      const data = proxyResponse;
       
       if (data.status !== 0) {
         throw new Error(data.cause || 'Failed to get tracks');
@@ -240,11 +283,24 @@ export class EmergencyGPS51Client {
     if (this.token) {
       try {
         await this.rateLimiter.addRequest(async () => {
-          const response = await fetch(`${this.baseUrl}?action=logout&token=${this.token}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+          // CRITICAL FIX: Use Supabase Edge Function proxy instead of direct fetch
+          const { supabase } = await import('@/integrations/supabase/client');
+          
+          const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('gps51-proxy', {
+            body: {
+              action: 'logout',
+              token: this.token,
+              params: {},
+              method: 'POST',
+              apiUrl: this.baseUrl
+            }
           });
-          return response.json();
+
+          if (proxyError) {
+            console.warn('Proxy logout failed:', proxyError);
+          }
+          
+          return proxyResponse;
         }, 10);
       } catch (error) {
         console.warn('Logout failed:', error);

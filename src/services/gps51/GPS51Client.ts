@@ -433,10 +433,24 @@ export class GPS51Client {
 
   /**
    * Set authentication state - used by unified auth service
+   * CRITICAL FIX: Accept username parameter to handle cases where API doesn't return user object
    */
-  setAuthenticationState(token: string, user?: GPS51User | null, expiryMs?: number): void {
+  setAuthenticationState(token: string, user?: GPS51User | null, expiryMs?: number, username?: string): void {
     this.token = token;
-    this.user = user || null;
+    
+    // CRITICAL FIX: If no user object but we have username, create minimal user object
+    if (!user && username) {
+      this.user = {
+        username: username,
+        usertype: 1, // 1 for USER type
+        companyname: 'Unknown',
+        showname: username,
+        multilogin: 0
+      };
+      console.log('GPS51Client: Created user object from username for device queries:', { username });
+    } else {
+      this.user = user || null;
+    }
     this.tokenExpiry = expiryMs || (Date.now() + (GPS51_DEFAULTS.TOKEN_EXPIRY_HOURS * 60 * 60 * 1000));
     
     console.log('GPS51Client: Authentication state set:', {

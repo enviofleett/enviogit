@@ -63,12 +63,13 @@ export class GPS51EmergencyManager {
 
   async authenticate(credentials: GPS51Credentials): Promise<{ success: boolean; error?: string }> {
     try {
-      console.log('🚨 GPS51EmergencyManager: Authenticating with emergency client');
+      console.log('🚨 GPS51EmergencyManager: Authenticating with emergency client via proxy');
       
       // Auto-hash password if needed using GPS51Utils
       const { GPS51Utils } = await import('./GPS51Utils');
       const hashedPassword = await GPS51Utils.ensureMD5Hash(credentials.password);
       
+      // CRITICAL FIX: Emergency client now uses proxy - no more CORS errors
       const token = await this.client.login(credentials.username, hashedPassword);
       
       this.authState = {

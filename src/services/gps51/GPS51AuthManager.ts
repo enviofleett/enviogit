@@ -31,6 +31,13 @@ export class GPS51AuthManager {
         throw new Error('Authentication succeeded but no token received');
       }
 
+      // CRITICAL FIX: Pass username to client even if user object is missing
+      const clientUser = gps51Client.getUser();
+      if (!clientUser || !clientUser.username) {
+        console.log('GPS51AuthManager: No user object from API, setting username manually for device queries');
+        gps51Client.setAuthenticationState(clientToken, clientUser, undefined, credentials.username);
+      }
+
       const token = this.tokenManager.setToken({
         access_token: clientToken,
         expires_in: 24 * 60 * 60 // 24 hours

@@ -5,6 +5,7 @@ import { GPS51AuthStateManager } from './GPS51AuthStateManager';
 import { GPS51SessionManager } from './GPS51SessionManager';
 import { GPS51ConnectionTester } from './GPS51ConnectionTester';
 import { GPS51AuthenticationCore } from './GPS51AuthenticationCore';
+import { gps51AuthStateSync } from './GPS51AuthStateSync';
 
 /**
  * Unified GPS51 Authentication Service
@@ -74,6 +75,14 @@ export class GPS51UnifiedAuthService {
 
         // Set authentication state using state manager
         this.authStateManager.setAuthenticationState(result.token, result.user);
+
+        // CRITICAL FIX: Synchronize authentication state across all services
+        gps51AuthStateSync.synchronizeAuthState(
+          result.token, 
+          result.user, 
+          authCredentials.username, 
+          'unified'
+        );
 
         // Dispatch authentication success event
         this.authStateManager.dispatchAuthenticationEvent(result.token, result.user, result.strategy || 'unknown');
@@ -185,6 +194,9 @@ export class GPS51UnifiedAuthService {
     console.log('GPS51UnifiedAuthService: Logging out...');
     this.authStateManager.clearAuthenticationState();
     this.credentialsManager.clearCredentials();
+    
+    // CRITICAL FIX: Clear synchronized authentication state
+    gps51AuthStateSync.clearAuthState();
     
     // Dispatch logout event
     this.authStateManager.dispatchLogoutEvent();
