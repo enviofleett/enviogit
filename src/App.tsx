@@ -16,6 +16,7 @@ import Partners from "./pages/Partners";
 import Referrals from "./pages/Referrals";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
+import GPS51LiveTrackingEnhanced from "./pages/GPS51LiveTrackingEnhanced";
 import { gps51ProductionBootstrap } from "./services/production/GPS51ProductionBootstrap";
 
 const queryClient = new QueryClient();
@@ -46,7 +47,7 @@ const App = () => {
                   <main className="flex-1 overflow-auto">
                     <Routes>
                       <Route path="/" element={<Index />} />
-                      <Route path="/tracking" element={<Index />} />
+                      <Route path="/tracking" element={<GPS51LiveTrackingEnhanced />} />
                       <Route path="/marketplace" element={<Marketplace />} />
                       <Route path="/partners" element={<Partners />} />
                       <Route path="/referrals" element={<Referrals />} />

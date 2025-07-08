@@ -5,35 +5,51 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { MapPin, Search, Filter, Download, RefreshCw } from 'lucide-react';
-import { useGPS51Data } from '@/hooks/useGPS51Data';
+import { useGPS51LiveTracking } from '@/hooks/useGPS51LiveTracking';
 
 const GPS51LiveTrackingEnhanced: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState('all');
 
-  const { vehicles, vehiclePositions, loading, error, refresh } = useGPS51Data();
+  const {
+    vehicles,
+    isLoading,
+    error,
+    refreshNow,
+    activeVehicleCount,
+    movingVehicleCount,
+    offlineVehicleCount,
+    parkedVehicleCount,
+    movingVehicles,
+    parkedVehicles,
+    offlineVehicles
+  } = useGPS51LiveTracking({
+    autoStart: true,
+    baseInterval: 30000,
+    adaptiveRefresh: true
+  });
   
-  // Transform GPS51 data to match expected format
-  const positions = vehiclePositions.map(pos => ({
-    deviceid: pos.vehicle_id,
-    callat: pos.latitude,
-    callon: pos.longitude,
-    speed: pos.speed,
-    moving: pos.isMoving ? 1 : 0,
-    strstatus: pos.status,
-    updatetime: new Date(pos.timestamp).getTime() / 1000,
-    course: pos.heading || 0,
-    altitude: 0,
+  // Transform GPS51 live data to expected format
+  const positions = vehicles.map(vehicle => ({
+    deviceid: vehicle.device.deviceid,
+    callat: vehicle.position?.callat || 0,
+    callon: vehicle.position?.callon || 0,
+    speed: vehicle.speed,
+    moving: vehicle.isMoving ? 1 : 0,
+    strstatus: vehicle.status,
+    updatetime: vehicle.lastUpdate / 1000,
+    course: vehicle.position?.course || 0,
+    altitude: vehicle.position?.altitude || 0,
     radius: 5
   }));
   
   const metrics = {
     totalDevices: vehicles.length,
-    activeDevices: vehicles.filter(v => v.latest_position).length,
-    movingVehicles: vehiclePositions.filter(p => p.isMoving).length,
-    parkedDevices: vehiclePositions.filter(p => !p.isMoving).length,
-    offlineVehicles: vehicles.length - vehicles.filter(v => v.latest_position).length
+    activeDevices: activeVehicleCount,
+    movingVehicles: movingVehicleCount,
+    parkedDevices: parkedVehicleCount,
+    offlineVehicles: offlineVehicleCount
   };
 
   const filteredPositions = positions.filter(position => {
@@ -66,8 +82,8 @@ const GPS51LiveTrackingEnhanced: React.FC = () => {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900">GPS51 Live Tracking</h1>
         <div className="flex items-center space-x-2">
-          <Button onClick={refresh} variant="outline" size="sm">
-            <RefreshCw className="h-4 w-4 mr-2" />
+          <Button onClick={refreshNow} variant="outline" size="sm" disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
           <Button variant="outline" size="sm">
@@ -157,7 +173,7 @@ const GPS51LiveTrackingEnhanced: React.FC = () => {
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>Live Device Positions ({filteredPositions.length})</span>
-            {loading && <RefreshCw className="h-4 w-4 animate-spin" />}
+            {isLoading && <RefreshCw className="h-4 w-4 animate-spin" />}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -228,7 +244,7 @@ const GPS51LiveTrackingEnhanced: React.FC = () => {
               </div>
             ))}
 
-            {filteredPositions.length === 0 && !loading && (
+            {filteredPositions.length === 0 && !isLoading && (
               <div className="text-center py-8 text-gray-500">
                 {searchTerm || filterStatus !== 'all' 
                   ? 'No devices match your search criteria'
