@@ -131,31 +131,35 @@ export class GPS51ProductionService {
 
         // Call GPS51 login API through Edge Function
         const { supabase } = await import('@/integrations/supabase/client');
+        
+        // Ensure password is MD5 hashed
+        const { GPS51Utils } = await import('./GPS51Utils');
+        const hashedPassword = await GPS51Utils.ensureMD5Hash(password);
+        
         const { data, error } = await supabase.functions.invoke('gps51-auth', {
           body: {
-            action: 'login',
             username,
-            password,
-            from: 'WEB',
-            type: 'USER'
+            password: hashedPassword,
+            apiUrl: this.apiUrl
           }
         });
 
         if (error) {
-          throw new Error(`Authentication failed: ${error.message}`);
+          throw new Error(`Edge Function error: ${error.message}`);
         }
 
-        if (!data?.success) {
-          throw new Error(data?.error || 'Authentication failed');
+        if (!data || !data.success) {
+          const errorMsg = data?.error || 'Authentication failed - invalid response from server';
+          throw new Error(errorMsg);
         }
 
-        return data;
+      return data;
       });
 
       // Update authentication state
       this.authState = {
         isAuthenticated: true,
-        token: result.token,
+        token: result.access_token || result.token,
         username
       };
 
@@ -180,7 +184,11 @@ export class GPS51ProductionService {
         error: errorMessage
       };
 
-      console.error('GPS51ProductionService: Authentication failed:', error);
+      console.error('GPS51ProductionService: Authentication failed:', {
+        error: errorMessage,
+        hasCredentials: !!username,
+        apiUrl: this.apiUrl
+      });
       throw new Error(errorMessage);
     }
   }

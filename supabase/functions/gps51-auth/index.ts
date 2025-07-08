@@ -26,10 +26,10 @@ serve(async (req) => {
       throw new Error('Empty request body received');
     }
 
-    const { username, password, apiKey, apiUrl }: GPS51AuthRequest = JSON.parse(requestBody);
+    const { username, password, apiUrl }: GPS51AuthRequest = JSON.parse(requestBody);
 
-    if (!username || !password || !apiKey || !apiUrl) {
-      throw new Error('Missing required authentication parameters: username, password, apiKey, and apiUrl are required');
+    if (!username || !password || !apiUrl) {
+      throw new Error('Missing required authentication parameters: username, password, and apiUrl are required');
     }
 
     // PRODUCTION FIX: Real GPS51 authentication
@@ -88,7 +88,7 @@ serve(async (req) => {
         timestamp: new Date().toISOString(),
       }),
       {
-        status: 500,
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
