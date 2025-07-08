@@ -8,6 +8,9 @@ import { GPS51ConfigStorage } from './configStorage';
 import { GPS51CredentialChecker } from './GPS51CredentialChecker';
 import { gps51SimpleAuthSync } from './GPS51SimpleAuthSync';
 import { gps51PerformanceOptimizer } from './GPS51PerformanceOptimizer';
+import { gps51UserTypeManager, EnvioUserRole, GPS51UserProfile } from './GPS51UserTypeManager';
+import { gps51IntelligentPolling, VehicleState } from './GPS51IntelligentPolling';
+import { gps51GroupManager, FleetHierarchy } from './GPS51GroupManager';
 
 export interface GPS51Vehicle {
   deviceid: string;
@@ -22,6 +25,10 @@ export interface GPS51Vehicle {
   devicetype?: string;
   overduetime?: number;
   remark?: string;
+  groupid?: string;
+  groupname?: string;
+  vehicleState?: VehicleState;
+  pollingPriority?: number;
 }
 
 export interface GPS51Position {
@@ -53,6 +60,8 @@ export interface GPS51AuthState {
   isAuthenticated: boolean;
   token: string | null;
   username: string | null;
+  userProfile?: GPS51UserProfile;
+  fleetHierarchy?: FleetHierarchy;
   error?: string;
 }
 
@@ -79,6 +88,7 @@ export class GPS51ProductionService {
   private lastQueryTime: number = 0;
   private retryCount: number = 0;
   private maxRetries: number = 3;
+  private userRole: EnvioUserRole = EnvioUserRole.INDIVIDUAL_OWNER;
   
   // API configuration
   private readonly apiUrl = 'https://api.gps51.com/openapi';
@@ -152,6 +162,9 @@ export class GPS51ProductionService {
       // Store username for other services
       localStorage.setItem('gps51_username', username);
       
+      // Initialize user profile and polling
+      await this.initializeUserProfile(username, result);
+      
       // Notify auth sync
       gps51SimpleAuthSync.notifyAuthSuccess(username);
 
@@ -216,20 +229,31 @@ export class GPS51ProductionService {
         devices = data.devices;
       }
 
-      // Transform to GPS51Vehicle format
-      this.vehicles = devices.map(device => ({
-        deviceid: device.deviceid,
-        devicename: device.devicename || `Device ${device.deviceid}`,
-        simnum: device.simnum || '',
-        lastactivetime: device.lastactivetime || '',
-        devicetype: device.devicetype,
-        overduetime: device.overduetime,
-        remark: device.remark,
-        isMoving: false,
-        speed: 0,
-        lastUpdate: new Date(),
-        status: 'unknown'
-      }));
+      // Process groups and build fleet hierarchy
+      const fleetHierarchy = gps51GroupManager.processGroupsResponse(data.groups || [], this.userRole);
+      this.authState.fleetHierarchy = fleetHierarchy;
+
+      // Transform to GPS51Vehicle format with group information
+      this.vehicles = fleetHierarchy.userDevices.map(device => {
+        // Initialize intelligent polling for each device
+        gps51IntelligentPolling.updateVehicleProfile(device.deviceid);
+        
+        return {
+          deviceid: device.deviceid,
+          devicename: device.devicename || `Device ${device.deviceid}`,
+          simnum: device.simnum || '',
+          lastactivetime: device.lastactivetime || '',
+          devicetype: device.devicetype,
+          overduetime: device.overduetime,
+          remark: device.remark,
+          isMoving: false,
+          speed: 0,
+          lastUpdate: new Date(),
+          status: 'unknown',
+          vehicleState: VehicleState.OFFLINE,
+          pollingPriority: 4
+        };
+      });
 
       console.log('GPS51ProductionService: Retrieved', this.vehicles.length, 'devices');
       return this.vehicles;
@@ -251,7 +275,9 @@ export class GPS51ProductionService {
     }
 
     try {
-      const targetDeviceIds = deviceIds || this.vehicles.map(d => d.deviceid);
+      // Use intelligent polling to determine which devices to query
+      const readyDeviceIds = deviceIds || gps51IntelligentPolling.getVehiclesReadyForPolling();
+      const targetDeviceIds = readyDeviceIds.length > 0 ? readyDeviceIds : this.vehicles.map(d => d.deviceid);
       
       if (targetDeviceIds.length === 0) {
         return {
@@ -263,7 +289,7 @@ export class GPS51ProductionService {
         };
       }
 
-      console.log('GPS51ProductionService: Fetching positions for', targetDeviceIds.length, 'devices');
+      console.log('GPS51ProductionService: Intelligent polling selected', targetDeviceIds.length, 'devices');
       console.log('GPS51ProductionService: Using lastquerypositiontime:', this.lastQueryTime);
 
       await this.enforceRateLimit();
@@ -315,16 +341,27 @@ export class GPS51ProductionService {
         voltagepercent: record.voltagepercent
       }));
 
-      // Update vehicles with position data
+      // Update vehicles with position data and intelligent polling
       const updatedVehicles = this.vehicles.map(vehicle => {
         const position = positions.find(p => p.deviceid === vehicle.deviceid);
+        
+        // Update intelligent polling profile
+        const pollingProfile = gps51IntelligentPolling.updateVehicleProfile(vehicle.deviceid, position);
+        
+        // Mark as polled if it was in the target list
+        if (targetDeviceIds.includes(vehicle.deviceid)) {
+          gps51IntelligentPolling.markVehiclePolled(vehicle.deviceid);
+        }
+        
         return {
           ...vehicle,
           position,
           isMoving: position ? position.moving === 1 : false,
           speed: position ? position.speed : 0,
           lastUpdate: new Date(),
-          status: position ? position.strstatusen : 'offline'
+          status: position ? position.strstatusen : 'offline',
+          vehicleState: pollingProfile.state,
+          pollingPriority: pollingProfile.priority
         };
       });
 
@@ -397,19 +434,10 @@ export class GPS51ProductionService {
   }
 
   /**
-   * Calculate smart polling interval
+   * Calculate smart polling interval using intelligent polling
    */
   calculatePollingInterval(): number {
-    const movingVehicles = this.vehicles.filter(v => v.isMoving);
-    const stationaryVehicles = this.vehicles.filter(v => !v.isMoving && v.status !== 'offline');
-    
-    if (movingVehicles.length > 0) {
-      return 30000; // 30 seconds for moving vehicles
-    } else if (stationaryVehicles.length > 0) {
-      return 45000; // 45 seconds for stationary vehicles
-    }
-    
-    return 60000; // 60 seconds default
+    return gps51IntelligentPolling.calculateGlobalPollingInterval();
   }
 
   /**
@@ -442,12 +470,15 @@ export class GPS51ProductionService {
   }
 
   /**
-   * Get service status
+   * Get service status with intelligent polling data
    */
   getServiceStatus() {
+    const pollingStats = gps51IntelligentPolling.getPollingStatistics();
+    
     return {
       isAuthenticated: this.authState.isAuthenticated,
       username: this.authState.username,
+      userRole: this.userRole,
       deviceCount: this.vehicles.length,
       lastQueryTime: this.lastQueryTime,
       retryCount: this.retryCount,
@@ -455,7 +486,9 @@ export class GPS51ProductionService {
       stationaryVehicles: this.vehicles.filter(v => !v.isMoving && v.status !== 'offline').length,
       offlineVehicles: this.vehicles.filter(v => v.status === 'offline').length,
       minRequestInterval: this.minRequestInterval,
-      timeSinceLastRequest: Date.now() - this.lastRequestTime
+      timeSinceLastRequest: Date.now() - this.lastRequestTime,
+      intelligentPolling: pollingStats,
+      fleetHierarchy: this.authState.fleetHierarchy
     };
   }
 
@@ -480,10 +513,132 @@ export class GPS51ProductionService {
     this.lastQueryTime = 0;
     this.retryCount = 0;
     
+    // Clear intelligent polling and group management
+    gps51IntelligentPolling.clearAllProfiles();
+    gps51GroupManager.clearHierarchy();
+    
     localStorage.removeItem('gps51_username');
     gps51SimpleAuthSync.notifyLogout();
     
     console.log('GPS51ProductionService: Logged out and reset');
+  }
+
+  /**
+   * Initialize user profile after authentication
+   */
+  private async initializeUserProfile(username: string, authData: any): Promise<void> {
+    try {
+      // Determine user role from GPS51 usertype or default
+      const gps51UserType = authData.user?.usertype || 11; // Default to END_USER
+      this.userRole = gps51UserTypeManager.getEnvioRole(gps51UserType);
+      
+      // Create user profile
+      const userProfile: GPS51UserProfile = {
+        username,
+        usertype: gps51UserType,
+        envioRole: this.userRole,
+        companyname: authData.user?.companyname || '',
+        showname: authData.user?.showname || username.split('@')[0],
+        email: username,
+        permissions: gps51UserTypeManager.getUserPermissions(this.userRole)
+      };
+      
+      this.authState.userProfile = userProfile;
+      
+      console.log('GPS51ProductionService: User profile initialized:', {
+        username,
+        usertype: gps51UserType,
+        envioRole: this.userRole,
+        permissions: userProfile.permissions
+      });
+      
+    } catch (error) {
+      console.warn('GPS51ProductionService: Failed to initialize user profile:', error);
+      // Continue with default permissions
+      this.userRole = EnvioUserRole.INDIVIDUAL_OWNER;
+    }
+  }
+
+  /**
+   * Register new user with GPS51
+   */
+  async registerUser(
+    username: string, 
+    password: string, 
+    envioRole: EnvioUserRole,
+    additionalData?: any
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const registrationPayload = gps51UserTypeManager.createUserRegistrationPayload(
+        username, 
+        password, 
+        envioRole, 
+        additionalData
+      );
+
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { data, error } = await supabase.functions.invoke('gps51-auth', {
+        body: {
+          action: 'adduser',
+          ...registrationPayload
+        }
+      });
+
+      if (error) {
+        throw new Error(`User registration failed: ${error.message}`);
+      }
+
+      if (data?.status !== 0) {
+        throw new Error(data?.message || 'User registration failed');
+      }
+
+      console.log('GPS51ProductionService: User registration successful:', username);
+      return { success: true };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Registration failed';
+      console.error('GPS51ProductionService: User registration failed:', error);
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Get fleet hierarchy
+   */
+  getFleetHierarchy(): FleetHierarchy | undefined {
+    return this.authState.fleetHierarchy;
+  }
+
+  /**
+   * Get devices by group
+   */
+  getDevicesByGroup(groupId: string): GPS51Vehicle[] {
+    const groupDevices = gps51GroupManager.getDevicesByGroup(groupId);
+    return this.vehicles.filter(vehicle => 
+      groupDevices.some(device => device.deviceid === vehicle.deviceid)
+    );
+  }
+
+  /**
+   * Get vehicles ready for polling
+   */
+  getVehiclesReadyForPolling(): GPS51Vehicle[] {
+    const readyDeviceIds = gps51IntelligentPolling.getVehiclesReadyForPolling();
+    return this.vehicles.filter(vehicle => readyDeviceIds.includes(vehicle.deviceid));
+  }
+
+  /**
+   * Force refresh all vehicle states
+   */
+  async refreshAllVehicleStates(): Promise<void> {
+    gps51IntelligentPolling.clearAllProfiles();
+    
+    // Re-initialize polling profiles for all vehicles
+    for (const vehicle of this.vehicles) {
+      gps51IntelligentPolling.updateVehicleProfile(vehicle.deviceid, vehicle.position);
+    }
+    
+    console.log('GPS51ProductionService: All vehicle states refreshed');
   }
 }
 

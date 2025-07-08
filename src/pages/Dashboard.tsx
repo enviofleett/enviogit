@@ -12,6 +12,8 @@ import RealTimeConnectionStatus from '@/components/dashboard/RealTimeConnectionS
 import RealTimeGPS51Status from '@/components/dashboard/RealTimeGPS51Status';
 import { GPS51RealTimePanel } from '@/components/dashboard/GPS51RealTimePanel';
 import { GPS51PerformanceMonitor } from '@/components/dashboard/GPS51PerformanceMonitor';
+import { GPS51IntelligentPollingMonitor } from '@/components/dashboard/GPS51IntelligentPollingMonitor';
+import { GPS51FleetHierarchyPanel } from '@/components/dashboard/GPS51FleetHierarchyPanel';
 import { useGPS51Data } from '@/hooks/useGPS51Data';
 import { useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -121,10 +123,11 @@ const Dashboard = () => {
 
             {/* Enhanced Dashboard Tabs */}
             <Tabs defaultValue="overview" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-5">
+              <TabsList className="grid w-full grid-cols-6">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="realtime">Real-time Tracking</TabsTrigger>
-                <TabsTrigger value="monitoring">Monitoring & Alerts</TabsTrigger>
+                <TabsTrigger value="realtime">Real-time</TabsTrigger>
+                <TabsTrigger value="fleet">Fleet Mgmt</TabsTrigger>
+                <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
                 <TabsTrigger value="performance">Performance</TabsTrigger>
                 <TabsTrigger value="analytics">Analytics</TabsTrigger>
               </TabsList>
@@ -210,6 +213,13 @@ const Dashboard = () => {
 
               <TabsContent value="realtime" className="space-y-6">
                 <GPS51RealTimePanel />
+              </TabsContent>
+
+              <TabsContent value="fleet" className="space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <GPS51FleetHierarchyPanel />
+                  <GPS51IntelligentPollingMonitor />
+                </div>
               </TabsContent>
 
               <TabsContent value="monitoring" className="space-y-6">
