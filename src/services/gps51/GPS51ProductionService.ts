@@ -154,8 +154,11 @@ export class GPS51ProductionService {
         
         const { data, error } = await supabase.functions.invoke('gps51-auth', {
           body: {
+            action: 'login',
             username,
             password: hashedPassword,
+            from: 'WEB',
+            type: 'USER',
             apiUrl: this.apiUrl
           }
         });
@@ -281,7 +284,8 @@ export class GPS51ProductionService {
         body: {
           action: 'querymonitorlist',
           username: this.authState.username,
-          token: this.authState.token
+          token: this.authState.token,
+          apiUrl: this.apiUrl
         }
       });
 
@@ -377,7 +381,8 @@ export class GPS51ProductionService {
           action: 'lastposition',
           deviceids: targetDeviceIds,
           lastquerypositiontime: this.lastQueryTime || undefined,
-          token: this.authState.token
+          token: this.authState.token,
+          apiUrl: this.apiUrl
         }
       });
 

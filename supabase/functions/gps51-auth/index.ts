@@ -11,6 +11,11 @@ interface GPS51AuthRequest {
   password: string;
   apiUrl: string;
   action?: string;
+  from?: string;
+  type?: string;
+  deviceids?: string[];
+  lastquerypositiontime?: number;
+  token?: string;
 }
 
 interface GPS51ApiResponse {
@@ -49,10 +54,10 @@ serve(async (req) => {
     logAuthAttempt('PARSING_REQUEST', { requestId, bodyLength: requestBody.length });
 
     const parsedRequest: GPS51AuthRequest = JSON.parse(requestBody);
-    const { username, password, apiUrl, action } = parsedRequest;
+    const { username, password, apiUrl, action, from, type, deviceids, lastquerypositiontime, token } = parsedRequest;
 
     // Enhanced validation with detailed logging
-    if (!username || !password || !apiUrl) {
+    if (action === 'login' && (!username || !password || !apiUrl)) {
       logAuthAttempt('VALIDATION_FAILED', {
         requestId,
         hasUsername: !!username,
@@ -61,6 +66,16 @@ serve(async (req) => {
       });
       throw new Error('Missing required authentication parameters: username, password, and apiUrl are required');
     }
+    
+    if ((action === 'querymonitorlist' || action === 'lastposition') && (!token || !apiUrl)) {
+      logAuthAttempt('VALIDATION_FAILED', {
+        requestId,
+        hasToken: !!token,
+        hasApiUrl: !!apiUrl,
+        action
+      });
+      throw new Error('Missing required parameters: token and apiUrl are required for this action');
+    }
 
     // Validate API URL format
     if (!apiUrl.includes('gps51.com') && !apiUrl.includes('localhost')) {
@@ -68,30 +83,49 @@ serve(async (req) => {
       throw new Error('Invalid GPS51 API URL format');
     }
 
-    // Validate password is MD5 hashed (32 character hex string)
-    const isMD5 = /^[a-f0-9]{32}$/i.test(password);
-    logAuthAttempt('CREDENTIAL_VALIDATION', {
-      requestId,
-      username,
-      apiUrl,
-      passwordIsMD5: isMD5,
-      passwordLength: password.length
-    });
+    // Validate password is MD5 hashed (32 character hex string) for login actions
+    if (action === 'login' || !action) {
+      const isMD5 = /^[a-f0-9]{32}$/i.test(password);
+      logAuthAttempt('CREDENTIAL_VALIDATION', {
+        requestId,
+        username,
+        apiUrl,
+        passwordIsMD5: isMD5,
+        passwordLength: password.length,
+        action: action || 'login'
+      });
+    }
 
-    // Prepare authentication request to GPS51 API
-    const authPayload = {
-      username,
-      password,
-      from: 'WEB',
-      type: 'USER'
-    };
+    // Prepare request payload based on action
+    let requestPayload: any = {};
+    
+    if (action === 'login' || !action) {
+      requestPayload = {
+        username,
+        password,
+        from: from || 'WEB',
+        type: type || 'USER'
+      };
+    } else if (action === 'querymonitorlist') {
+      requestPayload = {
+        username,
+        token
+      };
+    } else if (action === 'lastposition') {
+      requestPayload = {
+        deviceids: deviceids || [],
+        lastquerypositiontime: lastquerypositiontime || undefined,
+        token
+      };
+    }
 
     const requestUrl = action ? `${apiUrl}?action=${action}` : `${apiUrl}?action=login`;
     
     logAuthAttempt('GPS51_REQUEST_START', {
       requestId,
       url: requestUrl,
-      payload: { ...authPayload, password: '[REDACTED]' }
+      payload: { ...requestPayload, password: '[REDACTED]' },
+      action: action || 'login'
     });
 
     // Make authentication request to GPS51 with timeout
@@ -106,7 +140,7 @@ serve(async (req) => {
           'Accept': 'application/json',
           'User-Agent': 'Envio-GPS51-Client/1.0'
         },
-        body: JSON.stringify(authPayload),
+        body: JSON.stringify(requestPayload),
         signal: controller.signal
       });
 
@@ -142,22 +176,52 @@ serve(async (req) => {
       });
 
       // GPS51 returns status 0 for success
-      if (authResult.status === 0 && authResult.token) {
-        const response = {
+      if (authResult.status === 0) {
+        let response: any = {
           success: true,
-          access_token: authResult.token,
-          token_type: 'Bearer',
-          expires_in: 24 * 60 * 60, // 24 hours
-          user: authResult.user || { username },
           gps51_status: authResult.status,
           gps51_message: authResult.message
         };
 
+        // Handle different action types
+        if (action === 'login' || !action) {
+          if (!authResult.token) {
+            logAuthAttempt('LOGIN_NO_TOKEN', {
+              requestId,
+              status: authResult.status,
+              message: authResult.message
+            });
+            throw new Error('Login successful but no token received');
+          }
+          
+          response = {
+            ...response,
+            access_token: authResult.token,
+            token_type: 'Bearer',
+            expires_in: 24 * 60 * 60, // 24 hours
+            user: authResult.user || { username }
+          };
+        } else if (action === 'querymonitorlist') {
+          response = {
+            ...response,
+            groups: authResult.groups || [],
+            devices: authResult.devices || []
+          };
+        } else if (action === 'lastposition') {
+          response = {
+            ...response,
+            records: authResult.records || [],
+            lastquerypositiontime: authResult.lastquerypositiontime
+          };
+        }
+
         logAuthAttempt('SUCCESS', {
           requestId,
-          username,
-          hasToken: !!response.access_token,
-          tokenLength: response.access_token?.length
+          action: action || 'login',
+          hasToken: !!(response.access_token),
+          hasGroups: !!(response.groups),
+          hasRecords: !!(response.records),
+          recordCount: response.records?.length || 0
         });
 
         return new Response(
