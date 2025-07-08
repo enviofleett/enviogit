@@ -124,10 +124,6 @@ export class GPS51ProductionService {
         throw new Error('Username and password are required');
       }
 
-      if (!username.includes('@')) {
-        throw new Error('Username must be a valid email address');
-      }
-
       if (password.length < 6) {
         throw new Error('Password must be at least 6 characters');
       }
