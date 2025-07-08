@@ -10,6 +10,7 @@ import RealTimeMap from '@/components/dashboard/RealTimeMap';
 import MonitoringAlertsPanel from '@/components/dashboard/MonitoringAlertsPanel';
 import RealTimeConnectionStatus from '@/components/dashboard/RealTimeConnectionStatus';
 import RealTimeGPS51Status from '@/components/dashboard/RealTimeGPS51Status';
+import { GPS51RealTimePanel } from '@/components/dashboard/GPS51RealTimePanel';
 import { useGPS51Data } from '@/hooks/useGPS51Data';
 import { useGPS51ProductionData } from '@/hooks/useGPS51ProductionData';
 import { useEffect } from 'react';
@@ -218,22 +219,7 @@ const Dashboard = () => {
               </TabsContent>
 
               <TabsContent value="realtime" className="space-y-6">
-                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                  <div className="xl:col-span-2">
-                    <RealTimeMap />
-                  </div>
-                  <div className="space-y-6">
-                    <RealtimeChart />
-                    {intelligentFiltering && (
-                      <div className="bg-white p-4 rounded-lg border">
-                        <h4 className="font-medium mb-2">Smart Filtering Active</h4>
-                        <p className="text-sm text-slate-600">
-                          Using intelligent algorithms to optimize update frequencies based on vehicle behavior and location.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <GPS51RealTimePanel />
               </TabsContent>
 
               <TabsContent value="monitoring" className="space-y-6">
