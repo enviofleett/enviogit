@@ -64,7 +64,7 @@ const FleetDashboard: React.FC = () => {
     },
     serviceStatus
   } = useGPS51LiveData({
-    autoStart: false,
+    autoStart: true, // PRODUCTION FIX: Enable auto-start to use stored credentials
     enableSmartPolling: true
   });
 
@@ -134,7 +134,8 @@ const FleetDashboard: React.FC = () => {
     return vehicles.find(v => v.deviceid === vehicleId);
   };
 
-  if (!authState.isAuthenticated) {
+  // PRODUCTION FIX: Show loading state while checking authentication
+  if (!authState.isAuthenticated && isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
@@ -144,7 +145,32 @@ const FleetDashboard: React.FC = () => {
             </div>
             <CardTitle>Fleet Dashboard</CardTitle>
             <CardDescription>
-              Connect to GPS51 to start monitoring your fleet in real-time
+              Connecting to GPS51 system...
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex items-center justify-center py-8">
+            <div className="flex items-center space-x-3">
+              <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
+              <span className="text-gray-600">Initializing GPS51 connection...</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Only show manual connection if not authenticated AND not loading
+  if (!authState.isAuthenticated && !isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+              <Car className="w-6 h-6 text-blue-600" />
+            </div>
+            <CardTitle>Fleet Dashboard</CardTitle>
+            <CardDescription>
+              GPS51 credentials required for fleet monitoring
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -153,17 +179,8 @@ const FleetDashboard: React.FC = () => {
               className="w-full"
               disabled={isLoading}
             >
-              {isLoading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Connecting...
-                </>
-              ) : (
-                <>
-                  <Wifi className="w-4 h-4 mr-2" />
-                  Connect to GPS51
-                </>
-              )}
+              <Wifi className="w-4 h-4 mr-2" />
+              Connect to GPS51
             </Button>
             
             {error && (
@@ -171,6 +188,10 @@ const FleetDashboard: React.FC = () => {
                 {error}
               </div>
             )}
+            
+            <div className="text-xs text-gray-500 text-center">
+              Configure GPS51 credentials in Settings first
+            </div>
           </CardContent>
         </Card>
       </div>

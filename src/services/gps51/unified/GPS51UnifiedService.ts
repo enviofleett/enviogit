@@ -41,9 +41,19 @@ export class GPS51UnifiedService {
   }
 
   /**
-   * Authenticate user
+   * Authenticate user - PRODUCTION FIX: Save credentials to storage
    */
   async authenticate(username: string, password: string): Promise<GPS51AuthState> {
+    // CRITICAL: Save credentials first for persistence
+    const { GPS51ConfigStorage } = await import('../configStorage');
+    GPS51ConfigStorage.saveConfiguration({
+      apiUrl: this.apiUrl,
+      username,
+      password,
+      from: 'WEB',
+      type: 'USER'
+    });
+    
     return await this.authManager.authenticate(username, password);
   }
 
