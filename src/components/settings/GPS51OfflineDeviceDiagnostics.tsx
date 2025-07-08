@@ -60,24 +60,27 @@ export const GPS51OfflineDeviceDiagnostics = () => {
     try {
       console.log('🔍 Starting offline device diagnostics...');
       
-      // Call the GPS51 sync function to get latest device data
-      const { data: syncResponse, error: syncError } = await supabase.functions.invoke('gps51-sync', {
-        body: {
-          priority: 0, // Get all devices
-          batchMode: false,
-          diagnosticMode: true
-        }
-      });
-
-      if (syncError) {
-        console.error('Sync error:', syncError);
-        throw new Error('Failed to fetch device data');
+      // Use GPS51 Unified Live Data Service instead of edge function
+      const { gps51UnifiedLiveDataService } = await import('@/services/gps51/GPS51UnifiedLiveDataService');
+      
+      // Check if authenticated
+      const authState = gps51UnifiedLiveDataService.getAuthState();
+      if (!authState.isAuthenticated) {
+        throw new Error('GPS51 authentication required. Please configure GPS51 credentials in Settings.');
+      }
+      
+      // Fetch fresh device data
+      await gps51UnifiedLiveDataService.fetchUserDevices();
+      const vehicles = gps51UnifiedLiveDataService.getDevices();
+      
+      if (vehicles.length === 0) {
+        throw new Error('No GPS51 devices found. Please check your GPS51 account or credentials.');
       }
 
-      console.log('📡 Sync response:', syncResponse);
+      console.log('📡 GPS51 devices retrieved:', vehicles.length);
 
-      // Get vehicles from database with GPS51 device IDs
-      const { data: vehicles, error: vehicleError } = await supabase
+      // Get vehicles from database with GPS51 device IDs for comparison
+      const { data: dbVehicles, error: vehicleError } = await supabase
         .from('vehicles')
         .select(`
           gps51_device_id,
@@ -94,46 +97,36 @@ export const GPS51OfflineDeviceDiagnostics = () => {
 
       if (vehicleError) {
         console.error('Vehicle query error:', vehicleError);
-        throw new Error('Failed to fetch vehicle data');
+        // Continue with GPS51 data even if database query fails
+        console.warn('Continuing diagnostics with GPS51 data only');
       }
 
-      console.log('🚗 Found vehicles:', vehicles?.length || 0);
+      console.log('🚗 Database vehicles found:', dbVehicles?.length || 0);
 
       const now = Date.now();
       const thirtyMinutesAgo = now - (30 * 60 * 1000);
       
-      let totalDevices = vehicles?.length || 0;
+      let totalDevices = vehicles.length;
       let onlineDevices = 0;
       const offlineDevicesList: OfflineDevice[] = [];
 
-      vehicles?.forEach(vehicle => {
-        if (!vehicle.gps51_device_id) return;
-
-        // Get latest position
-        const latestPosition = Array.isArray(vehicle.vehicle_positions) 
-          ? vehicle.vehicle_positions.sort((a, b) => 
-              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-            )[0]
-          : vehicle.vehicle_positions;
-
-        const lastActiveTime = latestPosition 
-          ? new Date(latestPosition.timestamp).getTime()
-          : new Date(vehicle.updated_at).getTime();
-
-        const isOnline = lastActiveTime > thirtyMinutesAgo;
+      vehicles.forEach(vehicle => {
+        // GPS51 vehicles have real-time status from the unified service
+        const lastActiveTime = vehicle.lastUpdate.getTime();
+        const isOnline = lastActiveTime > thirtyMinutesAgo && vehicle.status !== 'offline';
 
         if (isOnline) {
           onlineDevices++;
         } else {
           const daysSinceActive = (now - lastActiveTime) / (1000 * 60 * 60 * 24);
           offlineDevicesList.push({
-            deviceId: vehicle.gps51_device_id,
-            deviceName: vehicle.license_plate || vehicle.gps51_device_id,
+            deviceId: vehicle.deviceid,
+            deviceName: vehicle.devicename,
             lastActiveTime,
             daysSinceActive,
             category: categorizeDevice(lastActiveTime),
-            batteryLevel: undefined, // Will be enhanced with actual battery data later
-            signalStrength: latestPosition?.speed ? 100 : 0 // Simplified signal strength
+            batteryLevel: vehicle.position?.voltagepercent, 
+            signalStrength: vehicle.isMoving ? 100 : vehicle.speed > 0 ? 75 : 25
           });
         }
       });
@@ -166,9 +159,15 @@ export const GPS51OfflineDeviceDiagnostics = () => {
 
     } catch (error) {
       console.error('Diagnostics error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
       toast({
         title: "Diagnostics Failed",
-        description: error instanceof Error ? error.message : 'Unknown error',
+        description: errorMessage.includes('authentication') 
+          ? 'GPS51 authentication required. Go to Settings → GPS51 to configure credentials.'
+          : errorMessage.includes('No GPS51 devices')
+          ? 'No devices found. Check your GPS51 account and credentials.'
+          : errorMessage,
         variant: "destructive",
       });
     } finally {

@@ -21,6 +21,8 @@ import { GPS51ProductionValidator } from '@/components/settings/GPS51ProductionV
 import { EmergencyGPS51Panel } from '@/components/settings/EmergencyGPS51Panel';
 import { GPS51ConnectionDiagnostics } from '@/components/settings/GPS51ConnectionDiagnostics';
 import { GPS51AuthenticationDiagnostics } from '@/components/dashboard/GPS51AuthenticationDiagnostics';
+import { GPS51SecretsSetup } from '@/components/settings/GPS51SecretsSetup';
+import { GPS51OfflineDeviceDiagnostics } from '@/components/settings/GPS51OfflineDeviceDiagnostics';
 
 const Settings = () => {
   return (
@@ -154,8 +156,10 @@ const Settings = () => {
           <APICredentialsPanel />
         </TabsContent>
         
-        <TabsContent value="gps51">
+        <TabsContent value="gps51" className="space-y-6">
+          <GPS51SecretsSetup />
           <GPS51Settings />
+          <GPS51OfflineDeviceDiagnostics />
         </TabsContent>
         
         <TabsContent value="email">
