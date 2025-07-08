@@ -126,6 +126,11 @@ export class EmergencyGPS51Client {
       }
 
       this.saveToken(data.token);
+      
+      // CRITICAL FIX: Store username in localStorage for GPS51Client access
+      localStorage.setItem('gps51_username', username);
+      console.log('🔄 EmergencyGPS51Client: Username stored for GPS51Client access');
+      
       this.setCachedData(cacheKey, data.token, 3600000); // Cache for 1 hour
       return data.token;
     }, 10); // Highest priority
@@ -385,8 +390,9 @@ export class EmergencyGPS51Client {
     
     this.token = null;
     sessionStorage.removeItem('gps51_token');
-    // CRITICAL FIX: Also clear localStorage token synchronization
+    // CRITICAL FIX: Also clear localStorage token synchronization and username
     localStorage.removeItem('gps51_token');
+    localStorage.removeItem('gps51_username');
     this.clearAllCaches();
   }
 }

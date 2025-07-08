@@ -135,18 +135,27 @@ export class GPS51Client {
     
     try {
       console.log('=== GPS51 DEVICE LIST QUERY START ===');
+      
+      // CRITICAL FIX: Get username from localStorage if user object is missing
+      let username = this.user?.username;
+      if (!username) {
+        username = localStorage.getItem('gps51_username');
+        console.log('GPS51Client: Retrieved username from localStorage:', username);
+      }
+      
       console.log('Request parameters:', {
-        username: this.user?.username || 'unknown',
+        username: username || 'unknown',
         hasToken: !!this.token,
-        tokenLength: this.token?.length || 0
+        tokenLength: this.token?.length || 0,
+        usernameSource: this.user?.username ? 'user_object' : 'localStorage'
       });
 
-      if (!this.user?.username) {
+      if (!username) {
         throw new Error('GPS51Client: Username is required for device list query');
       }
 
       const response = await this.apiClient.makeRequest('querymonitorlist', this.token!, { 
-        username: this.user.username 
+        username: username 
       });
       
       console.log('GPS51 Device List Response Analysis:', {

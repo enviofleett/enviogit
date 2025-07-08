@@ -162,7 +162,13 @@ export class GPS51DeviceDiagnostics {
    */
   private async attemptStandardDeviceQuery(): Promise<any> {
     const user = this.client.getUser();
-    const username = user?.username;
+    let username = user?.username;
+    
+    // CRITICAL FIX: Get username from localStorage if user object is missing
+    if (!username) {
+      username = localStorage.getItem('gps51_username');
+      console.log('GPS51DeviceDiagnostics: Retrieved username from localStorage:', username);
+    }
     
     if (!username) {
       throw new Error('Username is missing - cannot query device list');

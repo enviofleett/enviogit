@@ -106,6 +106,10 @@ export class GPS51UnifiedLiveDataService {
         username
       };
 
+      // CRITICAL FIX: Store username in localStorage for GPS51Client access
+      localStorage.setItem('gps51_username', username);
+      console.log('GPS51UnifiedLiveDataService: Username stored in localStorage for GPS51Client access');
+
       // CRITICAL FIX: Use simple auth sync to prevent circular loops
       gps51SimpleAuthSync.notifyAuthSuccess(username);
 
@@ -385,6 +389,9 @@ export class GPS51UnifiedLiveDataService {
     this.devices = [];
     this.lastQueryTime = 0;
     this.retryCount = 0;
+    
+    // CRITICAL FIX: Clear username from localStorage
+    localStorage.removeItem('gps51_username');
     
     // CRITICAL FIX: Notify simple auth sync of logout
     gps51SimpleAuthSync.notifyLogout();
