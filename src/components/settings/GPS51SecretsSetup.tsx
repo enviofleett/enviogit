@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { Eye, EyeOff, Key, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { GPS51ConfigStorage } from '@/services/gps51/configStorage';
-import { gps51UnifiedService } from '@/services/gps51/unified/GPS51UnifiedService';
+import { gps51ProductionService } from '@/services/gps51/GPS51ProductionService';
 
 interface SecretsStatus {
   GPS51_API_URL: boolean;
@@ -90,7 +90,7 @@ export const GPS51SecretsSetup = () => {
       console.log('🧪 Testing GPS51 credentials...');
       
       // Use the unified service to test authentication
-      const result = await gps51UnifiedService.authenticate(
+      const result = await gps51ProductionService.authenticate(
         credentials.username,
         credentials.password
       );
@@ -139,7 +139,7 @@ export const GPS51SecretsSetup = () => {
       });
 
       // Test the saved credentials
-      const result = await gps51UnifiedService.authenticate(
+      const result = await gps51ProductionService.authenticate(
         credentials.username,
         credentials.password
       );

@@ -14,7 +14,7 @@ import {
   Info
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { gps51UnifiedService } from '@/services/gps51/unified/GPS51UnifiedService';
+import { gps51ProductionService } from '@/services/gps51/GPS51ProductionService';
 import { GPS51ConfigStorage } from '@/services/gps51/configStorage';
 
 interface DiagnosticInfo {
@@ -55,7 +55,7 @@ export const GPS51AuthenticationDiagnostics = () => {
       });
 
       // 2. Check Unified Service Auth State
-      const authState = gps51UnifiedService.getAuthState();
+      const authState = gps51ProductionService.getAuthState();
       results.push({
         service: 'Unified Service',
         status: authState.isAuthenticated ? 'success' : 'warning',
@@ -71,7 +71,7 @@ export const GPS51AuthenticationDiagnostics = () => {
       });
 
       // 3. Check Service Status
-      const serviceStatus = gps51UnifiedService.getServiceStatus();
+      const serviceStatus = gps51ProductionService.getServiceStatus();
       results.push({
         service: 'Service Status',
         status: serviceStatus.isAuthenticated ? 'success' : 'warning',
@@ -83,7 +83,7 @@ export const GPS51AuthenticationDiagnostics = () => {
       if (isConfigured && !authState.isAuthenticated) {
         try {
           console.log('GPS51AuthenticationDiagnostics: Testing authentication...');
-          const authResult = await gps51UnifiedService.authenticate(config?.username || '', config?.password || '');
+          const authResult = await gps51ProductionService.authenticate(config?.username || '', config?.password || '');
           results.push({
             service: 'Authentication Test',
             status: authResult.isAuthenticated ? 'success' : 'error',
