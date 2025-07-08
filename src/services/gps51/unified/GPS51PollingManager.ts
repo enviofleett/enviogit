@@ -1,136 +1,114 @@
 /**
  * GPS51 Polling Manager
- * Handles intelligent polling intervals and coordination
+ * Handles intelligent polling intervals and priority management
  */
 
 import { GPS51Vehicle } from '../GPS51UnifiedLiveDataService';
 
+export interface PollingStats {
+  recommendedInterval: number;
+  priority1Count: number;
+  priority2Count: number;
+  priority3Count: number;
+  totalVehicles: number;
+  averageSpeed: number;
+}
+
 export class GPS51PollingManager {
-  private devices: GPS51Vehicle[] = [];
+  private readonly MIN_INTERVAL = 30000; // 30 seconds minimum
+  private readonly MAX_INTERVAL = 300000; // 5 minutes maximum
+  private readonly PRODUCTION_INTERVAL = 60000; // 1 minute for production
 
   /**
-   * Calculate smart polling interval based on vehicle activity
-   * ENHANCED: 30-60 seconds minimum to prevent rate limiting
+   * Calculate optimal polling interval based on fleet activity
    */
   calculatePollingInterval(devices: GPS51Vehicle[]): number {
-    this.devices = devices;
-    
-    const movingVehicles = this.devices.filter(v => v.isMoving);
-    const stationaryVehicles = this.devices.filter(v => !v.isMoving && v.status !== 'offline');
-    const offlineVehicles = this.devices.filter(v => v.status === 'offline');
-
-    if (movingVehicles.length > 0) {
-      return 30000; // 30 seconds for moving vehicles
-    } else if (stationaryVehicles.length > 0) {
-      return 45000; // 45 seconds for stationary vehicles
-    } else if (offlineVehicles.length > 0) {
-      return 60000; // 60 seconds for offline vehicles
+    if (devices.length === 0) {
+      return this.PRODUCTION_INTERVAL;
     }
-    
-    return 60000; // Default 60 seconds
+
+    const movingCount = devices.filter(d => d.isMoving).length;
+    const totalCount = devices.length;
+    const activityRatio = movingCount / totalCount;
+
+    // More activity = shorter intervals
+    if (activityRatio > 0.7) {
+      return this.MIN_INTERVAL; // High activity
+    } else if (activityRatio > 0.3) {
+      return this.PRODUCTION_INTERVAL; // Moderate activity
+    } else {
+      return Math.min(this.MAX_INTERVAL, this.PRODUCTION_INTERVAL * 2); // Low activity
+    }
   }
 
   /**
-   * Get polling recommendation based on fleet state
+   * Get polling recommendation with details
    */
-  getPollingRecommendation(devices: GPS51Vehicle[]): {
-    interval: number;
-    reason: string;
-    priority: 'high' | 'medium' | 'low';
-  } {
-    const movingCount = devices.filter(v => v.isMoving).length;
-    const stationaryCount = devices.filter(v => !v.isMoving && v.status !== 'offline').length;
-    const offlineCount = devices.filter(v => v.status === 'offline').length;
+  getPollingRecommendation(devices: GPS51Vehicle[]) {
+    const interval = this.calculatePollingInterval(devices);
+    const stats = this.getPollingStats(devices);
+    
+    return {
+      recommendedInterval: interval,
+      reason: this.getPollingReason(devices),
+      stats
+    };
+  }
 
-    if (movingCount > 0) {
-      return {
-        interval: 30000,
-        reason: `${movingCount} vehicles are moving`,
-        priority: 'high'
-      };
-    }
-
-    if (stationaryCount > 0) {
-      return {
-        interval: 45000,
-        reason: `${stationaryCount} vehicles are stationary`,
-        priority: 'medium'
-      };
-    }
+  /**
+   * Get detailed polling statistics
+   */
+  getPollingStats(devices: GPS51Vehicle[]): PollingStats {
+    const moving = devices.filter(d => d.isMoving);
+    const speeds = devices.map(d => d.speed || 0);
+    const averageSpeed = speeds.reduce((sum, speed) => sum + speed, 0) / (devices.length || 1);
 
     return {
-      interval: 60000,
-      reason: `${offlineCount} vehicles are offline`,
-      priority: 'low'
+      recommendedInterval: this.calculatePollingInterval(devices),
+      priority1Count: moving.filter(d => (d.speed || 0) > 60).length, // High speed
+      priority2Count: moving.filter(d => (d.speed || 0) > 30 && (d.speed || 0) <= 60).length, // Medium speed
+      priority3Count: moving.filter(d => (d.speed || 0) <= 30).length, // Low speed
+      totalVehicles: devices.length,
+      averageSpeed: Math.round(averageSpeed)
     };
+  }
+
+  /**
+   * Get priority vehicles that should be polled more frequently
+   */
+  getPriorityVehicles(devices: GPS51Vehicle[]): string[] {
+    return devices
+      .filter(d => d.isMoving && (d.speed || 0) > 30) // Moving vehicles with decent speed
+      .map(d => d.deviceid);
   }
 
   /**
    * Check if immediate polling is recommended
    */
   shouldPollImmediately(devices: GPS51Vehicle[]): boolean {
-    // Poll immediately if any vehicle just started moving
-    const recentlyActiveVehicles = devices.filter(vehicle => {
-      const lastUpdate = vehicle.lastUpdate.getTime();
-      const timeSinceUpdate = Date.now() - lastUpdate;
-      return vehicle.isMoving && timeSinceUpdate < 60000; // Within last minute
-    });
-
-    return recentlyActiveVehicles.length > 0;
+    const highSpeedCount = devices.filter(d => (d.speed || 0) > 80).length;
+    const emergencyCount = devices.filter(d => d.status === 'emergency').length;
+    
+    return highSpeedCount > 0 || emergencyCount > 0;
   }
 
   /**
-   * Get vehicles that should be prioritized for polling
+   * Get reason for polling interval recommendation
    */
-  getPriorityVehicles(devices: GPS51Vehicle[]): string[] {
-    return devices
-      .filter(vehicle => {
-        // Prioritize moving vehicles
-        if (vehicle.isMoving) return true;
-        
-        // Prioritize vehicles that were recently active
-        const timeSinceUpdate = Date.now() - vehicle.lastUpdate.getTime();
-        return timeSinceUpdate < 300000; // Within last 5 minutes
-      })
-      .map(vehicle => vehicle.deviceid);
-  }
+  private getPollingReason(devices: GPS51Vehicle[]): string {
+    if (devices.length === 0) {
+      return 'No vehicles - using standard interval';
+    }
 
-  /**
-   * Calculate delay before next poll based on current conditions
-   */
-  calculateNextPollDelay(
-    devices: GPS51Vehicle[], 
-    lastPollTime: number,
-    consecutiveFailures: number = 0
-  ): number {
-    const baseInterval = this.calculatePollingInterval(devices);
-    
-    // Add exponential backoff for failures
-    const failureDelay = consecutiveFailures > 0 ? 
-      Math.min(5000 * Math.pow(2, consecutiveFailures), 60000) : 0;
-    
-    // Calculate time since last poll
-    const timeSinceLastPoll = Date.now() - lastPollTime;
-    const remainingDelay = Math.max(0, baseInterval - timeSinceLastPoll);
-    
-    return remainingDelay + failureDelay;
-  }
+    const movingCount = devices.filter(d => d.isMoving).length;
+    const activityRatio = movingCount / devices.length;
 
-  /**
-   * Get polling statistics
-   */
-  getPollingStats(devices: GPS51Vehicle[]) {
-    const movingVehicles = devices.filter(v => v.isMoving);
-    const stationaryVehicles = devices.filter(v => !v.isMoving && v.status !== 'offline');
-    const offlineVehicles = devices.filter(v => v.status === 'offline');
-
-    return {
-      total: devices.length,
-      moving: movingVehicles.length,
-      stationary: stationaryVehicles.length,
-      offline: offlineVehicles.length,
-      recommendedInterval: this.calculatePollingInterval(devices),
-      lastActivityTime: Math.max(...devices.map(v => v.lastUpdate.getTime()))
-    };
+    if (activityRatio > 0.7) {
+      return 'High fleet activity - frequent updates needed';
+    } else if (activityRatio > 0.3) {
+      return 'Moderate fleet activity - balanced polling';
+    } else {
+      return 'Low fleet activity - extended intervals to reduce API load';
+    }
   }
 }

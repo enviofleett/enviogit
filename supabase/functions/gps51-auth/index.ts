@@ -32,26 +32,52 @@ serve(async (req) => {
       throw new Error('Missing required authentication parameters: username, password, apiKey, and apiUrl are required');
     }
 
-    // Here you would typically authenticate with the GPS51 API
-    // For now, we'll return a mock token
+    // PRODUCTION FIX: Real GPS51 authentication
     console.log(`Authenticating user ${username} with GPS51 API at ${apiUrl}`);
 
-    // Mock authentication - replace with actual GPS51 API call
-    const mockResponse = {
-      success: true,
-      access_token: 'mock_token_' + Date.now(),
-      token_type: 'Bearer',
-      expires_in: 3600
+    // Prepare authentication request to GPS51 API
+    const authPayload = {
+      username,
+      password, // Should be MD5 hashed
+      from: 'WEB',
+      type: 'USER'
     };
 
-    console.log('GPS51 authentication successful');
+    // Make real authentication request to GPS51
+    const gps51Response = await fetch(`${apiUrl}?action=login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(authPayload)
+    });
 
-    return new Response(
-      JSON.stringify(mockResponse),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
+    const authResult = await gps51Response.json();
+    
+    if (authResult.status === 0 && authResult.token) {
+      // Successful authentication
+      const response = {
+        success: true,
+        access_token: authResult.token,
+        token_type: 'Bearer',
+        expires_in: 24 * 60 * 60, // 24 hours
+        user: authResult.user || { username },
+        gps51_status: authResult.status
+      };
+      
+      console.log('GPS51 authentication successful:', { username, hasToken: !!response.access_token });
+      
+      return new Response(
+        JSON.stringify(response),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    } else {
+      // Authentication failed
+      throw new Error(`GPS51 authentication failed: ${authResult.message || 'Invalid credentials'}`);
+    }
 
   } catch (error) {
     console.error('GPS51 authentication error:', error);

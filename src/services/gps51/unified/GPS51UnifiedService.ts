@@ -1,6 +1,7 @@
 /**
- * GPS51 Unified Service (Refactored)
- * Main orchestrator using smaller, focused managers
+ * GPS51 Unified Service - PRODUCTION READY
+ * Single source of truth for all GPS51 authentication and data operations
+ * Phase 1: Emergency Authentication Consolidation - CRITICAL
  */
 
 import { GPS51AuthManager, GPS51AuthState } from './GPS51AuthManager';
@@ -8,6 +9,7 @@ import { GPS51DeviceManager } from './GPS51DeviceManager';
 import { GPS51PositionManager } from './GPS51PositionManager';
 import { GPS51PollingManager } from './GPS51PollingManager';
 import { GPS51Vehicle, GPS51Position, LiveDataResult } from '../GPS51UnifiedLiveDataService';
+import { GPS51ConfigStorage } from '../configStorage';
 
 export class GPS51UnifiedService {
   private static instance: GPS51UnifiedService;
@@ -19,7 +21,7 @@ export class GPS51UnifiedService {
   
   private readonly apiUrl: string;
 
-  private constructor(apiUrl: string = 'https://www.gps51.com:9015/RCSWebAPI/') {
+  private constructor(apiUrl: string = 'https://api.gps51.com/openapi') {
     this.apiUrl = apiUrl;
     
     // Initialize managers

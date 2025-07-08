@@ -1,10 +1,10 @@
 /**
  * GPS51 Device Manager
- * Handles device list fetching and management
+ * Handles device fetching and status management
  */
 
 import { EmergencyGPS51Client } from '../emergency/EmergencyGPS51Client';
-import { GPS51Vehicle } from '../GPS51UnifiedLiveDataService';
+import { GPS51Vehicle, GPS51Position } from '../GPS51UnifiedLiveDataService';
 
 export class GPS51DeviceManager {
   private devices: GPS51Vehicle[] = [];
@@ -15,66 +15,42 @@ export class GPS51DeviceManager {
   }
 
   /**
-   * Fetch user's affiliated devices (vehicles)
-   * Implements querymonitorlist API call
+   * Fetch user devices from GPS51 API
    */
   async fetchUserDevices(username: string): Promise<GPS51Vehicle[]> {
-    if (!username) {
-      throw new Error('Username is required for device list query');
-    }
-
     try {
-      console.log('GPS51DeviceManager: Fetching user devices for', username);
+      console.log('GPS51DeviceManager: Fetching devices for user:', username);
       
-      const deviceResponse = await this.client.getDeviceList(username);
+      const devices = await this.client.getDeviceList(username, false);
+      this.devices = devices;
       
-      // Extract devices from response structure
-      let devices: any[] = [];
-      
-      if (deviceResponse.groups && Array.isArray(deviceResponse.groups)) {
-        // Extract devices from groups structure
-        deviceResponse.groups.forEach((group: any) => {
-          if (group.devices && Array.isArray(group.devices)) {
-            devices = devices.concat(group.devices);
-          }
-        });
-      } else if (deviceResponse.devices && Array.isArray(deviceResponse.devices)) {
-        devices = deviceResponse.devices;
-      }
-
-      // Transform to GPS51Vehicle format
-      this.devices = devices.map(device => ({
-        deviceid: device.deviceid,
-        devicename: device.devicename || `Device ${device.deviceid}`,
-        simnum: device.simnum || '',
-        lastactivetime: device.lastactivetime || '',
-        isMoving: false,
-        speed: 0,
-        lastUpdate: new Date(),
-        status: 'unknown'
-      }));
-
-      console.log('GPS51DeviceManager: Retrieved', this.devices.length, 'devices');
-      return this.devices;
-
+      console.log('GPS51DeviceManager: Fetched devices:', devices.length);
+      return devices;
     } catch (error) {
       console.error('GPS51DeviceManager: Failed to fetch devices:', error);
-      throw error;
+      throw new Error(`Failed to fetch devices: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   /**
-   * Get current devices
+   * Update device status with position data
    */
-  getDevices(): GPS51Vehicle[] {
-    return [...this.devices];
+  updateDeviceStatus(deviceId: string, position: GPS51Position): void {
+    const device = this.devices.find(d => d.deviceid === deviceId);
+    if (device) {
+      device.position = position;
+      device.speed = position.speed || 0;
+      device.isMoving = (position.speed || 0) > 5; // Moving if speed > 5 km/h
+      device.lastUpdate = new Date();
+      device.status = 'online';
+    }
   }
 
   /**
-   * Get device by ID
+   * Get all devices
    */
-  getDeviceById(deviceId: string): GPS51Vehicle | undefined {
-    return this.devices.find(device => device.deviceid === deviceId);
+  getDevices(): GPS51Vehicle[] {
+    return this.devices;
   }
 
   /**
@@ -106,23 +82,10 @@ export class GPS51DeviceManager {
   }
 
   /**
-   * Update device status from position data
-   */
-  updateDeviceStatus(deviceId: string, position: any): void {
-    const device = this.devices.find(d => d.deviceid === deviceId);
-    if (device) {
-      device.position = position;
-      device.isMoving = position ? position.moving === 1 : false;
-      device.speed = position ? position.speed : 0;
-      device.lastUpdate = new Date();
-      device.status = position ? position.strstatusen : 'offline';
-    }
-  }
-
-  /**
    * Clear all devices
    */
   clearDevices(): void {
     this.devices = [];
+    console.log('GPS51DeviceManager: Devices cleared');
   }
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { gps51UnifiedService } from '@/services/gps51/unified/GPS51UnifiedService';
+import { gps51ProductionAuthManager, GPS51ProductionAuthState } from '@/services/gps51/GPS51ProductionAuthManager';
 import { GPS51ConfigStorage } from '@/services/gps51/configStorage';
+import { gps51UnifiedService } from '@/services/gps51/unified/GPS51UnifiedService';
 import { useToast } from './use-toast';
 
 export interface GPS51Credentials {
@@ -9,14 +10,8 @@ export interface GPS51Credentials {
   apiUrl: string;
 }
 
-export interface GPS51AuthStatus {
-  isAuthenticated: boolean;
-  isConfigured: boolean;
-  username: string | null;
-  error: string | null;
-  deviceCount: number;
-  movingVehicles: number;
-}
+// Use production auth state interface
+export type GPS51AuthStatus = GPS51ProductionAuthState;
 
 export function useGPS51UnifiedAuth() {
   const [status, setStatus] = useState<GPS51AuthStatus>({
@@ -25,24 +20,15 @@ export function useGPS51UnifiedAuth() {
     username: null,
     error: null,
     deviceCount: 0,
-    movingVehicles: 0
+    movingVehicles: 0,
+    lastAuthTime: null
   });
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
   const updateStatus = useCallback(() => {
-    const isConfigured = GPS51ConfigStorage.isConfigured();
-    const authState = gps51UnifiedService.getAuthState();
-    const serviceStatus = gps51UnifiedService.getServiceStatus();
-
-    setStatus({
-      isAuthenticated: authState.isAuthenticated,
-      isConfigured,
-      username: authState.username,
-      error: authState.error || null,
-      deviceCount: serviceStatus.deviceCount,
-      movingVehicles: serviceStatus.movingVehicles
-    });
+    const status = gps51ProductionAuthManager.getAuthenticationStatus();
+    setStatus(status);
   }, []);
 
   const authenticate = useCallback(async (credentials?: GPS51Credentials) => {
@@ -51,27 +37,12 @@ export function useGPS51UnifiedAuth() {
       let authResult;
       
       if (credentials) {
-        // Save credentials first
-        GPS51ConfigStorage.saveConfiguration({
-          apiUrl: credentials.apiUrl,
-          username: credentials.username,
-          password: credentials.password,
-          from: 'WEB',
-          type: 'USER'
-        });
-        
-        authResult = await gps51UnifiedService.authenticate(
+        authResult = await gps51ProductionAuthManager.authenticate(
           credentials.username,
           credentials.password
         );
       } else {
-        // Use stored credentials
-        const config = GPS51ConfigStorage.getConfiguration();
-        if (config) {
-          authResult = await gps51UnifiedService.authenticate(config.username, config.password);
-        } else {
-          throw new Error('No stored credentials found');
-        }
+        authResult = await gps51ProductionAuthManager.authenticateWithStoredCredentials();
       }
 
       if (authResult.isAuthenticated) {
@@ -105,7 +76,7 @@ export function useGPS51UnifiedAuth() {
 
   const logout = useCallback(async () => {
     try {
-      await gps51UnifiedService.logout();
+      await gps51ProductionAuthManager.logout();
       toast({
         title: "Logged Out",
         description: "Successfully logged out of GPS51",
@@ -151,7 +122,7 @@ export function useGPS51UnifiedAuth() {
   useEffect(() => {
     updateStatus();
     
-    // Auto-authenticate if configured but not authenticated
+    // PRODUCTION FIX: Auto-authenticate if configured but not authenticated
     const isConfigured = GPS51ConfigStorage.isConfigured();
     const authState = gps51UnifiedService.getAuthState();
     
@@ -159,11 +130,12 @@ export function useGPS51UnifiedAuth() {
       console.log('useGPS51UnifiedAuth: Auto-authenticating with stored credentials...');
       authenticate().catch(error => {
         console.warn('Auto-authentication failed:', error);
+        // Don't show toast for auto-auth failures to avoid spam
       });
     }
     
-    // Set up periodic status updates
-    const interval = setInterval(updateStatus, 30000);
+    // Set up periodic status updates - production safe interval
+    const interval = setInterval(updateStatus, 60000); // 1 minute intervals
     return () => clearInterval(interval);
   }, [authenticate, updateStatus]);
 

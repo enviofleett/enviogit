@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { useGPS51LiveData } from '@/hooks/useGPS51LiveData';
 import { useToast } from '@/hooks/use-toast';
+import { GPS51ConfigStorage } from '@/services/gps51/configStorage';
 import FleetMap from '@/components/fleet/FleetMap';
 import VehicleDetailsPanel from '@/components/fleet/VehicleDetailsPanel';
 import FleetMetricsCards from '@/components/fleet/FleetMetricsCards';
@@ -76,28 +77,31 @@ const FleetDashboard: React.FC = () => {
     }
   }, [autoRefresh, authState.isAuthenticated]);
 
-  // Handle authentication
+  // PRODUCTION FIX: Handle authentication using unified system
   const handleAuthenticate = async () => {
     try {
-      // This should be handled by a login form, but for demo we'll use stored credentials
-      const username = localStorage.getItem('gps51_username');
-      const password = localStorage.getItem('gps51_password');
-      
-      if (!username || !password) {
+      // Use GPS51ConfigStorage for consistent credential access
+      if (!GPS51ConfigStorage.isConfigured()) {
         toast({
-          title: "Authentication Required",
+          title: "Configuration Required",
           description: "Please configure GPS51 credentials in Settings first.",
           variant: "destructive"
         });
         return;
       }
 
-      await authenticate(username, password);
+      const config = GPS51ConfigStorage.getConfiguration();
+      if (!config) {
+        throw new Error('Failed to load GPS51 configuration');
+      }
+
+      await authenticate(config.username, config.password);
       toast({
         title: "Connected to GPS51",
         description: "Successfully authenticated and ready to track vehicles.",
       });
     } catch (error) {
+      console.error('Fleet Dashboard authentication error:', error);
       toast({
         title: "Authentication Failed",
         description: error instanceof Error ? error.message : "Failed to connect to GPS51",

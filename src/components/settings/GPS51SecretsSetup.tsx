@@ -18,7 +18,7 @@ interface SecretsStatus {
 
 export const GPS51SecretsSetup = () => {
   const [credentials, setCredentials] = useState({
-    apiUrl: 'https://www.gps51.com:9015/RCSWebAPI/',
+    apiUrl: 'https://api.gps51.com/openapi',
     username: '',
     password: ''
   });
