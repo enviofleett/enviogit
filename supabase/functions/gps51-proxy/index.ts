@@ -180,16 +180,35 @@ serve(async (req) => {
 
     // Add body for POST requests - Use JSON for all actions (GPS51 API expects JSON)
     if ((requestData.method || 'POST') === 'POST' && requestData.params) {
+      // CRITICAL FIX: Ensure proper parameter structure for lastposition
+      let bodyParams = requestData.params;
+      
+      if (requestData.action === 'lastposition') {
+        // Ensure required fields are present for lastposition
+        bodyParams = {
+          username: bodyParams.username || localStorage.getItem('gps51_username') || '',
+          deviceids: bodyParams.deviceids || [], // Empty array = all devices
+          lastquerypositiontime: bodyParams.lastquerypositiontime || 0 // 0 for initial fetch
+        };
+        
+        console.log('GPS51 Proxy: Fixed lastposition parameters:', {
+          username: bodyParams.username,
+          deviceidsCount: bodyParams.deviceids.length,
+          lastquerypositiontime: bodyParams.lastquerypositiontime,
+          isInitialFetch: bodyParams.lastquerypositiontime === 0
+        });
+      }
+      
       // Use JSON for all requests to GPS51 OpenAPI endpoint
       requestOptions.headers = {
         ...requestOptions.headers,
         'Content-Type': 'application/json'
       };
-      requestOptions.body = JSON.stringify(requestData.params);
+      requestOptions.body = JSON.stringify(bodyParams);
       
       console.log('GPS51 Proxy: Sending JSON request:', {
         action: requestData.action,
-        bodyParams: requestData.params,
+        bodyParams: bodyParams,
         jsonBody: requestOptions.body,
         endpoint: targetUrl.toString()
       });
