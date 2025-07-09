@@ -1,5 +1,5 @@
 import { GPS51EnhancedTokenManager } from './GPS51EnhancedTokenManager';
-import { GPS51Credentials } from '../gp51/GPS51CredentialsManager';
+import { GPS51AuthCredentials } from './GPS51Types';
 
 export interface PermissionValidationReport {
   timestamp: string;
@@ -39,7 +39,7 @@ export class GPS51PermissionValidator {
   /**
    * Run comprehensive permission validation
    */
-  async validatePermissions(credentials: GPS51Credentials): Promise<PermissionValidationReport> {
+  async validatePermissions(credentials: GPS51AuthCredentials): Promise<PermissionValidationReport> {
     console.log('GPS51PermissionValidator: Starting comprehensive permission validation...');
     
     const report: PermissionValidationReport = {
@@ -183,7 +183,7 @@ export class GPS51PermissionValidator {
   /**
    * Quick permission check for specific device
    */
-  async checkDevicePermission(deviceId: string, credentials: GPS51Credentials): Promise<{
+  async checkDevicePermission(deviceId: string, credentials: GPS51AuthCredentials): Promise<{
     hasAccess: boolean;
     error?: string;
     lastPosition?: any;

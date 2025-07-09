@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GPS51CredentialsForm } from './GPS51CredentialsForm';
 import GPS51DeviceManager from './GPS51DeviceManager';
@@ -18,12 +18,35 @@ import { GPS51AuthDiagnostics } from '../debug/GPS51AuthDiagnostics';
 import { GPS51APITester } from '../debug/GPS51APITester';
 import { GPS51HealthStatus } from './GPS51HealthStatus';
 import { GPS51PermissionDiagnosticsPanel } from './GPS51PermissionDiagnosticsPanel';
+import { GPS51AuthCredentials } from '@/services/gps51/GPS51Types';
 
 interface GPS51SettingsProps {
   onCredentialsChange?: (credentials: any) => void;
 }
 
 export const GPS51Settings: React.FC<GPS51SettingsProps> = ({ onCredentialsChange }) => {
+  const [credentials, setCredentials] = useState<GPS51AuthCredentials | null>(null);
+
+  useEffect(() => {
+    // Load saved credentials
+    const savedCredentials = localStorage.getItem('gps51_credentials');
+    if (savedCredentials) {
+      try {
+        const parsed = JSON.parse(savedCredentials);
+        // Ensure all required fields are present with defaults
+        const fullCredentials: GPS51AuthCredentials = {
+          username: parsed.username || '',
+          password: parsed.password || '',
+          apiUrl: parsed.apiUrl || '',
+          from: parsed.from || 'WEB',
+          type: parsed.type || 'USER'
+        };
+        setCredentials(fullCredentials);
+      } catch (error) {
+        console.error('Failed to parse saved credentials:', error);
+      }
+    }
+  }, []);
   return (
     <div className="space-y-6">
       <div>
@@ -70,7 +93,7 @@ export const GPS51Settings: React.FC<GPS51SettingsProps> = ({ onCredentialsChang
         </TabsContent>
 
         <TabsContent value="permissions">
-          <GPS51PermissionDiagnosticsPanel credentials={null} />
+          <GPS51PermissionDiagnosticsPanel credentials={credentials} />
         </TabsContent>
 
         <TabsContent value="devices">

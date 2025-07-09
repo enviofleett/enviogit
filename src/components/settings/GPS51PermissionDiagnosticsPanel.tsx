@@ -4,11 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, CheckCircle, XCircle, Clock, Shield, Users, Database } from 'lucide-react';
 import { GPS51PermissionValidator, PermissionValidationReport } from '@/services/gps51/GPS51PermissionValidator';
-import { GPS51Credentials } from '@/services/gp51/GPS51CredentialsManager';
+import { GPS51AuthCredentials } from '@/services/gps51/GPS51Types';
 import { useToast } from '@/hooks/use-toast';
 
 interface GPS51PermissionDiagnosticsPanelProps {
-  credentials: GPS51Credentials;
+  credentials: GPS51AuthCredentials | null;
 }
 
 export const GPS51PermissionDiagnosticsPanel: React.FC<GPS51PermissionDiagnosticsPanelProps> = ({
@@ -20,7 +20,7 @@ export const GPS51PermissionDiagnosticsPanel: React.FC<GPS51PermissionDiagnostic
   const validator = GPS51PermissionValidator.getInstance();
 
   const runDiagnostics = async () => {
-    if (!credentials.username || !credentials.password || !credentials.apiUrl) {
+    if (!credentials || !credentials.username || !credentials.password || !credentials.apiUrl) {
       toast({
         title: "Missing Credentials",
         description: "Please configure GPS51 credentials before running diagnostics.",

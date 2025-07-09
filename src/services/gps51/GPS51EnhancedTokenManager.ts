@@ -1,6 +1,6 @@
 import { GPS51AuthenticationService, GPS51AuthenticationResult } from './GPS51AuthenticationService';
 import { GPS51ProxyClient } from './GPS51ProxyClient';
-import { GPS51Credentials } from '../gp51/GPS51CredentialsManager';
+import { GPS51AuthCredentials } from './GPS51Types';
 
 export interface TokenValidationResult {
   isValid: boolean;
@@ -28,7 +28,7 @@ export class GPS51EnhancedTokenManager {
   private proxyClient: GPS51ProxyClient;
   private currentToken: string | null = null;
   private tokenObtainedAt: Date | null = null;
-  private lastCredentials: GPS51Credentials | null = null;
+  private lastCredentials: GPS51AuthCredentials | null = null;
   private permissionCache: Map<string, GPS51PermissionDiagnostics> = new Map();
 
   constructor() {
@@ -46,7 +46,7 @@ export class GPS51EnhancedTokenManager {
   /**
    * PHASE 1: Get fresh token with immediate validation
    */
-  async getFreshToken(credentials: GPS51Credentials, forceRefresh: boolean = false): Promise<GPS51AuthenticationResult> {
+  async getFreshToken(credentials: GPS51AuthCredentials, forceRefresh: boolean = false): Promise<GPS51AuthenticationResult> {
     console.log('GPS51EnhancedTokenManager: Getting fresh token...', {
       forceRefresh,
       hasCurrentToken: !!this.currentToken,
@@ -87,7 +87,7 @@ export class GPS51EnhancedTokenManager {
   /**
    * PHASE 2: Validate token permissions beyond just presence
    */
-  async validateTokenPermissions(token: string, credentials: GPS51Credentials): Promise<TokenValidationResult> {
+  async validateTokenPermissions(token: string, credentials: GPS51AuthCredentials): Promise<TokenValidationResult> {
     console.log('GPS51EnhancedTokenManager: Validating token permissions...');
     
     const validationResult: TokenValidationResult = {
@@ -232,7 +232,7 @@ export class GPS51EnhancedTokenManager {
   /**
    * PHASE 4: GPS51 Permission Diagnostics
    */
-  async runPermissionDiagnostics(credentials: GPS51Credentials): Promise<GPS51PermissionDiagnostics> {
+  async runPermissionDiagnostics(credentials: GPS51AuthCredentials): Promise<GPS51PermissionDiagnostics> {
     console.log('GPS51EnhancedTokenManager: Running comprehensive permission diagnostics...');
     
     const cacheKey = `${credentials.username}@${credentials.apiUrl}`;
@@ -351,7 +351,7 @@ export class GPS51EnhancedTokenManager {
   async makeRequestWithFreshToken(
     action: string,
     params: Record<string, any>,
-    credentials: GPS51Credentials,
+    credentials: GPS51AuthCredentials,
     method: 'GET' | 'POST' = 'POST'
   ) {
     console.log('GPS51EnhancedTokenManager: Making request with fresh token strategy...', { action });
