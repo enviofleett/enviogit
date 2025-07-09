@@ -7,8 +7,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, Navigation, Locate, ZoomIn, ZoomOut } from 'lucide-react';
+import { MapPin, Navigation, Locate, AlertCircle } from 'lucide-react';
 import { GPS51Vehicle, GPS51Position } from '@/services/gps51/GPS51ProductionService';
+import { MapTilerService } from '@/services/maps/MapTilerService';
+import { useMapSettings } from '@/hooks/useMapSettings';
 
 interface FleetMapProps {
   vehicles: GPS51Vehicle[];
@@ -26,74 +28,64 @@ const FleetMap: React.FC<FleetMapProps> = ({
   mapStyle = 'street'
 }) => {
   const mapRef = useRef<HTMLDivElement>(null);
-  const [map, setMap] = useState<any>(null);
-  const [markers, setMarkers] = useState<Map<string, any>>(new Map());
-  const [mapboxLoaded, setMapboxLoaded] = useState(false);
+  const [mapService, setMapService] = useState<MapTilerService | null>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { settings, isLoading: settingsLoading } = useMapSettings();
 
-  // Load Mapbox with proper error handling
+  // Initialize map with MapTiler
   useEffect(() => {
-    const loadMapbox = async () => {
+    const initializeMap = async () => {
+      if (!mapRef.current || settingsLoading || !settings.apiKey) return;
+      
       try {
-        // Check if mapbox-gl is available
-        if (typeof window !== 'undefined' && (window as any).mapboxgl) {
-          const mapboxgl = (window as any).mapboxgl;
-          setMapboxLoaded(true);
-          
-          // Set demo token for development
-          mapboxgl.accessToken = 'pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw';
-          
-          if (mapRef.current) {
-            const mapInstance = new mapboxgl.Map({
-            container: mapRef.current,
-            style: mapStyle === 'satellite' 
-              ? 'mapbox://styles/mapbox/satellite-v9'
-              : 'mapbox://styles/mapbox/streets-v11',
-            center: [3.3792, 6.5244], // Default to Lagos, Nigeria
-            zoom: 10,
-            pitch: 0,
-            bearing: 0
-          });
+        setError(null);
+        
+        const mapTilerConfig = {
+          apiKey: settings.apiKey,
+          style: mapStyle === 'satellite' ? 'satellite' : 'streets' as 'streets' | 'satellite' | 'terrain' | 'hybrid',
+          center: [settings.centerLng, settings.centerLat] as [number, number],
+          zoom: settings.zoomLevel
+        };
 
-            // Add navigation controls
-            mapInstance.addControl(new mapboxgl.NavigationControl(), 'top-right');
-            
-            // Add geolocate control
-            mapInstance.addControl(
-              new mapboxgl.GeolocateControl({
-              positionOptions: {
-                enableHighAccuracy: true
-              },
-              trackUserLocation: true,
-              showUserHeading: true
-            }),
-            'top-right'
-          );
-
-          setMap(mapInstance);
-
-          return () => {
-            mapInstance.remove();
-          };
-        }
+        const service = new MapTilerService(mapTilerConfig);
+        const initialized = await service.initialize(mapRef.current);
+        
+        if (initialized) {
+          setMapService(service);
+          setMapLoaded(true);
+          console.log('MapTiler initialized successfully');
         } else {
-          // Fallback: Show message that map requires Mapbox
-          console.warn('Mapbox GL JS not available. Please include Mapbox script.');
+          setError('Failed to initialize map service');
         }
       } catch (error) {
-        console.error('Failed to load Mapbox:', error);
+        console.error('Map initialization error:', error);
+        setError('Map initialization failed. Please check your API key in Settings > Maps.');
       }
     };
 
-    loadMapbox();
-  }, [mapStyle]);
+    // Cleanup existing map
+    if (mapService) {
+      mapService.destroy();
+      setMapService(null);
+      setMapLoaded(false);
+    }
+
+    initializeMap();
+
+    return () => {
+      if (mapService) {
+        mapService.destroy();
+      }
+    };
+  }, [settings, mapStyle, settingsLoading]);
 
   // Update markers when vehicles change
   useEffect(() => {
-    if (!map || !mapboxLoaded) return;
+    if (!mapService || !mapLoaded) return;
 
     // Clear existing markers
-    markers.forEach(marker => marker.remove());
-    const newMarkers = new Map();
+    mapService.clearMarkers();
 
     // Add markers for vehicles with positions
     vehicles.forEach(vehicle => {
@@ -101,72 +93,32 @@ const FleetMap: React.FC<FleetMapProps> = ({
 
       const { callat: lat, callon: lng } = vehicle.position;
       
-      // Create marker element
-      const markerElement = document.createElement('div');
-      markerElement.className = `vehicle-marker ${vehicle.isMoving ? 'moving' : 'stationary'} ${
-        selectedVehicle === vehicle.deviceid ? 'selected' : ''
-      }`;
-      markerElement.innerHTML = `
-        <div class="marker-content">
-          <div class="marker-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2L13.2 8.6L20 7.4L12 15L10.8 8.4L4 9.6L12 2Z" fill="currentColor"/>
-            </svg>
-          </div>
-          <div class="marker-info">
-            <div class="vehicle-name">${vehicle.devicename}</div>
-            <div class="vehicle-speed">${vehicle.speed} km/h</div>
-          </div>
-        </div>
-      `;
-
-      // Create popup
-      const popup = new (window as any).mapboxgl.Popup({
-        offset: 25,
-        closeButton: false
-      }).setHTML(`
-        <div class="vehicle-popup">
-          <h3>${vehicle.devicename}</h3>
-          <p><strong>Speed:</strong> ${vehicle.speed} km/h</p>
-          <p><strong>Status:</strong> ${vehicle.isMoving ? 'Moving' : 'Parked'}</p>
-          <p><strong>Last Update:</strong> ${vehicle.lastUpdate.toLocaleTimeString()}</p>
-          ${vehicle.position?.strstatusen ? `<p><strong>Device Status:</strong> ${vehicle.position.strstatusen}</p>` : ''}
-        </div>
-      `);
-
-      // Create marker
-      const marker = new (window as any).mapboxgl.Marker(markerElement)
-        .setLngLat([lng, lat])
-        .setPopup(popup)
-        .addTo(map);
-
-      // Add click handler
-      markerElement.addEventListener('click', () => {
-        onVehicleSelect?.(vehicle.deviceid);
+      mapService.addMarker({
+        id: vehicle.deviceid,
+        position: [lng, lat],
+        title: vehicle.devicename,
+        status: vehicle.isMoving ? 'moving' : vehicle.position ? 'stationary' : 'offline',
+        speed: vehicle.speed,
+        lastUpdate: vehicle.lastUpdate
       });
 
-      newMarkers.set(vehicle.deviceid, marker);
+      // Handle vehicle selection
+      if (selectedVehicle === vehicle.deviceid) {
+        // You could add visual selection feedback here
+      }
     });
-
-    setMarkers(newMarkers);
 
     // Fit map to show all vehicles
     if (vehicles.length > 0) {
       const coordinates = vehicles
         .filter(v => v.position)
-        .map(v => [v.position!.callon, v.position!.callat]);
+        .map(v => [v.position!.callon, v.position!.callat] as [number, number]);
       
       if (coordinates.length > 0) {
-        const bounds = new (window as any).mapboxgl.LngLatBounds();
-        coordinates.forEach(coord => bounds.extend(coord));
-        
-        map.fitBounds(bounds, {
-          padding: 50,
-          maxZoom: 15
-        });
+        mapService.fitBounds(coordinates, 50);
       }
     }
-  }, [map, vehicles, selectedVehicle, mapboxLoaded]);
+  }, [mapService, mapLoaded, vehicles, selectedVehicle]);
 
   // Add custom styles for markers
   useEffect(() => {
@@ -254,13 +206,54 @@ const FleetMap: React.FC<FleetMapProps> = ({
     }
   }, []);
 
-  if (!mapboxLoaded) {
+  if (settingsLoading || !mapLoaded) {
     return (
       <Card className="h-full">
         <CardContent className="h-full flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-            <p className="text-gray-500">Loading map...</p>
+          <div className="text-center space-y-4">
+            {settingsLoading ? (
+              <>
+                <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
+                <p className="text-muted-foreground">Loading map settings...</p>
+              </>
+            ) : error ? (
+              <>
+                <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
+                <div>
+                  <p className="text-destructive font-medium">Map Error</p>
+                  <p className="text-sm text-muted-foreground">{error}</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-2"
+                    onClick={() => window.location.href = '/settings?tab=maps'}
+                  >
+                    Configure Maps
+                  </Button>
+                </div>
+              </>
+            ) : !settings.apiKey ? (
+              <>
+                <MapPin className="w-12 h-12 text-muted-foreground mx-auto" />
+                <div>
+                  <p className="font-medium">Map Service Not Configured</p>
+                  <p className="text-sm text-muted-foreground">Please configure your map API key</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-2"
+                    onClick={() => window.location.href = '/settings?tab=maps'}
+                  >
+                    Configure Maps
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
+                <p className="text-muted-foreground">Initializing map...</p>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -299,19 +292,13 @@ const FleetMap: React.FC<FleetMapProps> = ({
           variant="secondary"
           className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm"
           onClick={() => {
-            if (map && vehicles.length > 0) {
+            if (mapService && vehicles.length > 0) {
               const coordinates = vehicles
                 .filter(v => v.position)
-                .map(v => [v.position!.callon, v.position!.callat]);
+                .map(v => [v.position!.callon, v.position!.callat] as [number, number]);
               
               if (coordinates.length > 0) {
-                const bounds = new (window as any).mapboxgl.LngLatBounds();
-                coordinates.forEach(coord => bounds.extend(coord));
-                
-                map.fitBounds(bounds, {
-                  padding: 50,
-                  maxZoom: 15
-                });
+                mapService.fitBounds(coordinates, 50);
               }
             }
           }}

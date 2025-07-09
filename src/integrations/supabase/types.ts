@@ -1012,6 +1012,48 @@ export type Database = {
         }
         Relationships: []
       }
+      map_settings: {
+        Row: {
+          api_key: string | null
+          center_lat: number | null
+          center_lng: number | null
+          created_at: string | null
+          default_style: string | null
+          id: string
+          is_active: boolean | null
+          service_provider: string
+          updated_at: string | null
+          user_id: string | null
+          zoom_level: number | null
+        }
+        Insert: {
+          api_key?: string | null
+          center_lat?: number | null
+          center_lng?: number | null
+          created_at?: string | null
+          default_style?: string | null
+          id?: string
+          is_active?: boolean | null
+          service_provider?: string
+          updated_at?: string | null
+          user_id?: string | null
+          zoom_level?: number | null
+        }
+        Update: {
+          api_key?: string | null
+          center_lat?: number | null
+          center_lng?: number | null
+          created_at?: string | null
+          default_style?: string | null
+          id?: string
+          is_active?: boolean | null
+          service_provider?: string
+          updated_at?: string | null
+          user_id?: string | null
+          zoom_level?: number | null
+        }
+        Relationships: []
+      }
       marketplace_configuration: {
         Row: {
           created_at: string

@@ -103,3 +103,75 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* MapTiler specific styles */
+.maptiler-marker {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.maptiler-marker:hover {
+  transform: scale(1.1);
+}
+
+.maptiler-marker.moving .marker-icon {
+  color: hsl(142.1 76.2% 36.3%);
+  animation: pulse 2s infinite;
+}
+
+.maptiler-marker.stationary .marker-icon {
+  color: hsl(var(--muted-foreground));
+}
+
+.maptiler-marker.offline .marker-icon {
+  color: hsl(var(--destructive));
+}
+
+.marker-content {
+  display: flex;
+  align-items: center;
+  background: hsl(var(--background));
+  border-radius: 8px;
+  padding: 4px 8px;
+  box-shadow: 0 2px 8px hsl(var(--border) / 0.15);
+  border: 2px solid hsl(var(--border));
+}
+
+.marker-icon {
+  margin-right: 6px;
+  display: flex;
+  align-items: center;
+}
+
+.marker-info {
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.vehicle-name {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.vehicle-speed {
+  color: hsl(var(--muted-foreground));
+}
+
+.vehicle-popup {
+  font-size: 14px;
+}
+
+.vehicle-popup h3 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.vehicle-popup p {
+  margin: 4px 0;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}

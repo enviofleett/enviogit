@@ -12,7 +12,7 @@ import { MarketplaceAdminPanel } from '@/components/marketplace/MarketplaceAdmin
 import { TechnicalPartnerAdminPanel } from '@/components/settings/TechnicalPartnerAdminPanel';
 import { GPS51HealthDashboard } from '@/components/monitoring/GPS51HealthDashboard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings as SettingsIcon, Mail, Smartphone, Package, Activity, Shield, Key, Store, Lock, Users, Brain, AlertTriangle } from 'lucide-react';
+import { Settings as SettingsIcon, Mail, Smartphone, Package, Activity, Shield, Key, Store, Lock, Users, Brain, AlertTriangle, Map } from 'lucide-react';
 import { AIChatbotSettings } from '@/components/settings/AIChatbotSettings';
 import { GPS51EmergencyControls } from '@/components/settings/GPS51EmergencyControls';
 import { GPS51OptimizationStatus } from '@/components/settings/GPS51OptimizationStatus';
@@ -21,6 +21,7 @@ import { EmergencyGPS51Panel } from '@/components/settings/EmergencyGPS51Panel';
 import { GPS51ConnectionDiagnostics } from '@/components/settings/GPS51ConnectionDiagnostics';
 import { GPS51AuthenticationDiagnostics } from '@/components/dashboard/GPS51AuthenticationDiagnostics';
 import { GPS51SecretsSetup } from '@/components/settings/GPS51SecretsSetup';
+import { MapSettingsPanel } from '@/components/settings/MapSettingsPanel';
 // GPS51OfflineDeviceDiagnostics removed
 
 const Settings = () => {
@@ -71,7 +72,7 @@ const Settings = () => {
             </TabsTrigger>
           </TabsList>
           
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="mobile" className="flex items-center gap-1 text-xs">
               <Smartphone className="h-3 w-3" />
               <span className="hidden sm:inline">Mobile</span>
@@ -86,6 +87,11 @@ const Settings = () => {
               <Key className="h-3 w-3" />
               <span className="hidden sm:inline">API Keys</span>
               <span className="sm:hidden">API</span>
+            </TabsTrigger>
+            <TabsTrigger value="maps" className="flex items-center gap-1 text-xs">
+              <Map className="h-3 w-3" />
+              <span className="hidden sm:inline">Maps</span>
+              <span className="sm:hidden">Map</span>
             </TabsTrigger>
             <TabsTrigger value="gps51" className="hidden lg:flex items-center gap-1 text-xs">
               <SettingsIcon className="h-3 w-3" />
@@ -157,6 +163,10 @@ const Settings = () => {
         
         <TabsContent value="credentials">
           <APICredentialsPanel />
+        </TabsContent>
+        
+        <TabsContent value="maps">
+          <MapSettingsPanel />
         </TabsContent>
         
         <TabsContent value="gps51" className="space-y-6">
