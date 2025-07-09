@@ -1,67 +1,23 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.3';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-};
-
-// Initialize Supabase client for database logging
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL') ?? '',
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-);
-
-interface GPS51ProxyRequest {
-  action: string;
-  token?: string;
-  params?: Record<string, any>;
-  method?: 'GET' | 'POST';
-  apiUrl?: string;
-}
+// Import refactored modules
+import { corsHeaders, handleCorsPreflightRequest, createCorsResponse } from './modules/cors-handler.ts';
+import { validateRequest, getClientIP } from './modules/request-validator.ts';
+import { buildGPS51URL, buildRequestOptions, makeGPS51Request } from './modules/gps51-client.ts';
+import { processGPS51Response, createErrorResponse } from './modules/response-processor.ts';
+import { checkRateLimit, recordRequest, handleRateLimitError } from './modules/rate-limiter.ts';
+import { logApiCall } from './modules/logger.ts';
+import type { GPS51ProxyRequest } from './modules/types.ts';
 
 serve(async (req) => {
   const startTime = Date.now();
-  const clientIP = req.headers.get('cf-connecting-ip') || 
-                   req.headers.get('x-forwarded-for') || 
-                   req.headers.get('x-real-ip') || 
-                   'unknown';
+  const clientIP = getClientIP(req);
   
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return handleCorsPreflightRequest();
   }
-
-  const logApiCall = async (
-    endpoint: string,
-    requestPayload: any,
-    responseStatus: number,
-    responseBody: any,
-    durationMs: number,
-    errorMessage?: string
-  ) => {
-    try {
-      await supabase.from('api_calls_monitor').insert({
-        endpoint: `GPS51-EdgeFunction-${endpoint}`,
-        method: req.method,
-        request_payload: {
-          ...requestPayload,
-          clientIP,
-          userAgent: req.headers.get('user-agent'),
-          timestamp: new Date().toISOString()
-        },
-        response_status: responseStatus,
-        response_body: responseBody,
-        duration_ms: durationMs,
-        error_message: errorMessage,
-        timestamp: new Date().toISOString()
-      });
-    } catch (logError) {
-      console.warn('Failed to log API call to database:', logError);
-    }
-  };
 
   try {
     console.log('GPS51 Proxy: Incoming request:', {
@@ -72,38 +28,24 @@ serve(async (req) => {
     });
 
     // Check rate limiter before proceeding
-    try {
-      const rateLimitCheck = await supabase.functions.invoke('gps51-rate-limiter', {
-        body: { action: 'check_limits' }
-      });
-
-      if (rateLimitCheck.data && !rateLimitCheck.data.shouldAllow) {
-        console.warn('GPS51 Proxy: Request blocked by rate limiter:', rateLimitCheck.data);
-        return new Response(
-          JSON.stringify({
-            error: 'Rate limit exceeded',
-            message: rateLimitCheck.data.message,
-            waitTime: rateLimitCheck.data.waitTime,
-            proxy_error: true,
-            error_code: 'RATE_LIMITED'
-          }),
-          { 
-            status: 429, 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-          }
-        );
-      }
-    } catch (rateLimitError) {
-      console.warn('GPS51 Proxy: Rate limiter check failed, proceeding without rate limiting:', rateLimitError);
+    const rateLimitResult = await checkRateLimit();
+    if (!rateLimitResult.shouldAllow) {
+      return createCorsResponse(
+        JSON.stringify({
+          error: 'Rate limit exceeded',
+          message: rateLimitResult.message,
+          waitTime: rateLimitResult.waitTime,
+          proxy_error: true,
+          error_code: 'RATE_LIMITED'
+        }),
+        429
+      );
     }
 
     if (req.method !== 'POST') {
-      return new Response(
+      return createCorsResponse(
         JSON.stringify({ error: 'Only POST requests are supported' }),
-        { 
-          status: 405, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
+        405
       );
     }
 
@@ -116,103 +58,24 @@ serve(async (req) => {
       apiUrl: requestData.apiUrl || 'https://api.gps51.com/openapi'
     });
 
-    // Validate required fields
-    if (!requestData.action) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required field: action' }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
+    // Validate request
+    const validation = validateRequest(requestData);
+    if (!validation.isValid) {
+      return createCorsResponse(
+        JSON.stringify({
+          error: validation.error,
+          proxy_error: true,
+          error_code: requestData.action !== 'login' ? 'MISSING_TOKEN' : 'INVALID_REQUEST',
+          action: requestData.action,
+          suggestion: requestData.action !== 'login' ? 'Please authenticate first using the login action' : 'Check request parameters'
+        }),
+        requestData.action !== 'login' ? 401 : 400
       );
     }
 
-    // Build GPS51 API URL
-    const apiUrl = requestData.apiUrl || 'https://api.gps51.com/openapi';
-    const targetUrl = new URL(apiUrl);
-    targetUrl.searchParams.append('action', requestData.action);
-    
-    // CRITICAL FIX: Enhanced token validation for all actions except login
-    if (requestData.action !== 'login') {
-      if (!requestData.token || requestData.token === 'no-token' || requestData.token.trim() === '') {
-        console.error('GPS51 Proxy: Missing or invalid token for authenticated action:', {
-          action: requestData.action,
-          tokenProvided: !!requestData.token,
-          tokenValue: requestData.token ? `${requestData.token.substring(0, 10)}...` : 'null'
-        });
-        
-        return new Response(
-          JSON.stringify({
-            error: 'Authentication required - no valid token provided',
-            proxy_error: true,
-            error_code: 'MISSING_TOKEN',
-            action: requestData.action,
-            suggestion: 'Please authenticate first using the login action'
-          }),
-          { 
-            status: 401, 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-          }
-        );
-      }
-      
-      targetUrl.searchParams.append('token', requestData.token);
-      console.log('GPS51 Proxy: Added valid token parameter:', { 
-        action: requestData.action, 
-        hasToken: !!requestData.token,
-        tokenLength: requestData.token.length,
-        tokenPrefix: requestData.token.substring(0, 10) + '...'
-      });
-    }
-
-    // NOTE: No additional URL parameters needed for lastposition - GPS51 API expects clean URL
-
-    // Prepare request options with enhanced headers
-    const requestOptions: RequestInit = {
-      method: requestData.method || 'POST',
-      headers: {
-        'Accept': 'application/json, text/plain, */*',
-        'User-Agent': 'Mozilla/5.0 (compatible; GPS51-Proxy/1.0)',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
-      }
-    };
-
-    // Add body for POST requests - Use JSON for all actions (GPS51 API expects JSON)
-    if ((requestData.method || 'POST') === 'POST' && requestData.params) {
-      // CRITICAL FIX: Ensure proper parameter structure for lastposition
-      let bodyParams = requestData.params;
-      
-      if (requestData.action === 'lastposition') {
-        // Ensure required fields are present for lastposition
-        bodyParams = {
-          username: bodyParams.username || localStorage.getItem('gps51_username') || '',
-          deviceids: bodyParams.deviceids || [], // Empty array = all devices
-          lastquerypositiontime: bodyParams.lastquerypositiontime || 0 // 0 for initial fetch
-        };
-        
-        console.log('GPS51 Proxy: Fixed lastposition parameters:', {
-          username: bodyParams.username,
-          deviceidsCount: bodyParams.deviceids.length,
-          lastquerypositiontime: bodyParams.lastquerypositiontime,
-          isInitialFetch: bodyParams.lastquerypositiontime === 0
-        });
-      }
-      
-      // Use JSON for all requests to GPS51 OpenAPI endpoint
-      requestOptions.headers = {
-        ...requestOptions.headers,
-        'Content-Type': 'application/json'
-      };
-      requestOptions.body = JSON.stringify(bodyParams);
-      
-      console.log('GPS51 Proxy: Sending JSON request:', {
-        action: requestData.action,
-        bodyParams: bodyParams,
-        jsonBody: requestOptions.body,
-        endpoint: targetUrl.toString()
-      });
-    }
+    // Build GPS51 request
+    const targetUrl = buildGPS51URL(requestData);
+    const requestOptions = buildRequestOptions(requestData);
 
     console.log('GPS51 Proxy: Making request to GPS51 API:', {
       url: targetUrl.toString(),
@@ -221,184 +84,21 @@ serve(async (req) => {
       headers: requestOptions.headers
     });
 
-    // Make request to GPS51 API with enhanced timeout and retry logic
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-    
     try {
-      requestOptions.signal = controller.signal;
-      const requestStartTime = Date.now();
+      // Make request to GPS51 API
+      const { response, responseText, requestDuration } = await makeGPS51Request(targetUrl, requestOptions);
       
-      console.log('GPS51 Proxy: Starting fetch request:', {
-        url: targetUrl.toString(),
-        startTime: new Date(requestStartTime).toISOString(),
-        timeout: '30s'
-      });
+      // Process response
+      const responseData = processGPS51Response(response, responseText, requestData, requestDuration, startTime);
       
-      const response = await fetch(targetUrl.toString(), requestOptions);
-      clearTimeout(timeoutId);
-      
-      const requestDuration = Date.now() - requestStartTime;
-      console.log('GPS51 Proxy: Fetch completed:', {
-        status: response.status,
-        statusText: response.statusText,
-        duration: `${requestDuration}ms`,
-        url: targetUrl.toString()
-      });
-      
-      const responseText = await response.text();
-
-    console.log('GPS51 Proxy: GPS51 API response:', {
-      status: response.status,
-      statusText: response.statusText,
-      contentType: response.headers.get('Content-Type'),
-      bodyLength: responseText.length,
-      isJSON: responseText.trim().startsWith('{') || responseText.trim().startsWith('['),
-      responsePreview: responseText.substring(0, 200)
-    });
-
-    // PRODUCTION FIX: Enhanced response handling with better error recovery
-    let responseData: any;
-    const contentType = response.headers.get('Content-Type') || '';
-    
-    console.log('GPS51 Proxy: Processing response content:', {
-      contentType,
-      responseLength: responseText.length,
-      isEmpty: responseText.trim().length === 0
-    });
-  
-    // Handle binary/octet-stream responses (often indicates API parameter issues)
-    if (contentType.includes('application/octet-stream') || contentType.includes('binary')) {
-      console.warn('GPS51 Proxy: Received binary response - investigating parameter compatibility');
-      
-      if (responseText.length === 0) {
-        // Empty binary response - return structured empty result
-        responseData = {
-          status: 0, // Success status to prevent cascade failures
-          message: 'Empty response received - possibly no data available for query',
-          records: [],
-          data: [],
-          lastquerypositiontime: Date.now(), // Provide current timestamp to prevent query loops
-          proxy_metadata: {
-            responseType: 'empty_binary',
-            action: requestData.action,
-            parameterDiagnostic: 'Parameters may be correct but no data available'
-          }
-        };
-      } else {
-        // Non-empty binary response - try parsing as JSON
-        try {
-          responseData = JSON.parse(responseText);
-          console.log('GPS51 Proxy: Binary response parsed as JSON successfully');
-        } catch {
-          // Binary content is not JSON - return structured error
-          responseData = {
-            status: 1,
-            message: 'Binary response cannot be parsed as JSON - check API parameters',
-            data: responseText.substring(0, 1000), // Truncate large responses
-            proxy_metadata: {
-              responseType: 'unparseable_binary',
-              contentType,
-              bodyLength: responseText.length,
-              action: requestData.action,
-              suggestion: 'Verify API endpoint and parameter format compatibility'
-            }
-          };
-        }
+      // Handle 8902 rate limit error immediately
+      if (responseData.status === 8902) {
+        console.error('GPS51 Proxy: 8902 Rate Limit Error Detected:', {
+          action: requestData.action,
+          message: responseData.message
+        });
+        await handleRateLimitError(requestData, requestDuration);
       }
-    } else {
-      // Standard JSON response handling with enhanced error recovery
-      try {
-        if (responseText.trim() === '') {
-          // Empty string response
-          responseData = {
-            status: 0,
-            message: 'Empty response from GPS51 API',
-            records: [],
-            data: [],
-            lastquerypositiontime: Date.now()
-          };
-        } else {
-          responseData = JSON.parse(responseText);
-          
-          // Normalize status field to ensure consistent integer type
-          if (responseData.status !== undefined) {
-            responseData.status = parseInt(responseData.status) || 0;
-          }
-          
-          // CRITICAL: Handle 8902 rate limit error immediately
-          if (responseData.status === 8902) {
-            console.error('GPS51 Proxy: 8902 Rate Limit Error Detected:', {
-              action: requestData.action,
-              message: responseData.message,
-              cause: responseData.cause
-            });
-            
-            // Immediately update rate limiter about 8902 error
-            try {
-              await supabase.functions.invoke('gps51-rate-limiter', {
-                body: {
-                  action: 'record_request',
-                  action_type: requestData.action,
-                  success: false,
-                  responseTime: requestDuration,
-                  status: 8902
-                }
-              });
-            } catch (rateLimitUpdateError) {
-              console.warn('Failed to update rate limiter about 8902 error:', rateLimitUpdateError);
-            }
-          }
-          
-          // Add lastquerypositiontime if missing (critical for position queries)
-          if (requestData.action === 'lastposition' && !responseData.lastquerypositiontime) {
-            responseData.lastquerypositiontime = Date.now();
-            console.log('GPS51 Proxy: Added missing lastquerypositiontime for position query');
-          }
-          
-          console.log('GPS51 Proxy: Successfully parsed JSON response:', {
-            status: responseData.status,
-            hasToken: !!responseData.token,
-            hasUser: !!responseData.user,
-            hasRecords: !!responseData.records,
-            recordsLength: Array.isArray(responseData.records) ? responseData.records.length : 0,
-            hasLastQueryTime: !!responseData.lastquerypositiontime,
-            message: responseData.message
-          });
-        }
-        
-      } catch (parseError) {
-        console.error('GPS51 Proxy: JSON parsing failed:', parseError);
-        
-        // PRODUCTION FIX: Return structured error instead of failing completely
-        responseData = {
-          status: 1,
-          message: 'Failed to parse GPS51 API response as JSON',
-          cause: parseError.message,
-          data: responseText.substring(0, 500), // Include sample for debugging
-          proxy_metadata: {
-            responseType: 'parse_error',
-            contentType,
-            bodyLength: responseText.length,
-            action: requestData.action,
-            parseError: parseError.message,
-            suggestion: 'Check GPS51 API response format or endpoint compatibility'
-          }
-        };
-      }
-    }
-
-    // Add proxy metadata with enhanced timing
-    const totalDuration = Date.now() - startTime;
-    responseData.proxy_metadata = {
-      processedAt: new Date().toISOString(),
-      apiUrl: targetUrl.toString(),
-      responseStatus: response.status,
-      responseTime: Date.now(),
-      requestDuration: requestDuration,
-      totalDuration: totalDuration,
-      proxyVersion: '2.0'
-    };
 
       console.log('GPS51 Proxy: Returning processed response:', {
         status: responseData.status,
@@ -406,111 +106,75 @@ serve(async (req) => {
         hasData: !!responseData.data,
         hasRecords: !!responseData.records,
         hasToken: !!responseData.token,
-        totalDuration: totalDuration,
+        totalDuration: responseData.proxy_metadata?.totalDuration,
         success: responseData.status === 0 || responseData.status === '0'
       });
 
       // Log successful API call to database
       await logApiCall(
         requestData.action,
+        req.method,
         requestData,
         response.status,
         responseData,
-        totalDuration
+        responseData.proxy_metadata?.totalDuration || 0,
+        undefined,
+        clientIP,
+        req.headers.get('user-agent')
       );
 
-      // Update rate limiter with successful request
-      try {
-        await supabase.functions.invoke('gps51-rate-limiter', {
-          body: {
-            action: 'record_request',
-            action_type: requestData.action,
-            success: responseData.status === 0 || responseData.status === '0',
-            responseTime: totalDuration,
-            status: responseData.status
-          }
-        });
-      } catch (rateLimitError) {
-        console.warn('GPS51 Proxy: Failed to update rate limiter:', rateLimitError);
-      }
+      // Update rate limiter with request result
+      await recordRequest(
+        requestData,
+        responseData.status === 0 || responseData.status === '0',
+        responseData.proxy_metadata?.totalDuration || 0,
+        responseData.status
+      );
 
-      return new Response(
+      return createCorsResponse(
         JSON.stringify(responseData),
-        {
-          status: response.ok ? 200 : response.status,
-          headers: { 
-            ...corsHeaders, 
-            'Content-Type': 'application/json' 
-          }
-        }
+        response.ok ? 200 : response.status
       );
+
     } catch (fetchError) {
-      clearTimeout(timeoutId);
-      
       console.error('GPS51 Proxy: Fetch error:', fetchError);
       
-      // Handle specific fetch errors with enhanced debugging
       const fetchDuration = Date.now() - startTime;
-      
+      const errorResponse = createErrorResponse(
+        fetchError instanceof Error ? fetchError : new Error('Unknown fetch error'),
+        requestData,
+        fetchDuration,
+        targetUrl
+      );
+
       // Log failed API call to database
       await logApiCall(
-        requestData?.action || 'unknown',
+        requestData.action || 'unknown',
+        req.method,
         requestData || {},
         502,
         null,
         fetchDuration,
-        fetchError.message
+        fetchError instanceof Error ? fetchError.message : 'Unknown fetch error',
+        clientIP,
+        req.headers.get('user-agent')
       );
 
       // Update rate limiter with failed request
-      try {
-        await supabase.functions.invoke('gps51-rate-limiter', {
-          body: {
-            action: 'record_request',
-            action_type: requestData?.action || 'unknown',
-            success: false,
-            responseTime: fetchDuration,
-            status: 502
-          }
-        });
-      } catch (rateLimitError) {
-        console.warn('GPS51 Proxy: Failed to update rate limiter with failure:', rateLimitError);
-      }
-      let errorMessage = 'Request failed';
-      let errorCode = 'UNKNOWN_ERROR';
+      await recordRequest(requestData, false, fetchDuration, 502);
       
-      if (fetchError.name === 'AbortError') {
-        errorMessage = 'Request timeout - GPS51 API did not respond within 30 seconds';
-        errorCode = 'REQUEST_TIMEOUT';
-      } else if (fetchError.message.includes('fetch')) {
-        errorMessage = 'Network error - Unable to reach GPS51 API server';
-        errorCode = 'NETWORK_ERROR';
-      } else if (fetchError.message.includes('DNS')) {
-        errorMessage = 'DNS resolution failed for GPS51 API server';
-        errorCode = 'DNS_ERROR';
-      } else if (fetchError.message.includes('SSL') || fetchError.message.includes('TLS')) {
-        errorMessage = 'SSL/TLS connection error to GPS51 API server';
-        errorCode = 'SSL_ERROR';
-      }
-      
-      return new Response(
+      return createCorsResponse(
         JSON.stringify({
-          error: errorMessage,
+          error: errorResponse.message,
           proxy_error: true,
-          error_code: errorCode,
+          error_code: errorResponse.proxy_metadata?.responseType?.toUpperCase() || 'UNKNOWN_ERROR',
           timestamp: new Date().toISOString(),
-          details: fetchError.message,
+          details: fetchError instanceof Error ? fetchError.message : 'Unknown error',
           fetchDuration: fetchDuration,
           targetUrl: targetUrl.toString(),
           requestAction: requestData.action
         }),
-        {
-          status: 502,
-          headers: { 
-            ...corsHeaders, 
-            'Content-Type': 'application/json' 
-          }
-        }
+        502
       );
     }
 
@@ -521,14 +185,17 @@ serve(async (req) => {
     // Log proxy processing error
     await logApiCall(
       'proxy-error',
+      req.method,
       { method: req.method, hasBody: req.method === 'POST' },
       500,
       null,
       totalDuration,
-      error instanceof Error ? error.message : 'Unknown proxy error'
+      error instanceof Error ? error.message : 'Unknown proxy error',
+      clientIP,
+      req.headers.get('user-agent')
     );
     
-    return new Response(
+    return createCorsResponse(
       JSON.stringify({
         error: error instanceof Error ? error.message : 'Unknown proxy error',
         proxy_error: true,
@@ -540,13 +207,7 @@ serve(async (req) => {
           hasBody: req.method === 'POST'
         }
       }),
-      {
-        status: 500,
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        }
-      }
+      500
     );
   }
 });
