@@ -149,7 +149,7 @@ export class GPS51ProductionService {
           apiUrl: this.apiUrl
         });
 
-        // Call GPS51 login API through Edge Function
+        // Call GPS51 login API through Edge Function (use gps51-auth for login only)
         const { supabase } = await import('@/integrations/supabase/client');
         
         const { data, error } = await supabase.functions.invoke('gps51-auth', {
@@ -279,12 +279,16 @@ export class GPS51ProductionService {
       
       await this.enforceRateLimit();
 
+      // Use gps51-proxy for non-login actions
       const { supabase } = await import('@/integrations/supabase/client');
-      const { data, error } = await supabase.functions.invoke('gps51-auth', {
+      const { data, error } = await supabase.functions.invoke('gps51-proxy', {
         body: {
           action: 'querymonitorlist',
-          username: this.authState.username,
           token: this.authState.token,
+          params: {
+            username: this.authState.username
+          },
+          method: 'POST',
           apiUrl: this.apiUrl
         }
       });
@@ -375,13 +379,17 @@ export class GPS51ProductionService {
 
       await this.enforceRateLimit();
 
+      // Use gps51-proxy for non-login actions with token
       const { supabase } = await import('@/integrations/supabase/client');
-      const { data, error } = await supabase.functions.invoke('gps51-auth', {
+      const { data, error } = await supabase.functions.invoke('gps51-proxy', {
         body: {
           action: 'lastposition',
-          deviceids: targetDeviceIds,
-          lastquerypositiontime: this.lastQueryTime || undefined,
           token: this.authState.token,
+          params: {
+            deviceids: targetDeviceIds,
+            lastquerypositiontime: this.lastQueryTime || undefined
+          },
+          method: 'POST',
           apiUrl: this.apiUrl
         }
       });

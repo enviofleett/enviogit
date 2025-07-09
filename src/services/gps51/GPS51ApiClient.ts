@@ -47,18 +47,16 @@ export class GPS51ApiClient {
         baseURL: this.baseURL
       });
       
-      // CRITICAL FIX: Use Supabase Edge Function proxy instead of direct fetch
-      // This prevents CORS "Failed to fetch" errors
-      console.log('GPS51ApiClient: Routing request through Supabase Edge Function proxy...');
+      // CRITICAL FIX: Route to correct Edge Function based on action
+      console.log('GPS51ApiClient: Routing request through appropriate Edge Function...');
       
-      const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke('gps51-proxy', {
-        body: {
-          action,
-          token: action === 'login' ? undefined : token,
-          params,
-          method,
-          apiUrl: this.baseURL
-        }
+      const edgeFunction = action === 'login' ? 'gps51-auth' : 'gps51-proxy';
+      const requestBody = action === 'login' 
+        ? { action, ...params, apiUrl: this.baseURL }
+        : { action, token, params, method, apiUrl: this.baseURL };
+      
+      const { data: proxyResponse, error: proxyError } = await supabase.functions.invoke(edgeFunction, {
+        body: requestBody
       });
 
       if (proxyError) {

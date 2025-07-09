@@ -85,14 +85,26 @@ export class GPS51AuthenticationService {
           attempt
         });
 
-        // CRITICAL: Use proxy client instead of direct API calls
-        const response = await this.proxyClient.makeRequest(
-          'login',
-          '', // No token for login
-          loginParams,
-          'POST',
-          apiUrl
-        );
+        // CRITICAL: Use gps51-auth Edge Function for login only
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { data: response, error: edgeFunctionError } = await supabase.functions.invoke('gps51-auth', {
+          body: {
+            action: 'login',
+            username: loginParams.username,
+            password: loginParams.password,
+            from: loginParams.from,
+            type: loginParams.type,
+            apiUrl
+          }
+        });
+
+        if (edgeFunctionError) {
+          throw new Error(`Edge Function error: ${edgeFunctionError.message}`);
+        }
+
+        if (!response) {
+          throw new Error('No response from Edge Function');
+        }
 
         const responseTime = Date.now() - startTime;
 
