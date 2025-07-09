@@ -1,4 +1,4 @@
-import { GPS51AuthCredentials } from './GPS51Types';
+import { GPS51Credentials } from '../gp51/GPS51CredentialsManager';
 import { gps51IntelligentConnectionManager } from './GPS51IntelligentConnectionManager';
 
 /**
@@ -8,7 +8,7 @@ export class GPS51AuthenticationCore {
   /**
    * Perform authentication with credentials
    */
-  async authenticate(credentials: GPS51AuthCredentials): Promise<{
+  async authenticate(credentials: GPS51Credentials): Promise<{
     success: boolean;
     error?: string;
     token?: string;
@@ -68,7 +68,7 @@ export class GPS51AuthenticationCore {
   /**
    * Validate credentials format
    */
-  validateCredentials(credentials: GPS51AuthCredentials): { valid: boolean; error?: string } {
+  validateCredentials(credentials: GPS51Credentials): { valid: boolean; error?: string } {
     if (!credentials.username || !credentials.password || !credentials.apiUrl) {
       return {
         valid: false,

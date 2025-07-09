@@ -35,7 +35,7 @@ export function buildRequestOptions(requestData: GPS51ProxyRequest): RequestInit
     let bodyParams = requestData.params;
     
     if (requestData.action === 'lastposition') {
-      // ENHANCED: Ensure correct parameter structure for lastposition with better validation
+      // PHASE 1 FIX: Ensure correct parameter structure for lastposition
       bodyParams = {
         username: String(bodyParams.username || ''),
         deviceids: Array.isArray(bodyParams.deviceids) 
@@ -44,27 +44,14 @@ export function buildRequestOptions(requestData: GPS51ProxyRequest): RequestInit
         lastquerypositiontime: Number(bodyParams.lastquerypositiontime) || 0
       };
       
-      console.log('GPS51 Proxy: ENHANCED - Fixed lastposition parameters:', {
+      console.log('GPS51 Proxy: PHASE 1 - Fixed lastposition parameters:', {
         username: bodyParams.username,
         deviceids: bodyParams.deviceids,
         deviceidsType: Array.isArray(bodyParams.deviceids) ? 'array' : typeof bodyParams.deviceids,
         deviceidsCount: Array.isArray(bodyParams.deviceids) ? bodyParams.deviceids.length : 0,
         lastquerypositiontime: bodyParams.lastquerypositiontime,
         lastquerypositiontimeType: typeof bodyParams.lastquerypositiontime,
-        isInitialFetch: bodyParams.lastquerypositiontime === 0,
-        timestamp: new Date().toISOString()
-      });
-    }
-    
-    // Enhanced logging for all actions to track token usage
-    if (requestData.action !== 'login') {
-      console.log('GPS51 Proxy: ENHANCED - Token usage tracking:', {
-        action: requestData.action,
-        hasToken: !!requestData.token,
-        tokenLength: requestData.token ? requestData.token.length : 0,
-        tokenPrefix: requestData.token ? requestData.token.substring(0, 10) + '...' : 'none',
-        username: bodyParams.username,
-        timestamp: new Date().toISOString()
+        isInitialFetch: bodyParams.lastquerypositiontime === 0
       });
     }
     
@@ -74,18 +61,15 @@ export function buildRequestOptions(requestData: GPS51ProxyRequest): RequestInit
     };
     requestOptions.body = JSON.stringify(bodyParams);
     
-    // ENHANCED: Add comprehensive request debugging
-    console.log('GPS51 Proxy: ENHANCED - Complete request details:', {
+    // PHASE 3: Add request debugging - log exact JSON body being sent
+    console.log('GPS51 Proxy: PHASE 3 - Exact request being sent:', {
       action: requestData.action,
       url: requestData.apiUrl || 'https://api.gps51.com/openapi',
       method: requestData.method || 'POST',
       headers: requestOptions.headers,
       bodyParams: bodyParams,
       jsonBody: requestOptions.body,
-      bodySize: requestOptions.body.length,
-      hasToken: !!requestData.token,
-      requestId: Math.random().toString(36).substring(2, 15),
-      timestamp: new Date().toISOString()
+      bodySize: requestOptions.body.length
     });
   }
 

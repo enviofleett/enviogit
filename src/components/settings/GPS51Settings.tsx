@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GPS51CredentialsForm } from './GPS51CredentialsForm';
 import GPS51DeviceManager from './GPS51DeviceManager';
@@ -17,76 +17,8 @@ import { GPS51EmergencyControls } from './GPS51EmergencyControls';
 import { GPS51AuthDiagnostics } from '../debug/GPS51AuthDiagnostics';
 import { GPS51APITester } from '../debug/GPS51APITester';
 import { GPS51HealthStatus } from './GPS51HealthStatus';
-import { GPS51PermissionDiagnosticsPanel } from './GPS51PermissionDiagnosticsPanel';
-import { GPS51AuthCredentials } from '@/services/gps51/GPS51Types';
 
-interface GPS51SettingsProps {
-  onCredentialsChange?: (credentials: any) => void;
-}
-
-export const GPS51Settings: React.FC<GPS51SettingsProps> = ({ onCredentialsChange }) => {
-  const [credentials, setCredentials] = useState<GPS51AuthCredentials | null>(null);
-
-  useEffect(() => {
-    // Load saved credentials from localStorage - handle security-conscious storage format
-    const loadCredentials = () => {
-      try {
-        // Primary: load from individual localStorage keys (current secure format)
-        const username = localStorage.getItem('gps51_username');
-        const passwordHash = localStorage.getItem('gps51_password_hash');
-        const apiUrl = localStorage.getItem('gps51_api_url');
-        const from = localStorage.getItem('gps51_from') as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN';
-        const type = localStorage.getItem('gps51_type') as 'USER' | 'DEVICE';
-
-        console.log('GPS51Settings: Loading credentials from localStorage:', {
-          hasUsername: !!username,
-          hasPasswordHash: !!passwordHash,
-          hasApiUrl: !!apiUrl,
-          from,
-          type
-        });
-
-        if (username && passwordHash && apiUrl) {
-          // Successfully loaded from individual keys - this is the correct format
-          const fullCredentials: GPS51AuthCredentials = {
-            username,
-            password: passwordHash, // This is already MD5 hashed
-            apiUrl,
-            from: from || 'WEB',
-            type: type || 'USER'
-          };
-          setCredentials(fullCredentials);
-          console.log('GPS51Settings: ✅ Loaded complete credentials from localStorage');
-          return;
-        }
-
-        // Fallback: try legacy JSON format (should not contain password)
-        const savedCredentials = localStorage.getItem('gps51_credentials');
-        if (savedCredentials) {
-          const parsed = JSON.parse(savedCredentials);
-          console.log('GPS51Settings: Found legacy credentials format');
-          
-          if (parsed.username && parsed.apiUrl) {
-            const partialCredentials: GPS51AuthCredentials = {
-              username: parsed.username,
-              password: '', // Empty - will trigger re-authentication
-              apiUrl: parsed.apiUrl,
-              from: parsed.from || 'WEB',
-              type: parsed.type || 'USER'
-            };
-            setCredentials(partialCredentials);
-            console.log('GPS51Settings: ⚠️ Loaded partial credentials - password missing');
-          }
-        } else {
-          console.log('GPS51Settings: No credentials found in localStorage');
-        }
-      } catch (error) {
-        console.error('GPS51Settings: Failed to load credentials:', error);
-      }
-    };
-
-    loadCredentials();
-  }, []);
+export const GPS51Settings = () => {
   return (
     <div className="space-y-6">
       <div>
@@ -97,12 +29,11 @@ export const GPS51Settings: React.FC<GPS51SettingsProps> = ({ onCredentialsChang
       </div>
 
       <Tabs defaultValue="emergency" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-11">
+        <TabsList className="grid w-full grid-cols-10">
           <TabsTrigger value="health">Health</TabsTrigger>
           <TabsTrigger value="emergency">Emergency</TabsTrigger>
           <TabsTrigger value="activation">Real-Time</TabsTrigger>
           <TabsTrigger value="credentials">Credentials</TabsTrigger>
-          <TabsTrigger value="permissions">Permissions</TabsTrigger>
           <TabsTrigger value="devices">Devices</TabsTrigger>
           <TabsTrigger value="sync">Sync</TabsTrigger>
           <TabsTrigger value="recovery">Recovery</TabsTrigger>
@@ -130,10 +61,6 @@ export const GPS51Settings: React.FC<GPS51SettingsProps> = ({ onCredentialsChang
             <GPS51CredentialsForm />
             <GPS51ConnectivityDiagnostics />
           </div>
-        </TabsContent>
-
-        <TabsContent value="permissions">
-          <GPS51PermissionDiagnosticsPanel credentials={credentials} />
         </TabsContent>
 
         <TabsContent value="devices">

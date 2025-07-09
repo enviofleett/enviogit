@@ -1,5 +1,5 @@
 import { GPS51ProxyClient } from './GPS51ProxyClient';
-import { GPS51AuthCredentials } from './GPS51Types';
+import { GPS51Credentials } from '../gp51/GPS51CredentialsManager';
 import { GPS51Utils } from './GPS51Utils';
 
 export interface GPS51AuthenticationResult {
@@ -33,14 +33,14 @@ export class GPS51AuthenticationService {
   /**
    * Authenticate using proxy-only approach with retry logic
    */
-  async authenticate(credentials: GPS51AuthCredentials): Promise<GPS51AuthenticationResult> {
+  async authenticate(credentials: GPS51Credentials): Promise<GPS51AuthenticationResult> {
     return this.authenticateWithRetry(credentials, 3);
   }
 
   /**
    * Authenticate with retry mechanism for transient failures
    */
-  private async authenticateWithRetry(credentials: GPS51AuthCredentials, maxRetries: number): Promise<GPS51AuthenticationResult> {
+  private async authenticateWithRetry(credentials: GPS51Credentials, maxRetries: number): Promise<GPS51AuthenticationResult> {
     let lastError: string = '';
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {

@@ -22,8 +22,6 @@ import { GPS51ConnectionDiagnostics } from '@/components/settings/GPS51Connectio
 import { GPS51AuthenticationDiagnostics } from '@/components/dashboard/GPS51AuthenticationDiagnostics';
 import { GPS51SecretsSetup } from '@/components/settings/GPS51SecretsSetup';
 import { MapSettingsPanel } from '@/components/settings/MapSettingsPanel';
-import { GPS51PermissionDiagnosticsPanel } from '@/components/settings/GPS51PermissionDiagnosticsPanel';
-import { GPS51EnhancedTokenManager } from '@/services/gps51/GPS51EnhancedTokenManager';
 // GPS51OfflineDeviceDiagnostics removed
 
 const Settings = () => {

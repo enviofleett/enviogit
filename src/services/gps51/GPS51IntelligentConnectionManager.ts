@@ -1,6 +1,6 @@
 import { GPS51AuthenticationService, GPS51AuthenticationResult } from './GPS51AuthenticationService';
 import { GPS51ProxyClient } from './GPS51ProxyClient';
-import { GPS51AuthCredentials } from './GPS51Types';
+import { GPS51Credentials } from '../gp51/GPS51CredentialsManager';
 
 export interface ConnectionStrategy {
   name: 'proxy' | 'direct';
@@ -63,7 +63,7 @@ export class GPS51IntelligentConnectionManager {
   /**
    * Intelligently connect using the best available strategy
    */
-  async connectWithBestStrategy(credentials: GPS51AuthCredentials): Promise<ConnectionResult> {
+  async connectWithBestStrategy(credentials: GPS51Credentials): Promise<ConnectionResult> {
     console.log('GPS51IntelligentConnectionManager: Starting intelligent connection...');
     
     // First, test connection health to update strategy availability
@@ -114,7 +114,7 @@ export class GPS51IntelligentConnectionManager {
   /**
    * Attempt connection with specific strategy
    */
-  private async attemptConnection(strategyName: 'proxy' | 'direct', credentials: GPS51AuthCredentials): Promise<ConnectionResult> {
+  private async attemptConnection(strategyName: 'proxy' | 'direct', credentials: GPS51Credentials): Promise<ConnectionResult> {
     const startTime = Date.now();
     
     try {

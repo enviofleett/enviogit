@@ -51,11 +51,9 @@ export class GPS51ProxyClient {
           action,
           hasToken: !!token,
           tokenLength: token?.length,
-          tokenPrefix: token ? token.substring(0, 10) + '...' : 'none',
           params,
           method,
-          apiUrl,
-          timestamp: new Date().toISOString()
+          apiUrl
         });
 
         const requestData: GPS51ProxyRequestData = {
@@ -79,31 +77,14 @@ export class GPS51ProxyClient {
           throw new Error('No data received from proxy');
         }
 
-        // Enhanced response logging for better diagnostics
         console.log('GPS51ProxyClient: Received response:', {
           status: data.status,
           message: data.message,
-          cause: data.cause,
           hasData: !!data.data,
           hasRecords: !!data.records,
-          recordsLength: data.records ? data.records.length : 0,
           hasToken: !!data.token,
-          proxyMetadata: data.proxy_metadata,
-          responseType: typeof data,
-          timestamp: new Date().toISOString()
+          proxyMetadata: data.proxy_metadata
         });
-
-        // Enhanced logging for position data responses
-        if (action === 'lastposition') {
-          console.log('GPS51ProxyClient: Position data analysis:', {
-            status: data.status,
-            hasRecords: !!data.records,
-            recordCount: data.records ? data.records.length : 0,
-            firstRecord: data.records && data.records.length > 0 ? data.records[0] : null,
-            isEmptyButSuccessful: data.status === 0 && (!data.records || data.records.length === 0),
-            possiblePermissionIssue: data.status === 0 && (!data.records || data.records.length === 0)
-          });
-        }
 
         // Log successful proxy call
         const duration = Date.now() - startTime;
@@ -123,19 +104,6 @@ export class GPS51ProxyClient {
               data.message = data.message || 'Authentication succeeded but received empty response. This may indicate GPS51 API parameter issues.';
             }
           }
-        }
-
-        // Add permission analysis for position requests
-        if (action === 'lastposition' && data.status === 0 && (!data.records || data.records.length === 0)) {
-          console.warn('GPS51ProxyClient: CRITICAL - Position request successful but no data returned. This indicates permission/access rights issues.');
-          data.permissionIssueDetected = true;
-          data.permissionAnalysis = {
-            issue: 'Token valid for authentication but lacks position data access rights',
-            recommendation: 'Verify user permissions in GPS51 admin panel for position data access',
-            statusOk: true,
-            dataEmpty: true,
-            likelyPermissionDenied: true
-          };
         }
 
         return data;
