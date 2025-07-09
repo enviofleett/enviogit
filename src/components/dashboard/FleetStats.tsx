@@ -7,12 +7,13 @@ import { useGPS51UnifiedData } from '@/hooks/useGPS51UnifiedData';
 const FleetStats = () => {
   const { state } = useGPS51UnifiedData();
 
-  // Calculate stats from unified GPS51 data
+  // Calculate live stats from unified GPS51 data
   const totalVehicles = state.devices.length;
   const vehiclesWithPositions = state.positions.length;
   const vehiclesWithoutPositions = totalVehicles - vehiclesWithPositions;
   const activeVehicles = state.positions.filter(p => p.moving === 1).length;
-  const maintenanceVehicles = 0; // Not available in GPS51 data
+  const parkedVehicles = state.positions.filter(p => p.moving === 0).length;
+  const offlineVehicles = totalVehicles - vehiclesWithPositions;
   const loading = state.isLoading;
 
   const stats = [
@@ -41,9 +42,9 @@ const FleetStats = () => {
       bgColor: 'bg-purple-100'
     },
     {
-      title: 'Maintenance',
-      value: loading ? '...' : maintenanceVehicles.toString(),
-      change: 'Scheduled',
+      title: 'Parked',
+      value: loading ? '...' : parkedVehicles.toString(),
+      change: 'Stationary vehicles',
       icon: Settings,
       color: 'text-yellow-600',
       bgColor: 'bg-yellow-100'

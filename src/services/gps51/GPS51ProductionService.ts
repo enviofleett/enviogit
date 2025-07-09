@@ -107,7 +107,7 @@ export class GPS51ProductionService {
   }
 
   /**
-   * Authenticate with GPS51 API
+   * Authenticate with GPS51 API - FIXED TOKEN MANAGEMENT
    * Single source of truth for authentication
    */
   async authenticate(username: string, password: string): Promise<GPS51AuthState> {
@@ -128,97 +128,100 @@ export class GPS51ProductionService {
         throw new Error('Password must be at least 6 characters');
       }
 
-      // Use performance optimizer for rate limiting and retry logic
-      const result = await gps51PerformanceOptimizer.retryWithBackoff(async () => {
-        if (!gps51PerformanceOptimizer.canMakeRequest()) {
-          const waitTime = gps51PerformanceOptimizer.getNextAvailableRequestTime();
-          if (waitTime > 0) {
-            console.log(`GPS51ProductionService: Rate limiting - waiting ${waitTime}ms`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
-          }
-        }
+      // Ensure password is MD5 hashed
+      const { GPS51Utils } = await import('./GPS51Utils');
+      const hashedPassword = await GPS51Utils.ensureMD5Hash(password);
+      
+      console.log('GPS51ProductionService: Calling Edge Function with validated credentials:', {
+        username,
+        hashedPasswordLength: hashedPassword.length,
+        isPasswordMD5: /^[a-f0-9]{32}$/i.test(hashedPassword),
+        apiUrl: this.apiUrl
+      });
 
-        // Ensure password is MD5 hashed
-        const { GPS51Utils } = await import('./GPS51Utils');
-        const hashedPassword = await GPS51Utils.ensureMD5Hash(password);
-        
-        console.log('GPS51ProductionService: Calling Edge Function with validated credentials:', {
+      // CRITICAL FIX: Use gps51-auth for login with proper token response
+      const { supabase } = await import('@/integrations/supabase/client');
+      
+      const { data, error } = await supabase.functions.invoke('gps51-auth', {
+        body: {
+          action: 'login',
           username,
-          hashedPasswordLength: hashedPassword.length,
-          isPasswordMD5: /^[a-f0-9]{32}$/i.test(hashedPassword),
+          password: hashedPassword,
+          from: 'WEB',
+          type: 'USER',
           apiUrl: this.apiUrl
-        });
-
-        // Call GPS51 login API through Edge Function (use gps51-auth for login only)
-        const { supabase } = await import('@/integrations/supabase/client');
-        
-        const { data, error } = await supabase.functions.invoke('gps51-auth', {
-          body: {
-            action: 'login',
-            username,
-            password: hashedPassword,
-            from: 'WEB',
-            type: 'USER',
-            apiUrl: this.apiUrl
-          }
-        });
-
-        const processingTime = Date.now() - startTime;
-
-        // Enhanced error handling with detailed logging
-        if (error) {
-          console.error('GPS51ProductionService: Edge Function invocation error:', {
-            error: error.message,
-            processingTime,
-            username
-          });
-          throw new Error(`Edge Function error: ${error.message}`);
         }
+      });
 
-        if (!data) {
-          console.error('GPS51ProductionService: No response from Edge Function:', {
-            processingTime,
-            username
-          });
-          throw new Error('No response from authentication service');
-        }
+      const processingTime = Date.now() - startTime;
 
-        console.log('GPS51ProductionService: Edge Function response received:', {
-          success: data.success,
-          hasToken: !!data.access_token,
-          hasUser: !!data.user,
-          gps51Status: data.gps51_status,
+      // Enhanced error handling with detailed logging
+      if (error) {
+        console.error('GPS51ProductionService: Edge Function invocation error:', {
+          error: error.message,
+          processingTime,
+          username
+        });
+        throw new Error(`Edge Function error: ${error.message}`);
+      }
+
+      if (!data) {
+        console.error('GPS51ProductionService: No response from Edge Function:', {
+          processingTime,
+          username
+        });
+        throw new Error('No response from authentication service');
+      }
+
+      console.log('GPS51ProductionService: Edge Function response received:', {
+        success: data.success,
+        hasToken: !!data.access_token,
+        hasUser: !!data.user,
+        gps51Status: data.gps51_status,
+        requestId: data.request_id,
+        processingTime
+      });
+
+      if (!data.success) {
+        const errorMsg = data.error || 'Authentication failed - invalid response from server';
+        console.error('GPS51ProductionService: Authentication failed:', {
+          error: errorMsg,
+          errorCode: data.error_code,
           requestId: data.request_id,
           processingTime
         });
+        throw new Error(errorMsg);
+      }
 
-        if (!data.success) {
-          const errorMsg = data.error || 'Authentication failed - invalid response from server';
-          console.error('GPS51ProductionService: Authentication failed:', {
-            error: errorMsg,
-            errorCode: data.error_code,
-            requestId: data.request_id,
-            processingTime
-          });
-          throw new Error(errorMsg);
-        }
+      // CRITICAL FIX: Properly store token and update authentication state
+      const token = data.access_token || data.token;
+      if (!token) {
+        throw new Error('Login successful but no token received');
+      }
 
-        return data;
-      });
-
-      // Update authentication state with enhanced logging
       this.authState = {
         isAuthenticated: true,
-        token: result.access_token || result.token,
+        token: token,
         username
       };
 
-      // Store credentials for session persistence
+      // CRITICAL FIX: Store token and credentials properly
       localStorage.setItem('gps51_username', username);
+      localStorage.setItem('gps51_password', password); // Store for auto-reauthentication
+      localStorage.setItem('gps51_token', token);
       localStorage.setItem('gps51_last_auth_success', new Date().toISOString());
       
+      // Also store in sessionStorage for immediate access
+      sessionStorage.setItem('gps51_token', token);
+      
+      console.log('GPS51ProductionService: Token stored successfully:', {
+        token: token.substring(0, 10) + '...',
+        tokenLength: token.length,
+        username
+      });
+      
       // Initialize user profile and polling
-      await this.initializeUserProfile(username, result);
+      await this.initializeUserProfile(username, data);
       
       // Notify auth sync
       gps51SimpleAuthSync.notifyAuthSuccess(username);
@@ -352,16 +355,22 @@ export class GPS51ProductionService {
   }
 
   /**
-   * Fetch live positions with smart tracking
+   * Fetch live positions with smart tracking - FIXED TOKEN HANDLING
    * Single source of truth for position data
    */
   async fetchLivePositions(deviceIds?: string[]): Promise<LiveDataResult> {
-    // Auto-authenticate if needed
-    if (!this.authState.isAuthenticated) {
-      await this.autoAuthenticate();
-    }
-
     try {
+      // CRITICAL FIX: Ensure valid token before making API calls
+      if (!this.authState.isAuthenticated || !this.authState.token) {
+        console.log('GPS51ProductionService: No valid authentication, attempting auto-auth');
+        await this.autoAuthenticate();
+      }
+
+      // Double-check authentication state
+      if (!this.authState.token) {
+        throw new Error('Authentication required - no valid token available');
+      }
+
       // Use intelligent polling to determine which devices to query
       const readyDeviceIds = deviceIds || gps51IntelligentPolling.getVehiclesReadyForPolling();
       const targetDeviceIds = readyDeviceIds.length > 0 ? readyDeviceIds : this.vehicles.map(d => d.deviceid);
@@ -376,20 +385,24 @@ export class GPS51ProductionService {
         };
       }
 
-      console.log('GPS51ProductionService: Intelligent polling selected', targetDeviceIds.length, 'devices');
-      console.log('GPS51ProductionService: Using lastquerypositiontime:', this.lastQueryTime);
+      console.log('GPS51ProductionService: Position fetch with verified token:', {
+        deviceCount: targetDeviceIds.length,
+        hasToken: !!this.authState.token,
+        tokenLength: this.authState.token?.length || 0,
+        lastQueryTime: this.lastQueryTime
+      });
 
       await this.enforceRateLimit();
 
-      // Use gps51-proxy for non-login actions with token
+      // CRITICAL FIX: Use gps51-proxy with proper token validation
       const { supabase } = await import('@/integrations/supabase/client');
       const { data, error } = await supabase.functions.invoke('gps51-proxy', {
         body: {
           action: 'lastposition',
-          token: this.authState.token,
+          token: this.authState.token, // Ensure token is always included
           params: {
-            deviceids: targetDeviceIds,
-            lastquerypositiontime: this.lastQueryTime || undefined
+            deviceids: targetDeviceIds.join(','), // GPS51 expects comma-separated string
+            lastquerypositiontime: this.lastQueryTime || 0
           },
           method: 'POST',
           apiUrl: this.apiUrl
@@ -397,19 +410,40 @@ export class GPS51ProductionService {
       });
 
       if (error) {
+        console.error('GPS51ProductionService: Proxy error:', error);
         throw new Error(`Failed to fetch positions: ${error.message}`);
+      }
+
+      console.log('GPS51ProductionService: Position response received:', {
+        status: data?.status,
+        hasRecords: !!data?.records,
+        recordsLength: Array.isArray(data?.records) ? data.records.length : 0,
+        hasLastQueryTime: !!data?.lastquerypositiontime,
+        message: data?.message
+      });
+
+      // CRITICAL FIX: Check for authentication errors
+      if (data?.status === 8901 || (data?.message && data.message.toLowerCase().includes('token'))) {
+        console.warn('GPS51ProductionService: Token expired or invalid, re-authenticating');
+        this.authState.isAuthenticated = false;
+        this.authState.token = null;
+        await this.autoAuthenticate();
+        
+        // Retry the request with new token
+        return this.fetchLivePositions(deviceIds);
       }
 
       // GPS51 uses status: 0 for success, not success: true
       if (data?.status !== 0) {
         const errorMsg = data?.message || data?.cause || `GPS51 error: status ${data?.status}`;
+        console.error('GPS51ProductionService: API error:', errorMsg);
         throw new Error(errorMsg);
       }
 
       // Update lastQueryTime from server response
       this.lastQueryTime = data.lastquerypositiontime || Date.now();
 
-      // Extract positions
+      // Extract positions with enhanced logging
       const positions: GPS51Position[] = (data.records || []).map((record: any) => ({
         deviceid: record.deviceid,
         devicetime: record.devicetime || record.updatetime || 0,
@@ -462,10 +496,11 @@ export class GPS51ProductionService {
       this.vehicles = updatedVehicles;
       this.retryCount = 0; // Reset on success
 
-      console.log('GPS51ProductionService: Position fetch completed', {
+      console.log('GPS51ProductionService: Position fetch completed successfully:', {
         positionsReceived: positions.length,
         newLastQueryTime: this.lastQueryTime,
-        isEmpty: positions.length === 0
+        isEmpty: positions.length === 0,
+        vehiclesUpdated: updatedVehicles.length
       });
 
       return {
@@ -480,7 +515,18 @@ export class GPS51ProductionService {
       this.retryCount++;
       const errorMessage = error instanceof Error ? error.message : 'Position fetch failed';
       
-      console.error('GPS51ProductionService: Position fetch failed:', error);
+      console.error('GPS51ProductionService: Position fetch failed:', {
+        error: errorMessage,
+        retryCount: this.retryCount,
+        hasToken: !!this.authState.token,
+        isAuthenticated: this.authState.isAuthenticated
+      });
+      
+      // If authentication error, mark as unauthenticated
+      if (errorMessage.includes('token') || errorMessage.includes('not authenticated')) {
+        this.authState.isAuthenticated = false;
+        this.authState.token = null;
+      }
       
       return {
         vehicles: this.vehicles,

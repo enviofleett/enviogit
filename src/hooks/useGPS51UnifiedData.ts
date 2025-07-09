@@ -40,14 +40,14 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
   const [authRetryCount, setAuthRetryCount] = useState<number>(0);
   const [backoff, setBackoff] = useState<number>(1000);
 
-  // Auto-authenticate on startup and retry on failure
+  // FIXED: Enhanced auto-authentication with token validation
   const autoAuthenticate = useCallback(async (): Promise<boolean> => {
     try {
       console.log('GPS51UnifiedData: Auto-authenticating...');
       
-      // Check if already authenticated
+      // Check if already authenticated with valid token
       const authState = gps51ProductionService.getAuthState();
-      if (authState.isAuthenticated) {
+      if (authState.isAuthenticated && authState.token) {
         setState(prev => ({ ...prev, isAuthenticated: true, error: null }));
         return true;
       }
@@ -67,13 +67,28 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
         return false;
       }
 
+      console.log('GPS51UnifiedData: Authenticating with stored credentials:', {
+        username: credentials.username,
+        hasPassword: !!credentials.password
+      });
+
       await gps51ProductionService.authenticate(credentials.username, credentials.password);
-      setState(prev => ({ ...prev, isAuthenticated: true, error: null }));
-      setAuthRetryCount(0);
-      setBackoff(1000);
       
-      console.log('GPS51UnifiedData: Auto-authentication successful');
-      return true;
+      // Verify authentication was successful
+      const newAuthState = gps51ProductionService.getAuthState();
+      if (newAuthState.isAuthenticated && newAuthState.token) {
+        setState(prev => ({ ...prev, isAuthenticated: true, error: null }));
+        setAuthRetryCount(0);
+        setBackoff(1000);
+        
+        console.log('GPS51UnifiedData: Auto-authentication successful:', {
+          hasToken: !!newAuthState.token,
+          tokenLength: newAuthState.token?.length || 0
+        });
+        return true;
+      } else {
+        throw new Error('Authentication completed but no valid token received');
+      }
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
@@ -156,10 +171,10 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
     setLastQueryTime(0);
     pollData(deviceIds);
 
-    // Real-time polling every 15 seconds for live tracking
+    // PRODUCTION: Real-time polling every 15 seconds for live tracking
     const timer = setInterval(() => {
       pollData(deviceIds);
-    }, 15000); // 15 seconds for true real-time experience
+    }, 15000); // 15 seconds for production-ready live experience
 
     setPollingTimer(timer);
     console.log('GPS51Data: Started real-time polling with 15s interval');
