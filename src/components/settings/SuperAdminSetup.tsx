@@ -18,8 +18,8 @@ export const SuperAdminSetup: React.FC = () => {
 
     try {
       // Get admin credentials from environment or prompt user
-      const adminEmail = 'chudesyl@gmail.com'; // TODO: Move to environment variable
-      const adminPassword = '@SuperAdmin2025!'; // TODO: Move to environment variable
+      const adminEmail = 'chudesyl@gmail.com';
+      const adminPassword = '@octopus100%';
       
       const { data, error } = await supabase.functions.invoke('setup-super-admin', {
         body: {
