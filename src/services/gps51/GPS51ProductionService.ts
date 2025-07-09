@@ -401,8 +401,9 @@ export class GPS51ProductionService {
           action: 'lastposition',
           token: this.authState.token, // Ensure token is always included
           params: {
-            deviceids: targetDeviceIds.join(','), // GPS51 expects comma-separated string
-            lastquerypositiontime: this.lastQueryTime || 0
+            username: this.authState.username,
+            deviceids: targetDeviceIds, // PHASE 4: Send as array, not string
+            lastquerypositiontime: Number(this.lastQueryTime) || 0
           },
           method: 'POST',
           apiUrl: this.apiUrl
@@ -433,9 +434,19 @@ export class GPS51ProductionService {
         return this.fetchLivePositions(deviceIds);
       }
 
-      // GPS51 uses status: 0 for success, not success: true
+      // PHASE 4: Enhanced error handling for null responses and parameter issues
       if (data?.status !== 0) {
         const errorMsg = data?.message || data?.cause || `GPS51 error: status ${data?.status}`;
+        
+        // Special handling for null response (parameter format issue)
+        if (data?.message?.includes('null response') || data?.message?.includes('parameter format')) {
+          console.error('GPS51ProductionService: PHASE 4 - Parameter format issue detected:', {
+            status: data.status,
+            message: data.message,
+            suggestion: data.proxy_metadata?.suggestion
+          });
+        }
+        
         console.error('GPS51ProductionService: API error:', errorMsg);
         throw new Error(errorMsg);
       }

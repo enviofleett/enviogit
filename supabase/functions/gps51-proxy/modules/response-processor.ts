@@ -7,22 +7,27 @@ export function processGPS51Response(
   requestDuration: number,
   startTime: number
 ): GPS51Response {
-  console.log('GPS51 Proxy: GPS51 API response:', {
+  // PHASE 2: Enhanced response logging and debugging
+  console.log('GPS51 Proxy: PHASE 2 - Complete GPS51 API response:', {
     status: response.status,
     statusText: response.statusText,
     contentType: response.headers.get('Content-Type'),
     bodyLength: responseText.length,
     isJSON: responseText.trim().startsWith('{') || responseText.trim().startsWith('['),
-    responsePreview: responseText.substring(0, 200)
+    isNull: responseText.trim() === 'null',
+    isEmptyString: responseText.trim() === '',
+    responsePreview: responseText.substring(0, 200),
+    fullResponseBody: responseText // Log complete response for debugging
   });
 
   let responseData: GPS51Response;
   const contentType = response.headers.get('Content-Type') || '';
   
-  console.log('GPS51 Proxy: Processing response content:', {
+  console.log('GPS51 Proxy: PHASE 2 - Processing response content:', {
     contentType,
     responseLength: responseText.length,
-    isEmpty: responseText.trim().length === 0
+    isEmpty: responseText.trim().length === 0,
+    isNullString: responseText.trim() === 'null'
   });
 
   // Handle binary/octet-stream responses
@@ -76,7 +81,7 @@ export function processGPS51Response(
       }
     }
   } else {
-    // Standard JSON response handling
+    // PHASE 2: Enhanced JSON response handling with null string detection
     try {
       if (responseText.trim() === '') {
         responseData = {
@@ -85,6 +90,28 @@ export function processGPS51Response(
           records: [],
           data: [],
           lastquerypositiontime: Date.now()
+        };
+      } else if (responseText.trim() === 'null') {
+        // PHASE 2 FIX: Handle GPS51 returning "null" string when parameters are incorrect
+        console.warn('GPS51 Proxy: PHASE 2 - Received "null" response, indicating parameter issue');
+        responseData = {
+          status: 1,
+          message: 'GPS51 API returned null - likely parameter format issue',
+          records: [],
+          data: [],
+          lastquerypositiontime: Date.now(),
+          proxy_metadata: {
+            responseType: 'null_response',
+            action: requestData.action,
+            suggestion: 'Check parameter format: deviceids should be array, lastquerypositiontime should be number',
+            processedAt: new Date().toISOString(),
+            apiUrl: '',
+            responseStatus: response.status,
+            responseTime: Date.now(),
+            requestDuration,
+            totalDuration: Date.now() - startTime,
+            proxyVersion: '2.0'
+          }
         };
       } else {
         responseData = JSON.parse(responseText);
@@ -100,7 +127,7 @@ export function processGPS51Response(
           console.log('GPS51 Proxy: Added missing lastquerypositiontime for position query');
         }
         
-        console.log('GPS51 Proxy: Successfully parsed JSON response:', {
+        console.log('GPS51 Proxy: PHASE 2 - Successfully parsed JSON response:', {
           status: responseData.status,
           hasToken: !!responseData.token,
           hasUser: !!responseData.user,
@@ -111,7 +138,7 @@ export function processGPS51Response(
         });
       }
     } catch (parseError) {
-      console.error('GPS51 Proxy: JSON parsing failed:', parseError);
+      console.error('GPS51 Proxy: PHASE 2 - JSON parsing failed:', parseError);
       
       responseData = {
         status: 1,

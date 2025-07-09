@@ -35,17 +35,22 @@ export function buildRequestOptions(requestData: GPS51ProxyRequest): RequestInit
     let bodyParams = requestData.params;
     
     if (requestData.action === 'lastposition') {
-      // Ensure required fields are present for lastposition
+      // PHASE 1 FIX: Ensure correct parameter structure for lastposition
       bodyParams = {
-        username: bodyParams.username || '',
-        deviceids: bodyParams.deviceids || [], // Empty array = all devices
-        lastquerypositiontime: bodyParams.lastquerypositiontime || 0 // 0 for initial fetch
+        username: String(bodyParams.username || ''),
+        deviceids: Array.isArray(bodyParams.deviceids) 
+          ? bodyParams.deviceids 
+          : (bodyParams.deviceids ? String(bodyParams.deviceids).split(',').map(id => id.trim()) : []),
+        lastquerypositiontime: Number(bodyParams.lastquerypositiontime) || 0
       };
       
-      console.log('GPS51 Proxy: Fixed lastposition parameters:', {
+      console.log('GPS51 Proxy: PHASE 1 - Fixed lastposition parameters:', {
         username: bodyParams.username,
-        deviceidsCount: bodyParams.deviceids.length,
+        deviceids: bodyParams.deviceids,
+        deviceidsType: Array.isArray(bodyParams.deviceids) ? 'array' : typeof bodyParams.deviceids,
+        deviceidsCount: Array.isArray(bodyParams.deviceids) ? bodyParams.deviceids.length : 0,
         lastquerypositiontime: bodyParams.lastquerypositiontime,
+        lastquerypositiontimeType: typeof bodyParams.lastquerypositiontime,
         isInitialFetch: bodyParams.lastquerypositiontime === 0
       });
     }
@@ -56,10 +61,15 @@ export function buildRequestOptions(requestData: GPS51ProxyRequest): RequestInit
     };
     requestOptions.body = JSON.stringify(bodyParams);
     
-    console.log('GPS51 Proxy: Sending JSON request:', {
+    // PHASE 3: Add request debugging - log exact JSON body being sent
+    console.log('GPS51 Proxy: PHASE 3 - Exact request being sent:', {
       action: requestData.action,
+      url: requestData.apiUrl || 'https://api.gps51.com/openapi',
+      method: requestData.method || 'POST',
+      headers: requestOptions.headers,
       bodyParams: bodyParams,
-      jsonBody: requestOptions.body
+      jsonBody: requestOptions.body,
+      bodySize: requestOptions.body.length
     });
   }
 
