@@ -20,42 +20,91 @@ export const GPS51PermissionDiagnosticsPanel: React.FC<GPS51PermissionDiagnostic
   const validator = GPS51PermissionValidator.getInstance();
 
   const runDiagnostics = async () => {
-    // Try to load credentials from props first, then from localStorage if incomplete
+    // Load credentials with enhanced validation and debug logging
     let validCredentials = credentials;
     
-    if (!validCredentials || !validCredentials.username || !validCredentials.password || !validCredentials.apiUrl) {
-      // Try to load complete credentials from localStorage
-      try {
-        const username = localStorage.getItem('gps51_username');
-        const passwordHash = localStorage.getItem('gps51_password_hash');
-        const apiUrl = localStorage.getItem('gps51_api_url');
-        const from = localStorage.getItem('gps51_from') as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN';
-        const type = localStorage.getItem('gps51_type') as 'USER' | 'DEVICE';
+    console.log('GPS51PermissionDiagnostics: Starting credential validation...', {
+      hasPropsCredentials: !!credentials,
+      propsUsername: credentials?.username,
+      propsHasPassword: !!credentials?.password,
+      propsApiUrl: credentials?.apiUrl
+    });
+    
+    // Always try to load the most complete credentials from localStorage
+    try {
+      const username = localStorage.getItem('gps51_username');
+      const passwordHash = localStorage.getItem('gps51_password_hash');
+      const apiUrl = localStorage.getItem('gps51_api_url');
+      const from = localStorage.getItem('gps51_from') as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN';
+      const type = localStorage.getItem('gps51_type') as 'USER' | 'DEVICE';
 
-        if (username && passwordHash && apiUrl) {
-          validCredentials = {
-            username,
-            password: passwordHash,
-            apiUrl,
-            from: from || 'WEB',
-            type: type || 'USER'
-          };
-          console.log('GPS51PermissionDiagnostics: Loaded credentials from localStorage');
-        }
-      } catch (error) {
-        console.error('GPS51PermissionDiagnostics: Failed to load credentials from localStorage:', error);
+      console.log('GPS51PermissionDiagnostics: localStorage credentials check:', {
+        hasUsername: !!username,
+        hasPasswordHash: !!passwordHash,
+        hasApiUrl: !!apiUrl,
+        from,
+        type
+      });
+
+      if (username && passwordHash && apiUrl) {
+        validCredentials = {
+          username,
+          password: passwordHash, // Already MD5 hashed
+          apiUrl,
+          from: from || 'WEB',
+          type: type || 'USER'
+        };
+        console.log('GPS51PermissionDiagnostics: ✅ Using localStorage credentials (complete)');
+      } else if (validCredentials && !validCredentials.password && passwordHash) {
+        // Merge props with localStorage password
+        validCredentials = {
+          ...validCredentials,
+          password: passwordHash
+        };
+        console.log('GPS51PermissionDiagnostics: ✅ Merged props with localStorage password');
       }
+    } catch (error) {
+      console.error('GPS51PermissionDiagnostics: Failed to load credentials from localStorage:', error);
     }
 
-    // Final validation
-    if (!validCredentials || !validCredentials.username || !validCredentials.password || !validCredentials.apiUrl) {
+    // Enhanced validation with detailed error reporting
+    if (!validCredentials) {
       toast({
-        title: "Missing Credentials",
-        description: "Please configure GPS51 credentials in the Credentials tab before running diagnostics.",
+        title: "No Credentials Found",
+        description: "Please configure GPS51 credentials in the Credentials tab.",
         variant: "destructive"
       });
       return;
     }
+
+    if (!validCredentials.username) {
+      toast({
+        title: "Missing Username",
+        description: "GPS51 username is required. Please check your credentials.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!validCredentials.password) {
+      toast({
+        title: "Missing Password",
+        description: "GPS51 password is required. Please re-enter your credentials in the Credentials tab.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!validCredentials.apiUrl) {
+      toast({
+        title: "Missing API URL",
+        description: "GPS51 API URL is required. Please check your credentials.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    console.log('GPS51PermissionDiagnostics: ✅ All credentials validated, proceeding with diagnostics...');
 
     setIsRunning(true);
     try {

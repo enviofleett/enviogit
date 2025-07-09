@@ -1,4 +1,5 @@
-import { GPS51EnhancedTokenManager } from './GPS51EnhancedTokenManager';
+import { GPS51AuthenticationService } from './GPS51AuthenticationService';
+import { GPS51ProxyClient } from './GPS51ProxyClient';
 import { GPS51AuthCredentials } from './GPS51Types';
 
 export interface PermissionValidationReport {
@@ -23,10 +24,12 @@ export interface PermissionValidationReport {
  */
 export class GPS51PermissionValidator {
   private static instance: GPS51PermissionValidator;
-  private tokenManager: GPS51EnhancedTokenManager;
+  private authService: GPS51AuthenticationService;
+  private proxyClient: GPS51ProxyClient;
 
   constructor() {
-    this.tokenManager = GPS51EnhancedTokenManager.getInstance();
+    this.authService = GPS51AuthenticationService.getInstance();
+    this.proxyClient = GPS51ProxyClient.getInstance();
   }
 
   static getInstance(): GPS51PermissionValidator {
@@ -59,52 +62,119 @@ export class GPS51PermissionValidator {
     };
 
     try {
-      // Step 1: Test authentication
+      // Step 1: Test authentication using GPS51AuthenticationService directly
       console.log('GPS51PermissionValidator: Step 1 - Testing authentication...');
-      const authResult = await this.tokenManager.getFreshToken(credentials, true);
+      const authResult = await this.authService.authenticate(credentials);
       
       if (!authResult.success || !authResult.token) {
         report.authenticationStatus = 'failed';
-        report.criticalIssues.push('Authentication failed - verify credentials');
+        report.criticalIssues.push(`Authentication failed: ${authResult.error || 'Unknown error'}`);
         report.permissionSummary = 'Cannot authenticate with GPS51 API';
         report.recommendations.push('Verify username and password are correct');
-        report.recommendations.push('Check API URL is accessible');
+        report.recommendations.push('Check API URL is accessible and correct');
+        report.recommendations.push('Ensure GPS51 account is active and not locked');
         return report;
       }
 
       report.authenticationStatus = 'success';
-      console.log('GPS51PermissionValidator: Authentication successful');
+      console.log('GPS51PermissionValidator: ✅ Authentication successful');
 
-      // Step 2: Test token permissions
-      console.log('GPS51PermissionValidator: Step 2 - Validating token permissions...');
-      const tokenValidation = await this.tokenManager.validateTokenPermissions(authResult.token, credentials);
-      
-      if (tokenValidation.permissionIssues.length > 0) {
-        report.criticalIssues.push(...tokenValidation.permissionIssues);
-      }
+      // Step 2: Test device list access
+      console.log('GPS51PermissionValidator: Step 2 - Testing device list access...');
+      try {
+        const deviceListResponse = await this.proxyClient.makeRequest(
+          'querymonitorlist',
+          authResult.token,
+          { username: credentials.username },
+          'POST',
+          credentials.apiUrl
+        );
 
-      // Step 3: Run detailed permission diagnostics
-      console.log('GPS51PermissionValidator: Step 3 - Running detailed diagnostics...');
-      const diagnostics = await this.tokenManager.runPermissionDiagnostics(credentials);
-      
-      // Populate report with diagnostics results
-      report.deviceListAccess = diagnostics.canAccessDeviceList ? 'allowed' : 'denied';
-      report.authorizedDevices = diagnostics.authorizedDeviceCount;
-      report.unauthorizedDevices = diagnostics.unauthorizedDevices;
-      report.permissionSummary = diagnostics.permissionSummary;
-
-      if (diagnostics.canAccessPositionData) {
-        if (diagnostics.authorizedDeviceCount > 0) {
-          report.positionDataAccess = diagnostics.unauthorizedDevices.length > 0 ? 'partial' : 'allowed';
+        if (deviceListResponse.status === 0 && deviceListResponse.data) {
+          report.deviceListAccess = 'allowed';
+          report.totalDevicesFound = this.countTotalDevices(deviceListResponse.data);
+          console.log('GPS51PermissionValidator: ✅ Device list access successful:', {
+            totalDevices: report.totalDevicesFound
+          });
         } else {
-          report.positionDataAccess = 'denied';
+          report.deviceListAccess = 'denied';
+          report.criticalIssues.push(`Device list access denied: Status ${deviceListResponse.status}`);
         }
-      } else {
-        report.positionDataAccess = 'denied';
+      } catch (error) {
+        report.deviceListAccess = 'denied';
+        report.criticalIssues.push(`Device list request failed: ${error.message}`);
       }
 
-      // Step 4: Generate recommendations based on findings
-      this.generateRecommendations(report, diagnostics, tokenValidation);
+      // Step 3: Test position data access (only if device list works)
+      if (report.deviceListAccess === 'allowed' && report.totalDevicesFound > 0) {
+        console.log('GPS51PermissionValidator: Step 3 - Testing position data access...');
+        
+        try {
+          const deviceListResponse = await this.proxyClient.makeRequest(
+            'querymonitorlist',
+            authResult.token,
+            { username: credentials.username },
+            'POST',
+            credentials.apiUrl
+          );
+
+          const deviceIds = this.extractDeviceIds(deviceListResponse.data);
+          const testDeviceIds = deviceIds.slice(0, Math.min(3, deviceIds.length)); // Test max 3 devices
+          report.testedDevices = testDeviceIds.length;
+
+          let authorizedCount = 0;
+          for (const deviceId of testDeviceIds) {
+            try {
+              const positionResponse = await this.proxyClient.makeRequest(
+                'lastposition',
+                authResult.token,
+                {
+                  username: credentials.username,
+                  deviceids: [deviceId],
+                  lastquerypositiontime: 0
+                },
+                'POST',
+                credentials.apiUrl
+              );
+
+              if (positionResponse.status === 0 && positionResponse.records && positionResponse.records.length > 0) {
+                authorizedCount++;
+              } else {
+                report.unauthorizedDevices.push(deviceId);
+              }
+            } catch (error) {
+              report.unauthorizedDevices.push(deviceId);
+            }
+            
+            // Small delay to avoid overwhelming API
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+
+          report.authorizedDevices = authorizedCount;
+          
+          if (authorizedCount === 0) {
+            report.positionDataAccess = 'denied';
+            report.criticalIssues.push('No position data access for any tested devices');
+          } else if (authorizedCount === testDeviceIds.length) {
+            report.positionDataAccess = 'allowed';
+          } else {
+            report.positionDataAccess = 'partial';
+          }
+
+          console.log('GPS51PermissionValidator: ✅ Position data test complete:', {
+            tested: testDeviceIds.length,
+            authorized: authorizedCount,
+            access: report.positionDataAccess
+          });
+
+        } catch (error) {
+          report.positionDataAccess = 'denied';
+          report.criticalIssues.push(`Position data test failed: ${error.message}`);
+        }
+      }
+
+      // Step 4: Generate summary and recommendations
+      this.generateSummaryAndRecommendations(report);
 
       console.log('GPS51PermissionValidator: Validation complete:', {
         authenticationStatus: report.authenticationStatus,
@@ -125,58 +195,81 @@ export class GPS51PermissionValidator {
   }
 
   /**
-   * Generate actionable recommendations based on validation results
+   * Count total devices across all groups
    */
-  private generateRecommendations(
-    report: PermissionValidationReport,
-    diagnostics: any,
-    tokenValidation: any
-  ): void {
-    // Authentication recommendations
+  private countTotalDevices(groups: any[]): number {
+    let total = 0;
+    for (const group of groups) {
+      if (group.children) {
+        total += group.children.length;
+      }
+    }
+    return total;
+  }
+
+  /**
+   * Extract device IDs from group structure
+   */
+  private extractDeviceIds(groups: any[]): string[] {
+    const deviceIds: string[] = [];
+    for (const group of groups) {
+      if (group.children) {
+        deviceIds.push(...group.children.map(d => d.deviceid));
+      }
+    }
+    return deviceIds;
+  }
+
+  /**
+   * Generate summary and actionable recommendations
+   */
+  private generateSummaryAndRecommendations(report: PermissionValidationReport): void {
+    // Generate summary based on results
     if (report.authenticationStatus === 'failed') {
+      report.permissionSummary = 'Authentication failed - cannot proceed with permission tests';
       report.recommendations.push('Verify GPS51 credentials are correct');
       report.recommendations.push('Ensure API URL is accessible and valid');
-      return; // No point in other recommendations if auth fails
+      report.recommendations.push('Check if GPS51 account is active and not locked');
+      return;
     }
 
-    // Device list access recommendations
     if (report.deviceListAccess === 'denied') {
-      report.recommendations.push('Contact GPS51 admin to grant device list access');
+      report.permissionSummary = 'Cannot access device list - basic functionality blocked';
+      report.recommendations.push('Contact GPS51 administrator to grant device list access');
+      report.recommendations.push('Verify user account has minimum required permissions');
       report.criticalIssues.push('User lacks basic device list access');
+      return;
     }
 
-    // Position data access recommendations
+    if (report.totalDevicesFound === 0) {
+      report.permissionSummary = 'No devices found in GPS51 account';
+      report.recommendations.push('Verify devices are properly configured in GPS51 system');
+      report.recommendations.push('Check if user has access to the correct GPS51 account');
+      return;
+    }
+
+    // Position data access analysis
     if (report.positionDataAccess === 'denied') {
-      report.recommendations.push('CRITICAL: User lacks position data access rights');
+      report.permissionSummary = `Can see ${report.totalDevicesFound} devices but cannot access position data`;
+      report.recommendations.push('🚨 CRITICAL: User lacks position data access rights');
       report.recommendations.push('Contact GPS51 admin to grant position data permissions');
       report.recommendations.push('Verify user has appropriate role/permissions in GPS51 system');
-      report.criticalIssues.push('No position data access - core functionality blocked');
+      report.criticalIssues.push('No position data access - core tracking functionality blocked');
     } else if (report.positionDataAccess === 'partial') {
-      report.recommendations.push('Partial position data access detected');
+      report.permissionSummary = `Partial access: ${report.authorizedDevices}/${report.testedDevices} devices accessible`;
+      report.recommendations.push('⚠️ Partial position data access detected');
       report.recommendations.push('Some devices may be restricted - review device-specific permissions');
-      report.recommendations.push(`${report.unauthorizedDevices.length} devices are unauthorized`);
-    }
-
-    // Token-specific recommendations
-    if (tokenValidation.needsRefresh) {
-      report.recommendations.push('Implement automatic token refresh for better reliability');
-    }
-
-    if (tokenValidation.permissionIssues.length > 0) {
-      report.recommendations.push('Token has permission limitations - review user role');
+      report.recommendations.push(`${report.unauthorizedDevices.length} devices require permission review`);
+    } else if (report.positionDataAccess === 'allowed') {
+      report.permissionSummary = `Full access: ${report.authorizedDevices}/${report.testedDevices} tested devices accessible`;
+      report.recommendations.push('✅ Permissions are working correctly');
+      report.recommendations.push('GPS51 integration is ready for production use');
+      report.recommendations.push('Monitor for any access issues during regular operation');
     }
 
     // Performance recommendations
     if (report.authorizedDevices === 0 && report.deviceListAccess === 'allowed') {
-      report.recommendations.push('CRITICAL: Can see devices but cannot access position data');
-      report.recommendations.push('This indicates a GPS51 permission configuration issue');
-      report.criticalIssues.push('Device visibility without data access rights');
-    }
-
-    // General recommendations
-    if (report.criticalIssues.length === 0) {
-      report.recommendations.push('Permissions appear to be working correctly');
-      report.recommendations.push('Monitor for any access issues during regular operation');
+      report.criticalIssues.push('Device visibility without data access rights - permission configuration issue');
     }
   }
 
@@ -189,14 +282,26 @@ export class GPS51PermissionValidator {
     lastPosition?: any;
   }> {
     try {
-      const response = await this.tokenManager.makeRequestWithFreshToken(
+      // Authenticate first
+      const authResult = await this.authService.authenticate(credentials);
+      if (!authResult.success || !authResult.token) {
+        return {
+          hasAccess: false,
+          error: `Authentication failed: ${authResult.error}`
+        };
+      }
+
+      // Test position access
+      const response = await this.proxyClient.makeRequest(
         'lastposition',
+        authResult.token,
         {
           username: credentials.username,
           deviceids: [deviceId],
           lastquerypositiontime: 0
         },
-        credentials
+        'POST',
+        credentials.apiUrl
       );
 
       return {
