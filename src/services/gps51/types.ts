@@ -155,6 +155,7 @@ export interface GPS51User {
 
 export interface GPS51ApiConfig {
   baseUrl: string;
-  apiKey: string;
-  timeout: number;
+  username: string;
+  token: string;
+  timeout?: number;
 }

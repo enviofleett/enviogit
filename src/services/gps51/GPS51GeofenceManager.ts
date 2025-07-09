@@ -4,6 +4,7 @@
 import { geofencingService, Geofence, GeofenceEvent } from '../geofencing/GeofencingService';
 import { GPS51Client } from './client';
 import { gps51EventBus } from './realtime';
+import { GPS51ProxyClient } from './GPS51ProxyClient';
 
 export interface GPS51GeofenceConfig {
   name: string;
@@ -33,9 +34,24 @@ export interface GPS51GeofenceStatus {
 export class GPS51GeofenceManager {
   private geofenceStatuses = new Map<string, GPS51GeofenceStatus>();
   private syncInProgress = false;
+  private gps51Client: GPS51Client | null = null;
+  private proxyClient: GPS51ProxyClient;
 
   constructor() {
     this.setupEventListeners();
+    this.proxyClient = GPS51ProxyClient.getInstance();
+    this.initializeGPS51Client();
+  }
+
+  private initializeGPS51Client(): void {
+    try {
+      // Try to create GPS51Client - it will auto-load credentials
+      this.gps51Client = new GPS51Client();
+      console.log('GPS51GeofenceManager: GPS51Client initialized successfully');
+    } catch (error) {
+      console.warn('GPS51GeofenceManager: GPS51Client initialization failed:', error);
+      this.gps51Client = null;
+    }
   }
 
   // Geofence Creation and Management
@@ -141,11 +157,31 @@ export class GPS51GeofenceManager {
         throw new Error(`Geofence ${geofenceId} not found`);
       }
 
+      // Check if GPS51Client is available
+      if (!this.gps51Client) {
+        this.initializeGPS51Client();
+        if (!this.gps51Client) {
+          throw new Error('GPS51Client not available - please authenticate first');
+        }
+      }
+
       // Convert to GPS51 format
       const gps51Geofence = this.convertToGPS51Format(geofence);
       
-      // Send to GPS51 API (mock implementation)
+      // Test GPS51 connection first
+      const isConnected = await this.gps51Client.testConnection();
+      if (!isConnected) {
+        throw new Error('GPS51 connection test failed');
+      }
+      
+      // For now, log what would be sent to GPS51 API
       console.log('GPS51GeofenceManager: Would create geofence in GPS51:', gps51Geofence);
+      
+      // GPS51 doesn't have a standard geofence API like this client expects
+      // This would need to be implemented using GPS51's specific geofence actions
+      // For now, we'll mark as synced but note that actual GPS51 geofence integration
+      // would require using GPS51's proprietary geofence format and API calls
+      
       const response = { id: `gps51_${Date.now()}` };
       
       // Update sync status
@@ -156,7 +192,7 @@ export class GPS51GeofenceManager {
         lastSync: new Date()
       });
 
-      console.log('GPS51GeofenceManager: Geofence synced with GPS51:', geofenceId, response.id);
+      console.log('GPS51GeofenceManager: Geofence marked as synced with GPS51:', geofenceId, response.id);
 
     } catch (error) {
       console.error('GPS51GeofenceManager: Error syncing with GPS51:', error);
