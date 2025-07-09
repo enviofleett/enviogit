@@ -28,24 +28,55 @@ export const GPS51Settings: React.FC<GPS51SettingsProps> = ({ onCredentialsChang
   const [credentials, setCredentials] = useState<GPS51AuthCredentials | null>(null);
 
   useEffect(() => {
-    // Load saved credentials
-    const savedCredentials = localStorage.getItem('gps51_credentials');
-    if (savedCredentials) {
+    // Load saved credentials from localStorage - handle security-conscious storage format
+    const loadCredentials = () => {
       try {
-        const parsed = JSON.parse(savedCredentials);
-        // Ensure all required fields are present with defaults
-        const fullCredentials: GPS51AuthCredentials = {
-          username: parsed.username || '',
-          password: parsed.password || '',
-          apiUrl: parsed.apiUrl || '',
-          from: parsed.from || 'WEB',
-          type: parsed.type || 'USER'
-        };
-        setCredentials(fullCredentials);
+        // Try to load from individual localStorage keys first (current format)
+        const username = localStorage.getItem('gps51_username');
+        const passwordHash = localStorage.getItem('gps51_password_hash');
+        const apiUrl = localStorage.getItem('gps51_api_url');
+        const from = localStorage.getItem('gps51_from') as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN';
+        const type = localStorage.getItem('gps51_type') as 'USER' | 'DEVICE';
+
+        if (username && passwordHash && apiUrl) {
+          // Successfully loaded from individual keys
+          const fullCredentials: GPS51AuthCredentials = {
+            username,
+            password: passwordHash, // This is already hashed
+            apiUrl,
+            from: from || 'WEB',
+            type: type || 'USER'
+          };
+          setCredentials(fullCredentials);
+          console.log('GPS51Settings: Loaded credentials from individual localStorage keys');
+          return;
+        }
+
+        // Fallback: try to load from JSON format (legacy)
+        const savedCredentials = localStorage.getItem('gps51_credentials');
+        if (savedCredentials) {
+          const parsed = JSON.parse(savedCredentials);
+          
+          // Note: JSON format doesn't include password for security
+          // Only set if we have at least username and apiUrl
+          if (parsed.username && parsed.apiUrl) {
+            const partialCredentials: GPS51AuthCredentials = {
+              username: parsed.username,
+              password: '', // Will be empty - component should handle this
+              apiUrl: parsed.apiUrl,
+              from: parsed.from || 'WEB',
+              type: parsed.type || 'USER'
+            };
+            setCredentials(partialCredentials);
+            console.log('GPS51Settings: Loaded partial credentials from JSON format');
+          }
+        }
       } catch (error) {
-        console.error('Failed to parse saved credentials:', error);
+        console.error('GPS51Settings: Failed to load credentials:', error);
       }
-    }
+    };
+
+    loadCredentials();
   }, []);
   return (
     <div className="space-y-6">

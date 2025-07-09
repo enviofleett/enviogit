@@ -20,10 +20,38 @@ export const GPS51PermissionDiagnosticsPanel: React.FC<GPS51PermissionDiagnostic
   const validator = GPS51PermissionValidator.getInstance();
 
   const runDiagnostics = async () => {
-    if (!credentials || !credentials.username || !credentials.password || !credentials.apiUrl) {
+    // Try to load credentials from props first, then from localStorage if incomplete
+    let validCredentials = credentials;
+    
+    if (!validCredentials || !validCredentials.username || !validCredentials.password || !validCredentials.apiUrl) {
+      // Try to load complete credentials from localStorage
+      try {
+        const username = localStorage.getItem('gps51_username');
+        const passwordHash = localStorage.getItem('gps51_password_hash');
+        const apiUrl = localStorage.getItem('gps51_api_url');
+        const from = localStorage.getItem('gps51_from') as 'WEB' | 'ANDROID' | 'IPHONE' | 'WEIXIN';
+        const type = localStorage.getItem('gps51_type') as 'USER' | 'DEVICE';
+
+        if (username && passwordHash && apiUrl) {
+          validCredentials = {
+            username,
+            password: passwordHash,
+            apiUrl,
+            from: from || 'WEB',
+            type: type || 'USER'
+          };
+          console.log('GPS51PermissionDiagnostics: Loaded credentials from localStorage');
+        }
+      } catch (error) {
+        console.error('GPS51PermissionDiagnostics: Failed to load credentials from localStorage:', error);
+      }
+    }
+
+    // Final validation
+    if (!validCredentials || !validCredentials.username || !validCredentials.password || !validCredentials.apiUrl) {
       toast({
         title: "Missing Credentials",
-        description: "Please configure GPS51 credentials before running diagnostics.",
+        description: "Please configure GPS51 credentials in the Credentials tab before running diagnostics.",
         variant: "destructive"
       });
       return;
@@ -31,7 +59,7 @@ export const GPS51PermissionDiagnosticsPanel: React.FC<GPS51PermissionDiagnostic
 
     setIsRunning(true);
     try {
-      const validationReport = await validator.validatePermissions(credentials);
+      const validationReport = await validator.validatePermissions(validCredentials);
       setReport(validationReport);
       
       if (validationReport.criticalIssues.length > 0) {
