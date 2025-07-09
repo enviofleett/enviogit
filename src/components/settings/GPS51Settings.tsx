@@ -17,8 +17,13 @@ import { GPS51EmergencyControls } from './GPS51EmergencyControls';
 import { GPS51AuthDiagnostics } from '../debug/GPS51AuthDiagnostics';
 import { GPS51APITester } from '../debug/GPS51APITester';
 import { GPS51HealthStatus } from './GPS51HealthStatus';
+import { GPS51PermissionDiagnosticsPanel } from './GPS51PermissionDiagnosticsPanel';
 
-export const GPS51Settings = () => {
+interface GPS51SettingsProps {
+  onCredentialsChange?: (credentials: any) => void;
+}
+
+export const GPS51Settings: React.FC<GPS51SettingsProps> = ({ onCredentialsChange }) => {
   return (
     <div className="space-y-6">
       <div>
@@ -29,11 +34,12 @@ export const GPS51Settings = () => {
       </div>
 
       <Tabs defaultValue="emergency" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-10">
+        <TabsList className="grid w-full grid-cols-11">
           <TabsTrigger value="health">Health</TabsTrigger>
           <TabsTrigger value="emergency">Emergency</TabsTrigger>
           <TabsTrigger value="activation">Real-Time</TabsTrigger>
           <TabsTrigger value="credentials">Credentials</TabsTrigger>
+          <TabsTrigger value="permissions">Permissions</TabsTrigger>
           <TabsTrigger value="devices">Devices</TabsTrigger>
           <TabsTrigger value="sync">Sync</TabsTrigger>
           <TabsTrigger value="recovery">Recovery</TabsTrigger>
@@ -61,6 +67,10 @@ export const GPS51Settings = () => {
             <GPS51CredentialsForm />
             <GPS51ConnectivityDiagnostics />
           </div>
+        </TabsContent>
+
+        <TabsContent value="permissions">
+          <GPS51PermissionDiagnosticsPanel credentials={null} />
         </TabsContent>
 
         <TabsContent value="devices">

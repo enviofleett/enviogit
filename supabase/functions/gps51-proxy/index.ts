@@ -91,7 +91,7 @@ serve(async (req) => {
       // Process response
       const responseData = processGPS51Response(response, responseText, requestData, requestDuration, startTime);
       
-      // Handle 8902 rate limit error immediately
+      // ENHANCED: Advanced auth issue detection
       if (responseData.status === 8902) {
         console.error('GPS51 Proxy: 8902 Rate Limit Error Detected:', {
           action: requestData.action,
@@ -100,14 +100,42 @@ serve(async (req) => {
         await handleRateLimitError(requestData, requestDuration);
       }
 
+      // ENHANCED: Detect permission issues for position data
+      if (requestData.action === 'lastposition' && responseData.status === 0) {
+        if (!responseData.records || responseData.records.length === 0) {
+          console.warn('GPS51 Proxy: CRITICAL PERMISSION ISSUE DETECTED:', {
+            action: requestData.action,
+            status: responseData.status,
+            message: responseData.message,
+            hasRecords: !!responseData.records,
+            recordsLength: responseData.records ? responseData.records.length : 0,
+            analysis: 'Token valid for auth but lacks position data access rights',
+            recommendation: 'Verify user permissions in GPS51 admin panel'
+          });
+          
+          // Add metadata about the permission issue
+          responseData.permissionIssueDetected = true;
+          responseData.authAnalysis = {
+            tokenValid: true,
+            hasDataAccess: false,
+            issueType: 'permission_denied',
+            recommendation: 'Token authenticated successfully but lacks position data access rights'
+          };
+        }
+      }
+
       console.log('GPS51 Proxy: Returning processed response:', {
         status: responseData.status,
         message: responseData.message,
         hasData: !!responseData.data,
         hasRecords: !!responseData.records,
+        recordsLength: responseData.records ? responseData.records.length : 0,
         hasToken: !!responseData.token,
         totalDuration: responseData.proxy_metadata?.totalDuration,
-        success: responseData.status === 0 || responseData.status === '0'
+        success: responseData.status === 0 || responseData.status === '0',
+        permissionIssueDetected: !!responseData.permissionIssueDetected,
+        authAnalysis: responseData.authAnalysis,
+        timestamp: new Date().toISOString()
       });
 
       // Log successful API call to database

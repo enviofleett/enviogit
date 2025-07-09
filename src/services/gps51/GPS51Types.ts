@@ -90,6 +90,33 @@ export interface GPS51ApiResponse {
   // Video streaming responses
   streamurl?: string;
   url?: string;
+  // Enhanced fields for permission analysis
+  permissionIssueDetected?: boolean;
+  permissionAnalysis?: {
+    issue: string;
+    recommendation: string;
+    statusOk: boolean;
+    dataEmpty: boolean;
+    likelyPermissionDenied: boolean;
+  };
+  authIssueDetected?: {
+    hasAuthIssue: boolean;
+    issueType: 'token_expired' | 'permission_denied' | 'invalid_token' | 'rate_limited' | 'none';
+    recommendation: string;
+  };
+  authAnalysis?: {
+    tokenValid: boolean;
+    hasDataAccess: boolean;
+    issueType: string;
+    recommendation: string;
+  };
+  proxy_metadata?: {
+    responseType: string;
+    totalDuration: number;
+    gpsFetchDuration: number;
+    processingDuration: number;
+    timestamp: string;
+  };
 }
 
 export interface GPS51Group {
