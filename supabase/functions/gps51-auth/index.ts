@@ -197,6 +197,7 @@ serve(async (req) => {
           response = {
             ...response,
             access_token: authResult.token,
+            token: authResult.token, // Add for compatibility
             token_type: 'Bearer',
             expires_in: 24 * 60 * 60, // 24 hours
             user: authResult.user || { username }
@@ -219,9 +220,11 @@ serve(async (req) => {
           requestId,
           action: action || 'login',
           hasToken: !!(response.access_token),
+          hasTokenAlias: !!(response.token),
           hasGroups: !!(response.groups),
           hasRecords: !!(response.records),
-          recordCount: response.records?.length || 0
+          recordCount: response.records?.length || 0,
+          tokenValue: response.access_token ? '[PRESENT]' : '[MISSING]'
         });
 
         return new Response(

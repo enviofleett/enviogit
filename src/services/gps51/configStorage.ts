@@ -26,7 +26,10 @@ export class GPS51ConfigStorage {
       // Save individual items for backward compatibility
       localStorage.setItem('gps51_api_url', configData.apiUrl);
       localStorage.setItem('gps51_username', configData.username);
-      localStorage.setItem('gps51_password_hash', config.password);
+      // Only save password if it's not empty to prevent empty hash storage
+      if (config.password && config.password.trim() !== '') {
+        localStorage.setItem('gps51_password_hash', config.password);
+      }
       localStorage.setItem('gps51_from', configData.from);
       localStorage.setItem('gps51_type', configData.type);
       

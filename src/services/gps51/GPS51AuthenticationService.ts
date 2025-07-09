@@ -58,7 +58,13 @@ export class GPS51AuthenticationService {
           };
         }
 
-        // Ensure password is MD5 hashed
+        // Ensure password is MD5 hashed - check if it's already hashed to prevent double-hashing
+        console.log('GPS51AuthenticationService: Password validation before hashing:', {
+          passwordLength: credentials.password?.length,
+          isAlreadyMD5: GPS51Utils.validateMD5Hash(credentials.password),
+          attempt
+        });
+        
         const hashedPassword = await GPS51Utils.ensureMD5Hash(credentials.password);
         
         // Normalize API URL
