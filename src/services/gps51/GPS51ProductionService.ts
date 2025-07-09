@@ -297,8 +297,10 @@ export class GPS51ProductionService {
         throw new Error(`Failed to fetch devices: ${error.message}`);
       }
 
-      if (!data?.success) {
-        throw new Error(data?.error || 'Failed to fetch devices');
+      // GPS51 uses status: 0 for success, not success: true
+      if (data?.status !== 0) {
+        const errorMsg = data?.message || data?.cause || `GPS51 error: status ${data?.status}`;
+        throw new Error(errorMsg);
       }
 
       // Process device response
@@ -398,8 +400,10 @@ export class GPS51ProductionService {
         throw new Error(`Failed to fetch positions: ${error.message}`);
       }
 
-      if (!data?.success) {
-        throw new Error(data?.error || 'Failed to fetch positions');
+      // GPS51 uses status: 0 for success, not success: true
+      if (data?.status !== 0) {
+        const errorMsg = data?.message || data?.cause || `GPS51 error: status ${data?.status}`;
+        throw new Error(errorMsg);
       }
 
       // Update lastQueryTime from server response
