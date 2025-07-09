@@ -497,18 +497,17 @@ export class GPS51ProductionService {
    * Auto-authenticate using stored credentials
    */
   private async autoAuthenticate(): Promise<void> {
-    const credentialStatus = GPS51CredentialChecker.checkCredentials();
+    const credentials = {
+      username: localStorage.getItem('gps51_username') || '',
+      password: localStorage.getItem('gps51_password') || ''
+    };
     
-    if (!credentialStatus.isConfigured) {
-      throw new Error('GPS51 credentials not configured');
+    if (!credentials.username || !credentials.password) {
+      throw new Error('GPS51 credentials not found. Please configure in Settings.');
     }
-
-    const config = GPS51ConfigStorage.getConfiguration();
-    if (!config || !config.password) {
-      throw new Error('GPS51 configuration incomplete');
-    }
-
-    await this.authenticate(config.username, config.password);
+    
+    console.log('GPS51ProductionService: Auto-authenticating with stored credentials');
+    await this.authenticate(credentials.username, credentials.password);
   }
 
   /**

@@ -5,7 +5,7 @@ import FleetStats from '@/components/dashboard/FleetStats';
 import VehicleCard from '@/components/dashboard/VehicleCard';
 import AIInsights from '@/components/dashboard/AIInsights';
 import RealtimeChart from '@/components/dashboard/RealtimeChart';
-import GPS51SyncButton from '@/components/dashboard/GPS51SyncButton';
+
 import RealTimeMap from '@/components/dashboard/RealTimeMap';
 import MonitoringAlertsPanel from '@/components/dashboard/MonitoringAlertsPanel';
 import RealTimeConnectionStatus from '@/components/dashboard/RealTimeConnectionStatus';
@@ -25,76 +25,82 @@ const Dashboard = () => {
   const [enableRealTime, setEnableRealTime] = useState(true);
   const [enableGPS51RealTime, setEnableGPS51RealTime] = useState(true);
 
-  // Transform unified data to legacy format for compatibility
-  const vehicles = state.devices.map(device => ({
-    id: device.deviceid,
-    brand: 'GPS51',
-    model: device.devicename || 'Unknown',
-    license_plate: device.devicename || device.deviceid,
-    status: (device as any).status === 1 ? 'active' : 'inactive',
-    type: 'vehicle',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    notes: '',
-    gps51_device_id: device.deviceid,
-    latest_position: (() => {
-      const position = state.positions.find(p => p.deviceid === device.deviceid);
-      if (!position) return null;
-      return {
+  // Transform unified GPS51 data to dashboard format with real status
+  const vehicles = state.devices.map(device => {
+    const position = state.positions.find(p => p.deviceid === device.deviceid);
+    const hasRecentPosition = position && (Date.now() - (position.updatetime * 1000)) < 300000; // 5 minutes
+    const isMoving = position && position.moving === 1 && (position.speed || 0) > 1;
+    
+    return {
+      id: device.deviceid,
+      brand: 'GPS51',
+      model: device.devicename || `Vehicle ${device.deviceid}`,
+      license_plate: device.devicename || device.deviceid,
+      status: hasRecentPosition ? (isMoving ? 'active' : 'available') : 'inactive',
+      type: 'vehicle',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      notes: '',
+      gps51_device_id: device.deviceid,
+      latest_position: position ? {
         vehicle_id: device.deviceid,
         latitude: Number(position.callat),
         longitude: Number(position.callon),
         speed: Number(position.speed || 0),
         timestamp: new Date(position.updatetime * 1000).toISOString(),
-        status: position.strstatus || 'Unknown',
-        isMoving: (position.speed || 0) > 1,
+        status: position.strstatus || position.strstatusen || 'Unknown',
+        isMoving: isMoving,
         ignition_status: position.moving === 1,
         heading: position.course,
-        fuel_level: undefined,
-        engine_temperature: undefined
-      };
-    })()
-  }));
+        fuel_level: position.totaloil || undefined,
+        engine_temperature: position.temp1 || undefined
+      } : null
+    };
+  });
   const isLoading = state.isLoading;
   
-  // Use unified data for metrics
-  const mockMetrics = {
-    realTimeConnected: state.isAuthenticated && !state.isLoading,
+  // Real-time metrics from live GPS51 data
+  const liveMetrics = {
+    realTimeConnected: state.isAuthenticated && state.pollingActive,
     lastUpdateTime: state.lastUpdate || new Date(),
-    activeDevices: vehicles.filter(v => v.latest_position?.isMoving).length
+    activeDevices: vehicles.filter(v => v.latest_position?.isMoving).length,
+    totalDevices: vehicles.length,
+    onlineDevices: vehicles.filter(v => v.latest_position).length,
+    offlineDevices: vehicles.filter(v => !v.latest_position).length,
+    movingVehicles: state.positions.filter(p => p.moving === 1).length,
+    parkedVehicles: state.positions.filter(p => p.moving === 0).length
   };
 
   const refreshLiveData = () => {
-    // Use unified service refresh
+    // Automatic background refresh - no manual intervention needed
     actions.refreshData();
   };
 
-  const triggerPrioritySync = (vehicleIds: string[]) => {
-    console.log('Priority sync requested for vehicles:', vehicleIds);
-  };
-
-  const intelligentFiltering = false; // Disabled in emergency mode
-
-  // Transform production data to match existing VehicleCard interface
+  // Transform live GPS51 data for display with real-time status
   const transformedVehicles = vehicles.map(vehicle => {
     const hasGPS = !!vehicle.latest_position;
+    const position = vehicle.latest_position;
+    const isRecentUpdate = hasGPS && (Date.now() - new Date(position!.timestamp).getTime()) < 300000; // 5 minutes
+    const realStatus = hasGPS && isRecentUpdate ? 
+      (position!.isMoving ? 'online' as const : 'maintenance' as const) : 
+      'offline' as const;
     
     return {
       id: vehicle.id,
-      name: `${vehicle.brand || 'GPS51'} ${vehicle.model || 'Vehicle'}`,
-      status: vehicle.status === 'available' ? 'online' as const :
-              vehicle.status === 'maintenance' ? 'maintenance' as const : 'offline' as const,
+      name: vehicle.model,
+      status: realStatus,
       location: hasGPS ? 
-        `${vehicle.latest_position!.latitude.toFixed(4)}, ${vehicle.latest_position!.longitude.toFixed(4)}` : 
-        'Unknown',
-      speed: hasGPS ? vehicle.latest_position!.speed : 0,
-      fuel: hasGPS ? (vehicle.latest_position!.fuel_level || 0) : 0,
-      temperature: hasGPS ? (vehicle.latest_position!.engine_temperature || 0) : 0,
+        `${position!.latitude.toFixed(6)}, ${position!.longitude.toFixed(6)}` : 
+        'GPS Offline',
+      speed: hasGPS ? Math.round(position!.speed) : 0,
+      fuel: hasGPS ? Math.round(position!.fuel_level || 0) : 0,
+      temperature: hasGPS ? Math.round(position!.engine_temperature || 25) : 0,
       lastUpdate: hasGPS ? 
-        new Date(vehicle.latest_position!.timestamp).toLocaleString() : 
-        'No data',
-      aiScore: hasGPS ? 85 : 0,
-      hasGPS: hasGPS
+        new Date(position!.timestamp).toLocaleString() : 
+        'Never',
+      aiScore: hasGPS && isRecentUpdate ? 95 : (hasGPS ? 70 : 0),
+      hasGPS: hasGPS && isRecentUpdate,
+      rawData: vehicle // Keep original for debugging
     };
   });
 
@@ -110,15 +116,6 @@ const Dashboard = () => {
     setEnableGPS51RealTime(prev => !prev);
   };
 
-  const handlePrioritySync = () => {
-    const movingVehicleIds = vehiclesWithGPS
-      .filter(v => v.speed > 0)
-      .map(v => v.id);
-    
-    if (movingVehicleIds.length > 0) {
-      triggerPrioritySync(movingVehicleIds);
-    }
-  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-100">
@@ -126,11 +123,36 @@ const Dashboard = () => {
         
         <main className="flex-1 overflow-auto p-6">
           <div className="space-y-6">
-            {/* Header with sync button and real-time status */}
+            {/* Header with live status indicator */}
             <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-slate-900">Fleet Dashboard</h2>
-              <div className="flex items-center space-x-4">
-                <GPS51SyncButton />
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900">Live Fleet Dashboard</h2>
+                <div className="flex items-center space-x-4 mt-1">
+                  {state.pollingActive ? (
+                    <div className="flex items-center space-x-2 text-green-600">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <span className="text-sm font-medium">Live Tracking Active</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-2 text-yellow-600">
+                      <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                      <span className="text-sm font-medium">Connecting...</span>
+                    </div>
+                  )}
+                  {state.lastUpdate && (
+                    <span className="text-sm text-slate-500">
+                      Last update: {state.lastUpdate.toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-lg font-bold text-slate-900">
+                  {state.devices.length} Vehicles
+                </div>
+                <div className="text-sm text-slate-500">
+                  {state.positions.filter(p => p.moving === 1).length} moving • {state.positions.filter(p => p.moving === 0).length} parked
+                </div>
               </div>
             </div>
 
@@ -141,11 +163,11 @@ const Dashboard = () => {
                 onToggle={handleToggleGPS51RealTime} 
               />
               <RealTimeConnectionStatus
-                connected={mockMetrics.realTimeConnected}
-                lastUpdateTime={mockMetrics.lastUpdateTime}
+                connected={liveMetrics.realTimeConnected}
+                lastUpdateTime={liveMetrics.lastUpdateTime}
                 onRefresh={refreshLiveData}
                 onToggleRealTime={handleToggleRealTime}
-                vehicleCount={mockMetrics.activeDevices}
+                vehicleCount={liveMetrics.activeDevices}
               />
             </div>
 
@@ -171,18 +193,22 @@ const Dashboard = () => {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xl font-semibold text-slate-900">
-                      {isLoading ? 'Loading Fleet...' : 'Fleet Status'}
+                      Live Fleet Status
                     </h3>
                     <div className="flex items-center space-x-4 text-sm text-slate-600">
                       <div className="flex items-center space-x-2">
                         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                        <span>{vehiclesWithGPS.length} with GPS</span>
+                        <span>{liveMetrics.movingVehicles} moving</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                        <span>{liveMetrics.parkedVehicles} parked</span>
                       </div>
                       <div className="flex items-center space-x-2">
                         <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
-                        <span>{vehiclesWithoutGPS.length} offline</span>
+                        <span>{liveMetrics.offlineDevices} offline</span>
                       </div>
-                      <span>{transformedVehicles.length} total</span>
+                      <span className="font-medium">{liveMetrics.totalDevices} total</span>
                     </div>
                   </div>
                   
@@ -192,9 +218,16 @@ const Dashboard = () => {
                         <div key={i} className="h-48 bg-slate-200 animate-pulse rounded-lg"></div>
                       ))}
                     </div>
+                  ) : state.error ? (
+                    <div className="text-center py-12 bg-red-50 rounded-lg border border-red-200">
+                      <p className="text-red-600 font-medium">Connection Error</p>
+                      <p className="text-red-500 text-sm mt-1">{state.error}</p>
+                      <p className="text-slate-500 text-sm mt-2">System will auto-retry...</p>
+                    </div>
                   ) : transformedVehicles.length === 0 ? (
-                    <div className="text-center py-12 bg-white rounded-lg border border-slate-200">
-                      <p className="text-slate-500">No vehicles found. Click "Sync GPS51" to load data.</p>
+                    <div className="text-center py-12 bg-yellow-50 rounded-lg border border-yellow-200">
+                      <p className="text-yellow-700 font-medium">No vehicles configured</p>
+                      <p className="text-yellow-600 text-sm mt-1">Please configure GPS51 credentials in Settings</p>
                     </div>
                   ) : (
                     <div className="space-y-6">
