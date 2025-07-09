@@ -17,7 +17,7 @@ import {
   Car
 } from 'lucide-react';
 import { gps51EmergencyManager } from '@/services/gps51/GPS51EmergencyManager';
-import { useGPS51Data } from '@/hooks/useGPS51Data';
+import { useGPS51UnifiedData } from '@/hooks/useGPS51UnifiedData';
 
 interface RealTimeMonitorProps {
   userId?: string;
@@ -36,7 +36,10 @@ export const GPS51RealTimeMonitor: React.FC<RealTimeMonitorProps> = ({
   });
   const [isMonitoring, setIsMonitoring] = useState(false);
   
-  const { vehicles, loading, error } = useGPS51Data();
+  const { state } = useGPS51UnifiedData();
+  const vehicles = state.devices;
+  const loading = state.isLoading;
+  const error = state.error;
 
   // Get emergency status only once on mount (no polling to prevent API spikes)
   useEffect(() => {
@@ -93,7 +96,8 @@ export const GPS51RealTimeMonitor: React.FC<RealTimeMonitorProps> = ({
     }
   };
 
-  const activeVehicles = vehicles.filter(v => v.latest_position?.isMoving).length;
+  // Calculate active vehicles from positions data
+  const activeVehicles = state.positions.filter(p => p.moving === 1).length;
   const successRate = error ? 0 : 100;
 
   return (

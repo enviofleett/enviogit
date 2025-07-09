@@ -14,31 +14,59 @@ import { GPS51RealTimePanel } from '@/components/dashboard/GPS51RealTimePanel';
 import { GPS51PerformanceMonitor } from '@/components/dashboard/GPS51PerformanceMonitor';
 import { GPS51IntelligentPollingMonitor } from '@/components/dashboard/GPS51IntelligentPollingMonitor';
 import { GPS51FleetHierarchyPanel } from '@/components/dashboard/GPS51FleetHierarchyPanel';
-import { useGPS51Data } from '@/hooks/useGPS51Data';
+import { useGPS51UnifiedData } from '@/hooks/useGPS51UnifiedData';
 import { useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const Dashboard = () => {
-  // Use legacy hook for compatibility
-  const { vehicles: legacyVehicles, vehiclePositions, loading: legacyLoading } = useGPS51Data();
+  // Use unified GPS51 service
+  const { state, actions } = useGPS51UnifiedData();
   
   const [enableRealTime, setEnableRealTime] = useState(true);
   const [enableGPS51RealTime, setEnableGPS51RealTime] = useState(true);
 
-  // Use legacy data
-  const vehicles = legacyVehicles;
-  const isLoading = legacyLoading;
+  // Transform unified data to legacy format for compatibility
+  const vehicles = state.devices.map(device => ({
+    id: device.deviceid,
+    brand: 'GPS51',
+    model: device.devicename || 'Unknown',
+    license_plate: device.devicename || device.deviceid,
+    status: (device as any).status === 1 ? 'active' : 'inactive',
+    type: 'vehicle',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    notes: '',
+    gps51_device_id: device.deviceid,
+    latest_position: (() => {
+      const position = state.positions.find(p => p.deviceid === device.deviceid);
+      if (!position) return null;
+      return {
+        vehicle_id: device.deviceid,
+        latitude: Number(position.callat),
+        longitude: Number(position.callon),
+        speed: Number(position.speed || 0),
+        timestamp: new Date(position.updatetime * 1000).toISOString(),
+        status: position.strstatus || 'Unknown',
+        isMoving: (position.speed || 0) > 1,
+        ignition_status: position.moving === 1,
+        heading: position.course,
+        fuel_level: undefined,
+        engine_temperature: undefined
+      };
+    })()
+  }));
+  const isLoading = state.isLoading;
   
-  // Use simplified data for emergency mode
+  // Use unified data for metrics
   const mockMetrics = {
-    realTimeConnected: !legacyLoading,
-    lastUpdateTime: new Date(),
+    realTimeConnected: state.isAuthenticated && !state.isLoading,
+    lastUpdateTime: state.lastUpdate || new Date(),
     activeDevices: vehicles.filter(v => v.latest_position?.isMoving).length
   };
 
   const refreshLiveData = () => {
-    // Trigger refresh of GPS51 data
-    window.location.reload();
+    // Use unified service refresh
+    actions.refreshData();
   };
 
   const triggerPrioritySync = (vehicleIds: string[]) => {

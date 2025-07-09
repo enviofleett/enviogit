@@ -2,14 +2,42 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MapPin, Navigation, Fuel, Thermometer, Wifi, WifiOff } from 'lucide-react';
-import { useGPS51Data } from '@/hooks/useGPS51Data';
+import { useGPS51UnifiedData } from '@/hooks/useGPS51UnifiedData';
 
 const RealTimeMap: React.FC = () => {
-  const { vehicles, loading, error, refresh } = useGPS51Data();
+  const { state, actions } = useGPS51UnifiedData();
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
+
+  // Transform unified data to compatible format
+  const vehicles = state.devices.map(device => {
+    const position = state.positions.find(p => p.deviceid === device.deviceid);
+    return {
+      id: device.deviceid,
+      license_plate: device.devicename || device.deviceid,
+      brand: 'GPS51',
+      model: device.devicename || 'Vehicle',
+      status: (device as any).status === 1 ? 'active' : 'inactive',
+      latest_position: position ? {
+        vehicle_id: device.deviceid,
+        latitude: Number(position.callat),
+        longitude: Number(position.callon),
+        speed: Number(position.speed || 0),
+        timestamp: new Date(position.updatetime * 1000).toISOString(),
+        status: position.strstatus || 'Unknown',
+        isMoving: position.moving === 1,
+        ignition_status: position.moving === 1,
+        heading: position.course,
+        fuel_level: position.totaloil,
+        engine_temperature: position.temp1
+      } : null
+    };
+  });
 
   const vehiclesWithGPS = vehicles.filter(v => v.latest_position);
   const vehiclesWithoutGPS = vehicles.filter(v => !v.latest_position);
+  const loading = state.isLoading;
+  const error = state.error;
+  const refresh = actions.refreshData;
 
   if (loading) {
     return (

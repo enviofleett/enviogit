@@ -8,7 +8,7 @@ import { useGPS51DirectAuth } from '@/hooks/useGPS51DirectAuth';
 import { useGPS51DirectVehicles } from '@/hooks/useGPS51DirectVehicles';
 import { useGPS51DirectPositions } from '@/hooks/useGPS51DirectPositions';
 import { useGPS51DirectConnection } from '@/hooks/useGPS51DirectConnection';
-import { useGPS51Data } from '@/hooks/useGPS51Data';
+import { useGPS51UnifiedData } from '@/hooks/useGPS51UnifiedData';
 import { useGPS51MetricsTracker } from '@/hooks/useGPS51MetricsTracker';
 import { GPS51DirectVehicleTable } from './GPS51DirectVehicleTable';
 import { GPS51DirectStatusCards } from './GPS51DirectStatusCards';
@@ -19,7 +19,7 @@ export const GPS51DirectDashboard: React.FC = () => {
   const vehicles = useGPS51DirectVehicles({ autoRefresh: true });
   const positions = useGPS51DirectPositions({ autoStart: false });
   const connection = useGPS51DirectConnection({ autoStart: true });
-  const { state: gps51Data, actions } = useGPS51Data();
+  const { state: gps51Data, actions } = useGPS51UnifiedData();
   const metrics = useGPS51MetricsTracker();
 
   // Auto-start simple polling when vehicles are loaded
@@ -201,7 +201,7 @@ export const GPS51DirectDashboard: React.FC = () => {
       <div className="container mx-auto px-4 py-6 space-y-6">
         {/* Status Cards */}
         <GPS51DirectStatusCards 
-          vehicles={gps51Data.devices}
+          vehicles={vehicles.state.vehicles}
           positions={gps51Data.positions}
           connection={connection.state}
           smartPolling={{ isActive: isPollingActive, currentInterval: 30000, activeDevices: 0, inactiveDevices: 0, lastAdaptation: 0, pollingEfficiency: 100 }}

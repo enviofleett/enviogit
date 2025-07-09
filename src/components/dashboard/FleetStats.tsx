@@ -2,17 +2,18 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Monitor, Zap, Shield, Settings, MapPin } from 'lucide-react';
-import { useGPS51Data } from '@/hooks/useGPS51Data';
+import { useGPS51UnifiedData } from '@/hooks/useGPS51UnifiedData';
 
 const FleetStats = () => {
-  const { vehicles, loading } = useGPS51Data();
+  const { state } = useGPS51UnifiedData();
 
-  // Calculate additional stats from vehicle data
-  const totalVehicles = vehicles.length;
-  const vehiclesWithPositions = vehicles.filter(v => v.latest_position).length;
+  // Calculate stats from unified GPS51 data
+  const totalVehicles = state.devices.length;
+  const vehiclesWithPositions = state.positions.length;
   const vehiclesWithoutPositions = totalVehicles - vehiclesWithPositions;
-  const activeVehicles = vehicles.filter(v => v.latest_position?.isMoving).length;
-  const maintenanceVehicles = vehicles.filter(v => v.status === 'maintenance').length;
+  const activeVehicles = state.positions.filter(p => p.moving === 1).length;
+  const maintenanceVehicles = 0; // Not available in GPS51 data
+  const loading = state.isLoading;
 
   const stats = [
     {

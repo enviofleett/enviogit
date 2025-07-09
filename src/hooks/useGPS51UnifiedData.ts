@@ -160,10 +160,18 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
     }
   }, []);
 
-  // Initialize authentication status
+  // Initialize authentication status and auto-start polling
   useEffect(() => {
-    authenticateIfNeeded();
-  }, [authenticateIfNeeded]);
+    const initializeData = async () => {
+      const isAuth = await authenticateIfNeeded();
+      if (isAuth) {
+        // Auto-start polling when authenticated
+        console.log('GPS51UnifiedData: Auto-starting polling for authenticated user');
+        startPolling();
+      }
+    };
+    initializeData();
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
