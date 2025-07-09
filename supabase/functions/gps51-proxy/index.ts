@@ -165,11 +165,7 @@ serve(async (req) => {
       });
     }
 
-    // Add undocumented parameters for specific actions
-    if (requestData.action === 'lastposition') {
-      targetUrl.searchParams.append('streamtype', 'proto');
-      targetUrl.searchParams.append('send', '2');
-    }
+    // NOTE: No additional URL parameters needed for lastposition - GPS51 API expects clean URL
 
     // Prepare request options with enhanced headers
     const requestOptions: RequestInit = {
@@ -182,45 +178,21 @@ serve(async (req) => {
       }
     };
 
-    // Add body for POST requests - Use JSON for login, form-encoded for others
+    // Add body for POST requests - Use JSON for all actions (GPS51 API expects JSON)
     if ((requestData.method || 'POST') === 'POST' && requestData.params) {
-      if (requestData.action === 'login') {
-        // Use JSON for login requests to OpenAPI endpoint
-        requestOptions.headers = {
-          ...requestOptions.headers,
-          'Content-Type': 'application/json'
-        };
-        requestOptions.body = JSON.stringify(requestData.params);
-        
-        console.log('GPS51 Proxy: Sending JSON login request:', {
-          bodyParams: requestData.params,
-          jsonBody: requestOptions.body,
-          endpoint: targetUrl.toString()
-        });
-      } else {
-        // Use form-encoded for other requests
-        requestOptions.headers = {
-          ...requestOptions.headers,
-          'Content-Type': 'application/x-www-form-urlencoded'
-        };
-        
-        const formParams = new URLSearchParams();
-        Object.entries(requestData.params).forEach(([key, value]) => {
-          if (Array.isArray(value)) {
-            formParams.append(key, value.join(','));
-          } else {
-            formParams.append(key, String(value));
-          }
-        });
-        requestOptions.body = formParams.toString();
-
-        console.log('GPS51 Proxy: Sending form-encoded request:', {
-          action: requestData.action,
-          bodyParams: requestData.params,
-          formBody: requestOptions.body,
-          endpoint: targetUrl.toString()
-        });
-      }
+      // Use JSON for all requests to GPS51 OpenAPI endpoint
+      requestOptions.headers = {
+        ...requestOptions.headers,
+        'Content-Type': 'application/json'
+      };
+      requestOptions.body = JSON.stringify(requestData.params);
+      
+      console.log('GPS51 Proxy: Sending JSON request:', {
+        action: requestData.action,
+        bodyParams: requestData.params,
+        jsonBody: requestOptions.body,
+        endpoint: targetUrl.toString()
+      });
     }
 
     console.log('GPS51 Proxy: Making request to GPS51 API:', {
