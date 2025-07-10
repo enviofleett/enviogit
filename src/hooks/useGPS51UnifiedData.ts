@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { gps51ProductionService, GPS51Vehicle, GPS51Position } from '@/services/gps51/GPS51ProductionService';
-import { GPS51Device } from '@/services/gps51/types';
+import { gps51ProductionService, GPS51Vehicle, GPS51Position, LiveDataResult } from '@/services/gps51/GPS51ProductionService';
+import { gps51UnifiedAuthManager } from '@/services/gps51/unified/GPS51UnifiedAuthManager';
 
 export interface GPS51UnifiedDataState {
   devices: GPS51Vehicle[];
@@ -40,25 +40,21 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
   const [authRetryCount, setAuthRetryCount] = useState<number>(0);
   const [backoff, setBackoff] = useState<number>(1000);
 
-  // FIXED: Enhanced auto-authentication with token validation
+  // Enhanced auto-authentication using unified manager
   const autoAuthenticate = useCallback(async (): Promise<boolean> => {
     try {
       console.log('GPS51UnifiedData: Auto-authenticating...');
       
       // Check if already authenticated with valid token
-      const authState = gps51ProductionService.getAuthState();
+      const authState = gps51UnifiedAuthManager.getAuthState();
       if (authState.isAuthenticated && authState.token) {
         setState(prev => ({ ...prev, isAuthenticated: true, error: null }));
         return true;
       }
 
       // Try to authenticate using stored credentials
-      const credentials = {
-        username: localStorage.getItem('gps51_username') || '',
-        password: localStorage.getItem('gps51_password') || ''
-      };
-
-      if (!credentials.username || !credentials.password) {
+      const storedCredentials = gps51UnifiedAuthManager.getStoredCredentials();
+      if (!storedCredentials) {
         setState(prev => ({ 
           ...prev, 
           isAuthenticated: false, 
@@ -68,26 +64,25 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
       }
 
       console.log('GPS51UnifiedData: Authenticating with stored credentials:', {
-        username: credentials.username,
-        hasPassword: !!credentials.password
+        username: storedCredentials.username,
+        hasPassword: !!storedCredentials.password
       });
 
-      await gps51ProductionService.authenticate(credentials.username, credentials.password);
+      const result = await gps51UnifiedAuthManager.authenticate(
+        storedCredentials.username, 
+        storedCredentials.password,
+        storedCredentials.apiUrl
+      );
       
-      // Verify authentication was successful
-      const newAuthState = gps51ProductionService.getAuthState();
-      if (newAuthState.isAuthenticated && newAuthState.token) {
+      if (result.success) {
         setState(prev => ({ ...prev, isAuthenticated: true, error: null }));
         setAuthRetryCount(0);
         setBackoff(1000);
         
-        console.log('GPS51UnifiedData: Auto-authentication successful:', {
-          hasToken: !!newAuthState.token,
-          tokenLength: newAuthState.token?.length || 0
-        });
+        console.log('GPS51UnifiedData: Auto-authentication successful');
         return true;
       } else {
-        throw new Error('Authentication completed but no valid token received');
+        throw new Error(result.error || 'Authentication failed');
       }
 
     } catch (error) {
@@ -98,172 +93,111 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
       setState(prev => ({ 
         ...prev, 
         isAuthenticated: false, 
-        error: `Authentication failed: ${errorMessage}` 
+        error: errorMessage
       }));
       
       return false;
     }
   }, []);
 
-  // Smart polling with real-time updates and auto-recovery
-  const pollData = useCallback(async (deviceIds?: string[]) => {
+  // Fetch live data using unified service
+  const fetchLiveData = useCallback(async (deviceIds?: string[]): Promise<void> => {
     try {
-      // Auto-authenticate if needed
+      setState(prev => ({ ...prev, isLoading: true, error: null }));
+
+      // Ensure authentication first
       const isAuth = await autoAuthenticate();
       if (!isAuth) {
-        // Retry authentication with exponential backoff
-        if (authRetryCount < 5) {
-          setTimeout(() => {
-            setBackoff(prev => Math.min(prev * 2, 30000));
-          }, backoff);
-        }
+        setState(prev => ({ ...prev, isLoading: false }));
         return;
       }
 
-      setState(prev => ({ ...prev, isLoading: true, error: null }));
-
-      // Fetch live positions with auto-recovery
-      const result = await gps51ProductionService.fetchLivePositions(deviceIds);
-
-      setState(prev => ({
-        ...prev,
-        positions: result.positions,
-        lastUpdate: new Date(),
-        isLoading: false,
-        isAuthenticated: true
-      }));
-
-      // Update lastQueryTime from server response for incremental polling
-      setLastQueryTime(result.lastQueryTime);
-
-      console.log('GPS51Data: Live poll completed', {
-        positionsReceived: result.positions.length,
-        lastQueryTime: result.lastQueryTime,
-        timestamp: new Date().toISOString()
-      });
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Live polling failed';
-      console.error('GPS51Data: Live polling failed:', error);
+      console.log('GPS51UnifiedData: Fetching live data...');
       
-      // Check if auth error and retry
-      if (errorMessage.includes('not authenticated') || errorMessage.includes('token')) {
-        setState(prev => ({ ...prev, isAuthenticated: false }));
-        await autoAuthenticate();
-      } else {
+      const liveData: LiveDataResult = await gps51ProductionService.getLiveData(deviceIds);
+
+      if (liveData.isSuccess) {
         setState(prev => ({
           ...prev,
-          error: errorMessage,
-          isLoading: false
+          devices: liveData.vehicles,
+          positions: liveData.positions,
+          lastUpdate: new Date(),
+          isLoading: false,
+          error: null
         }));
-      }
-    }
-  }, [lastQueryTime, autoAuthenticate, authRetryCount, backoff]);
 
+        setLastQueryTime(liveData.lastQueryTime);
+        
+        console.log('GPS51UnifiedData: Live data fetched successfully:', {
+          vehicleCount: liveData.vehicles.length,
+          positionCount: liveData.positions.length,
+          lastQueryTime: liveData.lastQueryTime
+        });
+      } else {
+        throw new Error(liveData.error || 'Failed to fetch live data');
+      }
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch data';
+      console.error('GPS51UnifiedData: Live data fetch failed:', error);
+      
+      setState(prev => ({
+        ...prev,
+        isLoading: false,
+        error: errorMessage
+      }));
+    }
+  }, [autoAuthenticate]);
+
+  // Start polling
   const startPolling = useCallback((deviceIds?: string[]) => {
+    console.log('GPS51UnifiedData: Starting polling for device data...');
+    
+    // Clear existing timer
     if (pollingTimer) {
       clearInterval(pollingTimer);
     }
 
     setState(prev => ({ ...prev, pollingActive: true }));
 
-    // Initial poll with lastQueryTime=0 for fresh start
-    setLastQueryTime(0);
-    pollData(deviceIds);
+    // Initial fetch
+    fetchLiveData(deviceIds);
 
-    // PRODUCTION: Real-time polling every 15 seconds for live tracking
+    // Set up polling interval
     const timer = setInterval(() => {
-      pollData(deviceIds);
-    }, 15000); // 15 seconds for production-ready live experience
+      fetchLiveData(deviceIds);
+    }, 30000); // 30 seconds
 
     setPollingTimer(timer);
-    console.log('GPS51Data: Started real-time polling with 15s interval');
-  }, [pollData, pollingTimer]);
+    
+    console.log('GPS51UnifiedData: Polling started with 30-second interval');
+  }, [fetchLiveData, pollingTimer]);
 
+  // Stop polling
   const stopPolling = useCallback(() => {
+    console.log('GPS51UnifiedData: Stopping polling...');
+    
     if (pollingTimer) {
       clearInterval(pollingTimer);
       setPollingTimer(null);
     }
+    
     setState(prev => ({ ...prev, pollingActive: false }));
-    console.log('GPS51Data: Stopped polling');
   }, [pollingTimer]);
 
-  const refreshData = useCallback(async () => {
-    try {
-      // Auto-authenticate first
-      const isAuth = await autoAuthenticate();
-      if (!isAuth) {
-        console.warn('GPS51Data: Cannot refresh - authentication failed');
-        return;
-      }
+  // Manual refresh
+  const refreshData = useCallback(async (): Promise<void> => {
+    // Reset query time for full refresh
+    gps51ProductionService.resetQueryTime();
+    setLastQueryTime(0);
+    
+    await fetchLiveData();
+  }, [fetchLiveData]);
 
-      setState(prev => ({ ...prev, isLoading: true, error: null }));
-
-      // Fetch devices and positions using unified service
-      const devices = await gps51ProductionService.fetchUserDevices();
-      const positionsResult = await gps51ProductionService.fetchLivePositions();
-
-      setState(prev => ({
-        ...prev,
-        devices,
-        positions: positionsResult.positions,
-        lastUpdate: new Date(),
-        isLoading: false,
-        isAuthenticated: true
-      }));
-
-      setLastQueryTime(positionsResult.lastQueryTime);
-
-      console.log('GPS51Data: Background refresh completed', {
-        devices: devices.length,
-        positions: positionsResult.positions.length,
-        timestamp: new Date().toISOString()
-      });
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Background refresh failed';
-      console.error('GPS51Data: Background refresh failed:', error);
-      
-      // Try to recover authentication on error
-      if (errorMessage.includes('not authenticated') || errorMessage.includes('token')) {
-        setState(prev => ({ ...prev, isAuthenticated: false }));
-        await autoAuthenticate();
-      } else {
-        setState(prev => ({
-          ...prev,
-          error: errorMessage,
-          isLoading: false
-        }));
-      }
-    }
-  }, [autoAuthenticate]);
-
+  // Authenticate if needed
   const authenticateIfNeeded = useCallback(async (): Promise<boolean> => {
     return await autoAuthenticate();
   }, [autoAuthenticate]);
-
-  // Auto-initialize with authentication and start live tracking
-  useEffect(() => {
-    const initializeRealTimeTracking = async () => {
-      console.log('GPS51UnifiedData: Initializing real-time tracking...');
-      
-      // Auto-authenticate and start live tracking
-      const isAuth = await autoAuthenticate();
-      if (isAuth) {
-        // Load initial data
-        await refreshData();
-        
-        // Start real-time polling automatically
-        console.log('GPS51UnifiedData: Starting automatic live tracking');
-        startPolling();
-      } else {
-        console.warn('GPS51UnifiedData: Failed to initialize - authentication required');
-      }
-    };
-    
-    initializeRealTimeTracking();
-  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -273,6 +207,11 @@ export const useGPS51UnifiedData = (): UseGPS51UnifiedDataReturn => {
       }
     };
   }, [pollingTimer]);
+
+  // Initial authentication check
+  useEffect(() => {
+    autoAuthenticate();
+  }, [autoAuthenticate]);
 
   return {
     state,

@@ -1,11 +1,9 @@
 /**
- * GPS51 Production Service - Single Entry Point
- * Consolidates all GPS51 operations into one authoritative service
- * Eliminates redundancy and provides reliable, coordinated API access
+ * GPS51 Production Service - Updated to use Unified Authentication
+ * Now leverages the GPS51UnifiedAuthManager for all authentication operations
  */
 
-import { GPS51ConfigStorage } from './configStorage';
-import { GPS51CredentialChecker } from './GPS51CredentialChecker';
+import { gps51UnifiedAuthManager, GPS51UnifiedAuthState } from './unified/GPS51UnifiedAuthManager';
 import { gps51SimpleAuthSync } from './GPS51SimpleAuthSync';
 import { gps51PerformanceOptimizer } from './GPS51PerformanceOptimizer';
 import { gps51UserTypeManager, EnvioUserRole, GPS51UserProfile } from './GPS51UserTypeManager';
@@ -56,14 +54,8 @@ export interface GPS51Position {
   voltagepercent?: number;
 }
 
-export interface GPS51AuthState {
-  isAuthenticated: boolean;
-  token: string | null;
-  username: string | null;
-  userProfile?: GPS51UserProfile;
-  fleetHierarchy?: FleetHierarchy;
-  error?: string;
-}
+// Re-export the unified auth state interface
+export type GPS51AuthState = GPS51UnifiedAuthState;
 
 export interface LiveDataResult {
   vehicles: GPS51Vehicle[];
@@ -78,12 +70,6 @@ export class GPS51ProductionService {
   private static instance: GPS51ProductionService;
   
   // Core state
-  private authState: GPS51AuthState = {
-    isAuthenticated: false,
-    token: null,
-    username: null
-  };
-  
   private vehicles: GPS51Vehicle[] = [];
   private lastQueryTime: number = 0;
   private retryCount: number = 0;
@@ -107,415 +93,246 @@ export class GPS51ProductionService {
   }
 
   /**
-   * Authenticate with GPS51 API - FIXED TOKEN MANAGEMENT
-   * Single source of truth for authentication
+   * Authenticate using the unified auth manager
    */
   async authenticate(username: string, password: string): Promise<GPS51AuthState> {
-    const startTime = Date.now();
-    
     try {
       console.log('GPS51ProductionService: Starting authentication for', username, {
         apiUrl: this.apiUrl,
         timestamp: new Date().toISOString()
       });
+
+      const result = await gps51UnifiedAuthManager.authenticate(username, password, this.apiUrl);
       
-      // Enhanced credential validation
-      if (!username || !password) {
-        throw new Error('Username and password are required');
+      if (!result.success) {
+        throw new Error(result.error || 'Authentication failed');
       }
 
-      if (password.length < 6) {
-        throw new Error('Password must be at least 6 characters');
+      // Get the updated auth state
+      const authState = gps51UnifiedAuthManager.getAuthState();
+      
+      // Initialize user profile and fleet hierarchy
+      if (authState.isAuthenticated) {
+        await this.initializeUserProfile(result.user);
+        
+        // Notify simple auth sync
+        gps51SimpleAuthSync.notifyAuthSuccess(username);
       }
 
-      // Ensure password is MD5 hashed
-      const { GPS51Utils } = await import('./GPS51Utils');
-      const hashedPassword = await GPS51Utils.ensureMD5Hash(password);
-      
-      console.log('GPS51ProductionService: Calling Edge Function with validated credentials:', {
-        username,
-        hashedPasswordLength: hashedPassword.length,
-        isPasswordMD5: /^[a-f0-9]{32}$/i.test(hashedPassword),
-        apiUrl: this.apiUrl
-      });
-
-      // CRITICAL FIX: Use gps51-auth for login with proper token response
-      const { supabase } = await import('@/integrations/supabase/client');
-      
-      const { data, error } = await supabase.functions.invoke('gps51-auth', {
-        body: {
-          action: 'login',
-          username,
-          password: hashedPassword,
-          from: 'WEB',
-          type: 'USER',
-          apiUrl: this.apiUrl
-        }
-      });
-
-      const processingTime = Date.now() - startTime;
-
-      // Enhanced error handling with detailed logging
-      if (error) {
-        console.error('GPS51ProductionService: Edge Function invocation error:', {
-          error: error.message,
-          processingTime,
-          username
-        });
-        throw new Error(`Edge Function error: ${error.message}`);
-      }
-
-      if (!data) {
-        console.error('GPS51ProductionService: No response from Edge Function:', {
-          processingTime,
-          username
-        });
-        throw new Error('No response from authentication service');
-      }
-
-      console.log('GPS51ProductionService: Edge Function response received:', {
-        success: data.success,
-        hasToken: !!data.access_token,
-        hasUser: !!data.user,
-        gps51Status: data.gps51_status,
-        requestId: data.request_id,
-        processingTime
-      });
-
-      if (!data.success) {
-        const errorMsg = data.error || 'Authentication failed - invalid response from server';
-        console.error('GPS51ProductionService: Authentication failed:', {
-          error: errorMsg,
-          errorCode: data.error_code,
-          requestId: data.request_id,
-          processingTime
-        });
-        throw new Error(errorMsg);
-      }
-
-      // CRITICAL FIX: Properly store token and update authentication state
-      const token = data.access_token || data.token;
-      if (!token) {
-        throw new Error('Login successful but no token received');
-      }
-
-      this.authState = {
-        isAuthenticated: true,
-        token: token,
-        username
-      };
-
-      // CRITICAL FIX: Store token and credentials properly
-      localStorage.setItem('gps51_username', username);
-      localStorage.setItem('gps51_password', password); // Store for auto-reauthentication
-      localStorage.setItem('gps51_token', token);
-      localStorage.setItem('gps51_last_auth_success', new Date().toISOString());
-      
-      // Also store in sessionStorage for immediate access
-      sessionStorage.setItem('gps51_token', token);
-      
-      console.log('GPS51ProductionService: Token stored successfully:', {
-        token: token.substring(0, 10) + '...',
-        tokenLength: token.length,
-        username
-      });
-      
-      // Initialize user profile and polling
-      await this.initializeUserProfile(username, data);
-      
-      // Notify auth sync
-      gps51SimpleAuthSync.notifyAuthSuccess(username);
-
-      const totalTime = Date.now() - startTime;
       console.log('GPS51ProductionService: Authentication completed successfully:', {
         username,
-        totalProcessingTime: totalTime,
-        hasToken: !!this.authState.token,
-        tokenLength: this.authState.token?.length
+        totalProcessingTime: result.responseTime,
+        hasToken: !!authState.token,
+        tokenLength: authState.token?.length || 0
       });
-      
-      return this.authState;
+
+      return authState;
 
     } catch (error) {
-      const totalTime = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
-      
-      this.authState = {
-        isAuthenticated: false,
-        token: null,
-        username: null,
-        error: errorMessage
-      };
-
-      // Store failed attempt for analysis
-      localStorage.setItem('gps51_last_auth_error', JSON.stringify({
-        error: errorMessage,
-        timestamp: new Date().toISOString(),
-        username,
-        processingTime: totalTime
-      }));
-
-      console.error('GPS51ProductionService: Authentication failed:', {
-        error: errorMessage,
-        username,
-        hasCredentials: !!username,
-        apiUrl: this.apiUrl,
-        totalProcessingTime: totalTime,
-        retryCount: this.retryCount
-      });
-      
+      console.error('GPS51ProductionService: Authentication failed:', error);
       throw new Error(errorMessage);
     }
   }
 
   /**
-   * Fetch user devices
-   * Single source of truth for device discovery
+   * Get current authentication state from unified manager
    */
-  async fetchUserDevices(): Promise<GPS51Vehicle[]> {
-    if (!this.authState.isAuthenticated || !this.authState.username) {
-      throw new Error('Not authenticated - call authenticate() first');
-    }
+  getAuthState(): GPS51AuthState {
+    return gps51UnifiedAuthManager.getAuthState();
+  }
 
+  /**
+   * Check if currently authenticated
+   */
+  isAuthenticated(): boolean {
+    return gps51UnifiedAuthManager.isAuthenticated();
+  }
+
+  /**
+   * Logout and clear all data
+   */
+  async logout(): Promise<void> {
+    console.log('GPS51ProductionService: Logging out');
+    
+    // Clear unified auth manager
+    gps51UnifiedAuthManager.logout();
+    
+    // Clear local state
+    this.vehicles = [];
+    this.lastQueryTime = 0;
+    this.retryCount = 0;
+    
+    // Notify simple auth sync
+    gps51SimpleAuthSync.notifyLogout();
+    
+    console.log('GPS51ProductionService: Logout completed');
+  }
+
+  /**
+   * Fetch vehicles using authenticated token
+   */
+  async fetchVehicles(): Promise<GPS51Vehicle[]> {
     try {
-      console.log('GPS51ProductionService: Fetching user devices');
+      console.log('GPS51ProductionService: Fetching vehicles...');
       
-      await this.enforceRateLimit();
+      const token = await gps51UnifiedAuthManager.getValidToken();
+      if (!token) {
+        throw new Error('No valid authentication token available');
+      }
 
-      // Use gps51-proxy for non-login actions
+      const authState = gps51UnifiedAuthManager.getAuthState();
+      if (!authState.username) {
+        throw new Error('No username available for vehicle fetch');
+      }
+
+      // Call Edge Function for vehicles
       const { supabase } = await import('@/integrations/supabase/client');
-      const { data, error } = await supabase.functions.invoke('gps51-proxy', {
+      const { data: response, error } = await supabase.functions.invoke('gps51-auth', {
         body: {
           action: 'querymonitorlist',
-          token: this.authState.token,
-          params: {
-            username: this.authState.username
-          },
-          method: 'POST',
+          username: authState.username,
+          token,
           apiUrl: this.apiUrl
         }
       });
 
       if (error) {
-        throw new Error(`Failed to fetch devices: ${error.message}`);
+        throw new Error(`Edge Function error: ${error.message}`);
       }
 
-      // GPS51 uses status: 0 for success, not success: true
-      if (data?.status !== 0) {
-        const errorMsg = data?.message || data?.cause || `GPS51 error: status ${data?.status}`;
-        throw new Error(errorMsg);
+      if (!response || !response.success) {
+        throw new Error(response?.error || 'Failed to fetch vehicles');
       }
 
-      // Process device response
-      let devices: any[] = [];
-      
-      if (data.groups && Array.isArray(data.groups)) {
-        data.groups.forEach((group: any) => {
-          if (group.devices && Array.isArray(group.devices)) {
-            devices = devices.concat(group.devices);
-          }
-        });
-      } else if (data.devices && Array.isArray(data.devices)) {
-        devices = data.devices;
-      }
+      // Process vehicles from groups and devices
+      const vehicles: GPS51Vehicle[] = [];
+      const groups = response.groups || [];
+      const devices = response.devices || [];
 
-      // Process groups and build fleet hierarchy
-      const fleetHierarchy = gps51GroupManager.processGroupsResponse(data.groups || [], this.userRole);
-      this.authState.fleetHierarchy = fleetHierarchy;
-
-      // Transform to GPS51Vehicle format with group information
-      this.vehicles = fleetHierarchy.userDevices.map(device => {
-        // Initialize intelligent polling for each device
-        gps51IntelligentPolling.updateVehicleProfile(device.deviceid);
+      // Process devices and assign group information
+      devices.forEach((device: any) => {
+        const group = groups.find((g: any) => g.groupid === device.groupid);
         
-        return {
+        const vehicle: GPS51Vehicle = {
           deviceid: device.deviceid,
-          devicename: device.devicename || `Device ${device.deviceid}`,
+          devicename: device.devicename || device.deviceid,
           simnum: device.simnum || '',
-          lastactivetime: device.lastactivetime || '',
-          devicetype: device.devicetype,
-          overduetime: device.overduetime,
-          remark: device.remark,
+          lastactivetime: device.lastactivetime || new Date().toISOString(),
           isMoving: false,
           speed: 0,
           lastUpdate: new Date(),
-          status: 'unknown',
-          vehicleState: VehicleState.OFFLINE,
-          pollingPriority: 4
+          status: 'offline',
+          devicetype: device.devicetype,
+          overduetime: device.overduetime,
+          remark: device.remark,
+          groupid: device.groupid,
+          groupname: group?.groupname || 'Default Group'
         };
+
+        vehicles.push(vehicle);
       });
 
-      console.log('GPS51ProductionService: Retrieved', this.vehicles.length, 'devices');
-      return this.vehicles;
+      this.vehicles = vehicles;
+      
+      console.log('GPS51ProductionService: Vehicles fetched successfully:', {
+        vehicleCount: vehicles.length,
+        groupCount: groups.length
+      });
+
+      return vehicles;
 
     } catch (error) {
-      console.error('GPS51ProductionService: Failed to fetch devices:', error);
-      throw error;
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch vehicles';
+      console.error('GPS51ProductionService: Vehicle fetch failed:', error);
+      throw new Error(errorMessage);
     }
   }
 
   /**
-   * Fetch live positions with smart tracking - FIXED TOKEN HANDLING
-   * Single source of truth for position data
+   * Fetch positions for devices
    */
-  async fetchLivePositions(deviceIds?: string[]): Promise<LiveDataResult> {
+  async fetchPositions(deviceIds?: string[]): Promise<GPS51Position[]> {
     try {
-      // CRITICAL FIX: Ensure valid token before making API calls
-      if (!this.authState.isAuthenticated || !this.authState.token) {
-        console.log('GPS51ProductionService: No valid authentication, attempting auto-auth');
-        await this.autoAuthenticate();
-      }
-
-      // Double-check authentication state
-      if (!this.authState.token) {
-        throw new Error('Authentication required - no valid token available');
-      }
-
-      // Use intelligent polling to determine which devices to query
-      const readyDeviceIds = deviceIds || gps51IntelligentPolling.getVehiclesReadyForPolling();
-      const targetDeviceIds = readyDeviceIds.length > 0 ? readyDeviceIds : this.vehicles.map(d => d.deviceid);
-      
-      if (targetDeviceIds.length === 0) {
-        return {
-          vehicles: [],
-          positions: [],
-          lastQueryTime: this.lastQueryTime,
-          isEmpty: true,
-          isSuccess: true
-        };
-      }
-
-      console.log('GPS51ProductionService: Position fetch with verified token:', {
-        deviceCount: targetDeviceIds.length,
-        hasToken: !!this.authState.token,
-        tokenLength: this.authState.token?.length || 0,
+      console.log('GPS51ProductionService: Fetching positions for devices:', {
+        deviceCount: deviceIds?.length || 'all',
         lastQueryTime: this.lastQueryTime
       });
 
-      await this.enforceRateLimit();
+      const token = await gps51UnifiedAuthManager.getValidToken();
+      if (!token) {
+        throw new Error('No valid authentication token available');
+      }
 
-      // CRITICAL FIX: Use gps51-proxy with proper token validation
+      // Use all vehicle IDs if none specified
+      const targetDeviceIds = deviceIds || this.vehicles.map(v => v.deviceid);
+      
+      if (targetDeviceIds.length === 0) {
+        console.log('GPS51ProductionService: No devices to fetch positions for');
+        return [];
+      }
+
+      // Call Edge Function for positions
       const { supabase } = await import('@/integrations/supabase/client');
-      const { data, error } = await supabase.functions.invoke('gps51-proxy', {
+      const { data: response, error } = await supabase.functions.invoke('gps51-auth', {
         body: {
           action: 'lastposition',
-          token: this.authState.token, // Ensure token is always included
-          params: {
-            username: this.authState.username,
-            deviceids: targetDeviceIds, // PHASE 4: Send as array, not string
-            lastquerypositiontime: Number(this.lastQueryTime) || 0
-          },
-          method: 'POST',
+          deviceids: targetDeviceIds, // Pass as array
+          lastquerypositiontime: this.lastQueryTime || undefined,
+          token,
           apiUrl: this.apiUrl
         }
       });
 
       if (error) {
-        console.error('GPS51ProductionService: Proxy error:', error);
-        throw new Error(`Failed to fetch positions: ${error.message}`);
+        throw new Error(`Edge Function error: ${error.message}`);
       }
 
-      console.log('GPS51ProductionService: Position response received:', {
-        status: data?.status,
-        hasRecords: !!data?.records,
-        recordsLength: Array.isArray(data?.records) ? data.records.length : 0,
-        hasLastQueryTime: !!data?.lastquerypositiontime,
-        message: data?.message
-      });
-
-      // CRITICAL FIX: Check for authentication errors
-      if (data?.status === 8901 || (data?.message && data.message.toLowerCase().includes('token'))) {
-        console.warn('GPS51ProductionService: Token expired or invalid, re-authenticating');
-        this.authState.isAuthenticated = false;
-        this.authState.token = null;
-        await this.autoAuthenticate();
-        
-        // Retry the request with new token
-        return this.fetchLivePositions(deviceIds);
+      if (!response || !response.success) {
+        throw new Error(response?.error || 'Failed to fetch positions');
       }
 
-      // PHASE 4: Enhanced error handling for null responses and parameter issues
-      if (data?.status !== 0) {
-        const errorMsg = data?.message || data?.cause || `GPS51 error: status ${data?.status}`;
-        
-        // Special handling for null response (parameter format issue)
-        if (data?.message?.includes('null response') || data?.message?.includes('parameter format')) {
-          console.error('GPS51ProductionService: PHASE 4 - Parameter format issue detected:', {
-            status: data.status,
-            message: data.message,
-            suggestion: data.proxy_metadata?.suggestion
-          });
-        }
-        
-        console.error('GPS51ProductionService: API error:', errorMsg);
-        throw new Error(errorMsg);
+      const positions: GPS51Position[] = response.records || [];
+      
+      // Update last query time if provided
+      if (response.lastquerypositiontime) {
+        this.lastQueryTime = response.lastquerypositiontime;
       }
 
-      // Update lastQueryTime from server response
-      this.lastQueryTime = data.lastquerypositiontime || Date.now();
-
-      // Extract positions with enhanced logging
-      const positions: GPS51Position[] = (data.records || []).map((record: any) => ({
-        deviceid: record.deviceid,
-        devicetime: record.devicetime || record.updatetime || 0,
-        arrivedtime: record.arrivedtime,
-        updatetime: record.updatetime || 0,
-        callat: record.callat || 0,
-        callon: record.callon || 0,
-        altitude: record.altitude || 0,
-        radius: record.radius || 5,
-        speed: record.speed || 0,
-        course: record.course || 0,
-        totaldistance: record.totaldistance || 0,
-        status: record.status || 0,
-        moving: record.moving || 0,
-        strstatus: record.strstatus || record.strstatusen || 'Unknown',
-        strstatusen: record.strstatusen || 'Unknown',
-        alarm: record.alarm,
-        stralarm: record.stralarm,
-        stralarmen: record.stralarmen || 'No alarm',
-        totaloil: record.totaloil,
-        temp1: record.temp1,
-        temp2: record.temp2,
-        voltagepercent: record.voltagepercent
-      }));
-
-      // Update vehicles with position data and intelligent polling
-      const updatedVehicles = this.vehicles.map(vehicle => {
-        const position = positions.find(p => p.deviceid === vehicle.deviceid);
-        
-        // Update intelligent polling profile
-        const pollingProfile = gps51IntelligentPolling.updateVehicleProfile(vehicle.deviceid, position);
-        
-        // Mark as polled if it was in the target list
-        if (targetDeviceIds.includes(vehicle.deviceid)) {
-          gps51IntelligentPolling.markVehiclePolled(vehicle.deviceid);
-        }
-        
-        return {
-          ...vehicle,
-          position,
-          isMoving: position ? position.moving === 1 : false,
-          speed: position ? position.speed : 0,
-          lastUpdate: new Date(),
-          status: position ? position.strstatusen : 'offline',
-          vehicleState: pollingProfile.state,
-          pollingPriority: pollingProfile.priority
-        };
-      });
-
-      this.vehicles = updatedVehicles;
-      this.retryCount = 0; // Reset on success
+      // Update vehicle positions and states
+      this.updateVehicleStates(positions);
 
       console.log('GPS51ProductionService: Position fetch completed successfully:', {
         positionsReceived: positions.length,
         newLastQueryTime: this.lastQueryTime,
         isEmpty: positions.length === 0,
-        vehiclesUpdated: updatedVehicles.length
+        vehiclesUpdated: this.vehicles.length
       });
 
+      return positions;
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch positions';
+      console.error('GPS51ProductionService: Position fetch failed:', error);
+      throw new Error(errorMessage);
+    }
+  }
+
+  /**
+   * Get live data (vehicles + positions)
+   */
+  async getLiveData(deviceIds?: string[]): Promise<LiveDataResult> {
+    try {
+      // Ensure we have vehicles first
+      if (this.vehicles.length === 0) {
+        await this.fetchVehicles();
+      }
+
+      // Fetch positions
+      const positions = await this.fetchPositions(deviceIds);
+
       return {
-        vehicles: updatedVehicles,
+        vehicles: [...this.vehicles],
         positions,
         lastQueryTime: this.lastQueryTime,
         isEmpty: positions.length === 0,
@@ -523,24 +340,10 @@ export class GPS51ProductionService {
       };
 
     } catch (error) {
-      this.retryCount++;
-      const errorMessage = error instanceof Error ? error.message : 'Position fetch failed';
-      
-      console.error('GPS51ProductionService: Position fetch failed:', {
-        error: errorMessage,
-        retryCount: this.retryCount,
-        hasToken: !!this.authState.token,
-        isAuthenticated: this.authState.isAuthenticated
-      });
-      
-      // If authentication error, mark as unauthenticated
-      if (errorMessage.includes('token') || errorMessage.includes('not authenticated')) {
-        this.authState.isAuthenticated = false;
-        this.authState.token = null;
-      }
+      const errorMessage = error instanceof Error ? error.message : 'Failed to get live data';
       
       return {
-        vehicles: this.vehicles,
+        vehicles: [...this.vehicles],
         positions: [],
         lastQueryTime: this.lastQueryTime,
         isEmpty: true,
@@ -551,244 +354,198 @@ export class GPS51ProductionService {
   }
 
   /**
-   * Auto-authenticate using stored credentials
+   * Initialize user profile from authentication response
    */
-  private async autoAuthenticate(): Promise<void> {
-    const credentials = {
-      username: localStorage.getItem('gps51_username') || '',
-      password: localStorage.getItem('gps51_password') || ''
-    };
-    
-    if (!credentials.username || !credentials.password) {
-      throw new Error('GPS51 credentials not found. Please configure in Settings.');
+  private async initializeUserProfile(user: any): Promise<void> {
+    try {
+      if (user) {
+        const userProfile = {
+          username: user.username,
+          usertype: user.usertype || 11,
+          showname: user.showname || user.username,
+          email: user.email || '',
+          envioRole: EnvioUserRole.INDIVIDUAL_OWNER,
+          permissions: { canManageUsers: false, canManageDevices: false, canViewReports: true, canConfigureAlerts: false, deviceAccessLevel: 'own' as const }
+        };
+
+        this.userRole = userProfile.envioRole;
+        
+        console.log('GPS51ProductionService: User profile initialized:', {
+          username: userProfile.username,
+          usertype: userProfile.usertype,
+          envioRole: userProfile.envioRole,
+          permissions: userProfile.permissions
+        });
+      }
+    } catch (error) {
+      console.error('GPS51ProductionService: Failed to initialize user profile:', error);
     }
-    
-    console.log('GPS51ProductionService: Auto-authenticating with stored credentials');
-    await this.authenticate(credentials.username, credentials.password);
   }
 
   /**
-   * Enforce rate limiting between requests
+   * Update vehicle states with position data
    */
-  private async enforceRateLimit(): Promise<void> {
-    const now = Date.now();
-    const timeSinceLastRequest = now - this.lastRequestTime;
-    
-    if (timeSinceLastRequest < this.minRequestInterval) {
-      const waitTime = this.minRequestInterval - timeSinceLastRequest;
-      console.log(`GPS51ProductionService: Rate limiting - waiting ${waitTime}ms`);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-    }
-    
-    this.lastRequestTime = Date.now();
+  private updateVehicleStates(positions: GPS51Position[]): void {
+    positions.forEach(position => {
+      const vehicle = this.vehicles.find(v => v.deviceid === position.deviceid);
+      if (vehicle) {
+        vehicle.position = position;
+        vehicle.isMoving = position.moving === 1;
+        vehicle.speed = position.speed || 0;
+        vehicle.lastUpdate = new Date();
+        vehicle.status = position.moving === 1 ? 'moving' : 'stopped';
+      }
+    });
   }
 
   /**
-   * Calculate smart polling interval using intelligent polling
+   * Get current vehicles
    */
-  calculatePollingInterval(): number {
-    return gps51IntelligentPolling.calculateGlobalPollingInterval();
-  }
-
-  /**
-   * Calculate retry delay
-   */
-  calculateRetryDelay(): number {
-    if (this.retryCount === 0) return 0;
-    return Math.min(1000 * Math.pow(2, this.retryCount), 30000);
-  }
-
-  /**
-   * Check if retry should be attempted
-   */
-  shouldRetry(): boolean {
-    return this.retryCount < this.maxRetries;
-  }
-
-  /**
-   * Get current authentication state
-   */
-  getAuthState(): GPS51AuthState {
-    return { ...this.authState };
-  }
-
-  /**
-   * Get current devices
-   */
-  getDevices(): GPS51Vehicle[] {
+  getVehicles(): GPS51Vehicle[] {
     return [...this.vehicles];
   }
 
   /**
-   * Get service status with intelligent polling data
+   * Get last query time
    */
-  getServiceStatus() {
-    const pollingStats = gps51IntelligentPolling.getPollingStatistics();
-    
+  getLastQueryTime(): number {
+    return this.lastQueryTime;
+  }
+
+  // Compatibility methods for existing components
+  
+  /**
+   * Alias for fetchVehicles for backward compatibility
+   */
+  async fetchUserDevices(): Promise<GPS51Vehicle[]> {
+    return this.fetchVehicles();
+  }
+
+  /**
+   * Alias for getVehicles for backward compatibility
+   */
+  getDevices(): GPS51Vehicle[] {
+    return this.getVehicles();
+  }
+
+  /**
+   * Alias for fetchPositions for backward compatibility
+   */
+  async fetchLivePositions(deviceIds?: string[]): Promise<LiveDataResult> {
+    try {
+      const positions = await this.fetchPositions(deviceIds);
+      return {
+        vehicles: [...this.vehicles],
+        positions,
+        lastQueryTime: this.lastQueryTime,
+        isEmpty: positions.length === 0,
+        isSuccess: true
+      };
+    } catch (error) {
+      return {
+        vehicles: [...this.vehicles],
+        positions: [],
+        lastQueryTime: this.lastQueryTime,
+        isEmpty: true,
+        isSuccess: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch positions'
+      };
+    }
+  }
+
+  /**
+   * Get service status for monitoring components
+   */
+  getServiceStatus(): any {
+    const authState = this.getAuthState();
     return {
-      isAuthenticated: this.authState.isAuthenticated,
-      username: this.authState.username,
-      userRole: this.userRole,
-      deviceCount: this.vehicles.length,
+      isAuthenticated: authState.isAuthenticated,
+      hasToken: !!authState.token,
+      username: authState.username,
+      vehicleCount: this.vehicles.length,
       lastQueryTime: this.lastQueryTime,
-      retryCount: this.retryCount,
-      movingVehicles: this.vehicles.filter(v => v.isMoving).length,
-      stationaryVehicles: this.vehicles.filter(v => !v.isMoving && v.status !== 'offline').length,
-      offlineVehicles: this.vehicles.filter(v => v.status === 'offline').length,
-      minRequestInterval: this.minRequestInterval,
-      timeSinceLastRequest: Date.now() - this.lastRequestTime,
-      intelligentPolling: pollingStats,
-      fleetHierarchy: this.authState.fleetHierarchy
+      error: authState.error
     };
   }
 
   /**
-   * Reset query time
+   * Get fleet hierarchy (simplified version)
+   */
+  getFleetHierarchy(): FleetHierarchy | null {
+    // Basic hierarchy based on current vehicles
+    const groups = new Map();
+    
+    this.vehicles.forEach(vehicle => {
+      const groupId = vehicle.groupid || 'default';
+      const groupName = vehicle.groupname || 'Default Group';
+      
+      if (!groups.has(groupId)) {
+        groups.set(groupId, {
+          groupid: groupId,
+          groupname: groupName,
+          devices: []
+        });
+      }
+      
+      groups.get(groupId).devices.push(vehicle);
+    });
+
+    return {
+      rootGroups: Array.from(groups.values()),
+      userAccessibleGroups: Array.from(groups.values()),
+      userDevices: this.vehicles.map(v => ({
+        deviceid: v.deviceid,
+        devicename: v.devicename,
+        simnum: v.simnum,
+        devicetype: v.devicetype,
+        lastactivetime: v.lastactivetime,
+        overduetime: v.overduetime,
+        remark: v.remark
+      })),
+      totalDevices: this.vehicles.length
+    };
+  }
+
+  /**
+   * Refresh all vehicle states
+   */
+  async refreshAllVehicleStates(): Promise<void> {
+    try {
+      await this.fetchVehicles();
+      await this.fetchPositions();
+    } catch (error) {
+      console.error('GPS51ProductionService: Failed to refresh vehicle states:', error);
+    }
+  }
+
+  /**
+   * Reset query time for position polling
    */
   resetQueryTime(): void {
     this.lastQueryTime = 0;
-    console.log('GPS51ProductionService: Query time reset');
+    console.log('GPS51ProductionService: Query time reset for full refresh');
   }
 
   /**
-   * Logout and clear state
+   * Calculate polling interval based on conditions
    */
-  async logout(): Promise<void> {
-    this.authState = {
-      isAuthenticated: false,
-      token: null,
-      username: null
-    };
-    this.vehicles = [];
-    this.lastQueryTime = 0;
-    this.retryCount = 0;
-    
-    // Clear intelligent polling and group management
-    gps51IntelligentPolling.clearAllProfiles();
-    gps51GroupManager.clearHierarchy();
-    
-    localStorage.removeItem('gps51_username');
-    gps51SimpleAuthSync.notifyLogout();
-    
-    console.log('GPS51ProductionService: Logged out and reset');
+  calculatePollingInterval(): number {
+    return this.minRequestInterval;
   }
 
   /**
-   * Initialize user profile after authentication
+   * Calculate retry delay for failed requests
    */
-  private async initializeUserProfile(username: string, authData: any): Promise<void> {
-    try {
-      // Determine user role from GPS51 usertype or default
-      const gps51UserType = authData.user?.usertype || 11; // Default to END_USER
-      this.userRole = gps51UserTypeManager.getEnvioRole(gps51UserType);
-      
-      // Create user profile
-      const userProfile: GPS51UserProfile = {
-        username,
-        usertype: gps51UserType,
-        envioRole: this.userRole,
-        companyname: authData.user?.companyname || '',
-        showname: authData.user?.showname || username.split('@')[0],
-        email: username,
-        permissions: gps51UserTypeManager.getUserPermissions(this.userRole)
-      };
-      
-      this.authState.userProfile = userProfile;
-      
-      console.log('GPS51ProductionService: User profile initialized:', {
-        username,
-        usertype: gps51UserType,
-        envioRole: this.userRole,
-        permissions: userProfile.permissions
-      });
-      
-    } catch (error) {
-      console.warn('GPS51ProductionService: Failed to initialize user profile:', error);
-      // Continue with default permissions
-      this.userRole = EnvioUserRole.INDIVIDUAL_OWNER;
-    }
+  calculateRetryDelay(attempt?: number): number {
+    return Math.min(1000 * Math.pow(2, attempt || 0), 30000);
   }
 
   /**
-   * Register new user with GPS51
+   * Check if should retry based on error type
    */
-  async registerUser(
-    username: string, 
-    password: string, 
-    envioRole: EnvioUserRole,
-    additionalData?: any
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      const registrationPayload = gps51UserTypeManager.createUserRegistrationPayload(
-        username, 
-        password, 
-        envioRole, 
-        additionalData
-      );
-
-      const { supabase } = await import('@/integrations/supabase/client');
-      const { data, error } = await supabase.functions.invoke('gps51-auth', {
-        body: {
-          action: 'adduser',
-          ...registrationPayload
-        }
-      });
-
-      if (error) {
-        throw new Error(`User registration failed: ${error.message}`);
-      }
-
-      if (data?.status !== 0) {
-        throw new Error(data?.message || 'User registration failed');
-      }
-
-      console.log('GPS51ProductionService: User registration successful:', username);
-      return { success: true };
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Registration failed';
-      console.error('GPS51ProductionService: User registration failed:', error);
-      return { success: false, error: errorMessage };
-    }
-  }
-
-  /**
-   * Get fleet hierarchy
-   */
-  getFleetHierarchy(): FleetHierarchy | undefined {
-    return this.authState.fleetHierarchy;
-  }
-
-  /**
-   * Get devices by group
-   */
-  getDevicesByGroup(groupId: string): GPS51Vehicle[] {
-    const groupDevices = gps51GroupManager.getDevicesByGroup(groupId);
-    return this.vehicles.filter(vehicle => 
-      groupDevices.some(device => device.deviceid === vehicle.deviceid)
-    );
-  }
-
-  /**
-   * Get vehicles ready for polling
-   */
-  getVehiclesReadyForPolling(): GPS51Vehicle[] {
-    const readyDeviceIds = gps51IntelligentPolling.getVehiclesReadyForPolling();
-    return this.vehicles.filter(vehicle => readyDeviceIds.includes(vehicle.deviceid));
-  }
-
-  /**
-   * Force refresh all vehicle states
-   */
-  async refreshAllVehicleStates(): Promise<void> {
-    gps51IntelligentPolling.clearAllProfiles();
-    
-    // Re-initialize polling profiles for all vehicles
-    for (const vehicle of this.vehicles) {
-      gps51IntelligentPolling.updateVehicleProfile(vehicle.deviceid, vehicle.position);
-    }
-    
-    console.log('GPS51ProductionService: All vehicle states refreshed');
+  shouldRetry(error?: any, attempt?: number): boolean {
+    if (!error || !attempt) return false;
+    return attempt < this.maxRetries && !error.message?.includes('authentication');
   }
 }
 
