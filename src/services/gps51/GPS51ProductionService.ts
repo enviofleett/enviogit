@@ -5,6 +5,7 @@
 
 import { gps51UnifiedAuthManager, GPS51UnifiedAuthState } from './unified/GPS51UnifiedAuthManager';
 import { gps51SimpleAuthSync } from './GPS51SimpleAuthSync';
+import { gps51WebSocketPrevention } from './GPS51WebSocketPrevention';
 import { gps51PerformanceOptimizer } from './GPS51PerformanceOptimizer';
 import { gps51UserTypeManager, EnvioUserRole, GPS51UserProfile } from './GPS51UserTypeManager';
 import { gps51IntelligentPolling, VehicleState } from './GPS51IntelligentPolling';
@@ -83,6 +84,9 @@ export class GPS51ProductionService {
 
   private constructor() {
     console.log('GPS51ProductionService: Initializing production service');
+    
+    // Initialize WebSocket prevention to avoid console errors
+    gps51WebSocketPrevention;
   }
 
   static getInstance(): GPS51ProductionService {

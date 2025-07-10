@@ -107,9 +107,20 @@ export class GPS51UnifiedAuthManager {
         throw new Error(`Edge Function error: ${edgeError.message}`);
       }
 
-      // Handle GPS51 response format - check both success flag and status code
-      if (!response || (!response.success && response.status !== 0)) {
-        const errorMsg = response?.error || response?.message || response?.cause || 'Authentication failed';
+      // Handle GPS51 response format with improved error checking
+      if (!response) {
+        throw new Error('No response received from GPS51 authentication service');
+      }
+      
+      // Check for Edge Function errors first
+      if (response.success === false || response.error) {
+        const errorMsg = response.error || 'Authentication request failed';
+        throw new Error(errorMsg);
+      }
+      
+      // Check GPS51 API status (0 = success)
+      if (response.status !== undefined && response.status !== 0) {
+        const errorMsg = response.message || response.cause || `GPS51 API error (status: ${response.status})`;
         throw new Error(errorMsg);
       }
 
@@ -139,6 +150,7 @@ export class GPS51UnifiedAuthManager {
       // CRITICAL: Store tokens for legacy service compatibility
       localStorage.setItem('gps51_username', username);
       localStorage.setItem('gps51_token', token);
+      localStorage.setItem('gps51_access_token', token); // Additional compatibility key
 
       // Persist auth state
       this.saveAuthState();
