@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useBackgroundRefresh } from '@/hooks/useBackgroundRefresh';
 import { 
   Activity, 
   AlertCircle, 
@@ -13,7 +14,8 @@ import {
   Shield,
   TrendingUp,
   TrendingDown,
-  Zap
+  Zap,
+  RefreshCw
 } from 'lucide-react';
 
 interface GPS51HealthMetrics {
@@ -52,8 +54,19 @@ export const GPS51HealthDashboard = () => {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Set up background refresh for health metrics
+  const backgroundRefresh = useBackgroundRefresh(async () => {
+    await Promise.all([loadHealthMetrics(), loadRecentActivity()]);
+  }, {
+    refreshInterval: 60000, // 1 minute for health monitoring
+    enabled: true,
+    onError: (error) => {
+      console.error('Health metrics background refresh failed:', error);
+    }
+  });
+
   useEffect(() => {
-    // Load initial data only once (no polling to prevent API spikes)
+    // Load initial data
     loadHealthMetrics();
     loadRecentActivity();
   }, []);
@@ -184,15 +197,33 @@ export const GPS51HealthDashboard = () => {
         <div>
           <h2 className="text-2xl font-bold">GPS51 Health Dashboard</h2>
           <p className="text-muted-foreground">Real-time monitoring of GPS51 API interactions</p>
+          {backgroundRefresh.lastRefresh && (
+            <p className="text-xs text-muted-foreground">
+              Last updated: {backgroundRefresh.lastRefresh.toLocaleTimeString()}
+            </p>
+          )}
         </div>
-        <Button 
-          variant="destructive" 
-          onClick={triggerEmergencyStop}
-          disabled={isLoading}
-        >
-          <AlertCircle className="h-4 w-4 mr-2" />
-          Emergency Stop
-        </Button>
+        <div className="flex items-center gap-2">
+          <Badge variant={backgroundRefresh.error ? "destructive" : "default"} className="text-xs">
+            {backgroundRefresh.error ? 'Monitor Error' : 'Live'}
+          </Badge>
+          <button
+            onClick={backgroundRefresh.manualRefresh}
+            disabled={backgroundRefresh.isRefreshing}
+            className="p-2 rounded-md hover:bg-muted transition-colors"
+            title="Refresh metrics"
+          >
+            <RefreshCw className={`h-4 w-4 ${backgroundRefresh.isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+          <Button 
+            variant="destructive" 
+            onClick={triggerEmergencyStop}
+            disabled={isLoading}
+          >
+            <AlertCircle className="h-4 w-4 mr-2" />
+            Emergency Stop
+          </Button>
+        </div>
       </div>
 
       {/* Key Metrics */}

@@ -9,11 +9,13 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle,
-  Clock
+  Clock,
+  RefreshCw
 } from 'lucide-react';
 import { TechnicalPartnerService } from '@/services/partners/TechnicalPartnerService';
 import { PartnerWalletService } from '@/services/partners/PartnerWalletService';
 import { useToast } from '@/hooks/use-toast';
+import { useBackgroundRefresh } from '@/hooks/useBackgroundRefresh';
 
 interface DashboardStats {
   totalPartners: number;
@@ -35,17 +37,11 @@ export const PartnerDashboard = () => {
     monthlyEarnings: 0,
     recentActivities: []
   });
-  const [isLoading, setIsLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const { toast } = useToast();
-
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
 
   const loadDashboardData = async () => {
     try {
-      setIsLoading(true);
-      
       // Load partner statistics
       const [allPartners, pendingPartners, activePartners] = await Promise.all([
         TechnicalPartnerService.getAllPartners(),
@@ -68,17 +64,36 @@ export const PartnerDashboard = () => {
         monthlyEarnings: walletSummary.monthlyEarnings || 0,
         recentActivities: [] // We'll implement activity tracking later
       });
+
+      if (isInitialLoading) {
+        setIsInitialLoading(false);
+      }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load dashboard data",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
+      if (isInitialLoading) {
+        toast({
+          title: "Error",
+          description: "Failed to load dashboard data",
+          variant: "destructive",
+        });
+      }
     }
   };
+
+  // Set up background refresh
+  const backgroundRefresh = useBackgroundRefresh(loadDashboardData, {
+    refreshInterval: 30000, // 30 seconds
+    enabled: true,
+    onError: (error) => {
+      console.error('Background refresh failed:', error);
+      // Only show toast for critical errors, not background failures
+    }
+  });
+
+  // Initial load
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
 
   const StatCard = ({ title, value, icon: Icon, color, subtitle }: any) => (
     <Card>
@@ -93,7 +108,7 @@ export const PartnerDashboard = () => {
     </Card>
   );
 
-  if (isLoading) {
+  if (isInitialLoading) {
     return (
       <div className="space-y-6">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -114,6 +129,31 @@ export const PartnerDashboard = () => {
 
   return (
     <div className="space-y-6">
+      {/* Header with Refresh Controls */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Partner Dashboard</h2>
+          {backgroundRefresh.lastRefresh && (
+            <p className="text-sm text-muted-foreground">
+              Last updated: {backgroundRefresh.lastRefresh.toLocaleTimeString()}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant={backgroundRefresh.error ? "destructive" : "default"} className="text-xs">
+            {backgroundRefresh.error ? 'Sync Error' : 'Live'}
+          </Badge>
+          <button
+            onClick={backgroundRefresh.manualRefresh}
+            disabled={backgroundRefresh.isRefreshing}
+            className="p-2 rounded-md hover:bg-muted transition-colors"
+            title="Refresh data"
+          >
+            <RefreshCw className={`h-4 w-4 ${backgroundRefresh.isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </div>
+
       {/* Key Metrics */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard

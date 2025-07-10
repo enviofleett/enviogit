@@ -8,12 +8,14 @@ import {
   TrendingUp, 
   Activity,
   CreditCard,
-  UserPlus
+  UserPlus,
+  RefreshCw
 } from 'lucide-react';
 import { ReferralAgentService } from '@/services/referrals/ReferralAgentService';
 import { ReferralCommissionService } from '@/services/referrals/ReferralCommissionService';
 import { ReferralPayoutService } from '@/services/referrals/ReferralPayoutService';
 import { useToast } from '@/hooks/use-toast';
+import { useBackgroundRefresh } from '@/hooks/useBackgroundRefresh';
 
 interface DashboardStats {
   totalAgents: number;
@@ -41,17 +43,11 @@ export const ReferralDashboard = () => {
     pendingPayoutAmount: 0,
     recentSignups: 0
   });
-  const [isLoading, setIsLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const { toast } = useToast();
-
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
 
   const loadDashboardData = async () => {
     try {
-      setIsLoading(true);
-      
       // Load agent statistics
       const agentStats = await ReferralAgentService.getDashboardStats();
       
@@ -76,17 +72,35 @@ export const ReferralDashboard = () => {
         pendingPayoutAmount: payoutSummary.pendingAmount,
         recentSignups
       });
+
+      if (isInitialLoading) {
+        setIsInitialLoading(false);
+      }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load dashboard data",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
+      if (isInitialLoading) {
+        toast({
+          title: "Error",
+          description: "Failed to load dashboard data",
+          variant: "destructive",
+        });
+      }
     }
   };
+
+  // Set up background refresh
+  const backgroundRefresh = useBackgroundRefresh(loadDashboardData, {
+    refreshInterval: 45000, // 45 seconds for referrals
+    enabled: true,
+    onError: (error) => {
+      console.error('Background refresh failed:', error);
+    }
+  });
+
+  // Initial load
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
 
   const StatCard = ({ title, value, icon: Icon, color, subtitle }: any) => (
     <Card>
@@ -101,7 +115,7 @@ export const ReferralDashboard = () => {
     </Card>
   );
 
-  if (isLoading) {
+  if (isInitialLoading) {
     return (
       <div className="space-y-6">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -122,6 +136,31 @@ export const ReferralDashboard = () => {
 
   return (
     <div className="space-y-6">
+      {/* Header with Refresh Controls */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Referral Dashboard</h2>
+          {backgroundRefresh.lastRefresh && (
+            <p className="text-sm text-muted-foreground">
+              Last updated: {backgroundRefresh.lastRefresh.toLocaleTimeString()}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant={backgroundRefresh.error ? "destructive" : "default"} className="text-xs">
+            {backgroundRefresh.error ? 'Sync Error' : 'Live'}
+          </Badge>
+          <button
+            onClick={backgroundRefresh.manualRefresh}
+            disabled={backgroundRefresh.isRefreshing}
+            className="p-2 rounded-md hover:bg-muted transition-colors"
+            title="Refresh data"
+          >
+            <RefreshCw className={`h-4 w-4 ${backgroundRefresh.isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </div>
+
       {/* Key Metrics */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
