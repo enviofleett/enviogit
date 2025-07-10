@@ -133,6 +133,10 @@ export class GPS51UnifiedAuthManager {
         lastLoginTime: new Date()
       };
 
+      // CRITICAL: Store tokens for legacy service compatibility
+      localStorage.setItem('gps51_username', username);
+      localStorage.setItem('gps51_token', token);
+
       // Persist auth state
       this.saveAuthState();
       
@@ -243,8 +247,10 @@ export class GPS51UnifiedAuthManager {
       credentials: null
     };
 
-    // Clear stored state
+    // Clear stored state and legacy tokens
     this.clearStoredAuthState();
+    localStorage.removeItem('gps51_username');
+    localStorage.removeItem('gps51_token');
     
     // Clear auto-refresh timer
     if (this.refreshTimer) {

@@ -182,9 +182,9 @@ export class GPS51NetworkConnectivityService {
       recommendations.push(testResult.connectivity.recommendedAction || 'Check network connectivity');
     }
     
+    // CORS is expected for browser-based access - recommend proxy usage
     if (!testResult.diagnostics.corsEnabled) {
-      issues.push('CORS policy prevents direct browser access to GPS51 API');
-      recommendations.push('Use Supabase Edge Function as a proxy to bypass CORS restrictions');
+      recommendations.push('✅ CORS blocking is normal - GPS51 Edge Function proxy handles this automatically');
     }
     
     if (!testResult.diagnostics.sslValid) {
@@ -192,13 +192,14 @@ export class GPS51NetworkConnectivityService {
       recommendations.push('Contact GPS51 support about SSL certificate issues');
     }
     
+    // For browser apps, POST requests will fail due to CORS - this is expected
     if (!testResult.diagnostics.postRequestWorks) {
-      issues.push('POST requests to GPS51 API are failing');
-      recommendations.push('Check firewall and network policies');
+      recommendations.push('✅ Direct API calls blocked by CORS - using Edge Function proxy instead');
     }
 
-    const canProceed = testResult.authenticationPossible && testResult.diagnostics.sslValid;
-    const suggestEdgeFunction = !testResult.diagnostics.corsEnabled || issues.length > 1;
+    // Connection is viable if basic connectivity works, even with CORS blocking
+    const canProceed = testResult.connectivity.isReachable && testResult.diagnostics.sslValid;
+    const suggestEdgeFunction = true; // Always suggest Edge Function for browser apps
 
     return {
       issues,

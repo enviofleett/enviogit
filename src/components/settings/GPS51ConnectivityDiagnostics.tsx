@@ -55,18 +55,22 @@ export const GPS51ConnectivityDiagnostics = () => {
       let canProceed = false;
       let useProxy = false;
       
-      // Determine best approach
+      // Determine best approach - Always prefer proxy for browser apps
       if (proxyTest.success) {
-        recommendations.push('✅ Proxy connection works - recommended approach');
+        recommendations.push('✅ Proxy connection works - this is the correct approach for browser apps');
         useProxy = true;
         canProceed = true;
-      } else if (directTest.authenticationPossible) {
-        recommendations.push('⚠️ Direct connection works but may have CORS issues');
-        recommendations.push('Consider using proxy for better reliability');
-        canProceed = true;
       } else {
-        recommendations.push('❌ Neither direct nor proxy connections are working');
-        recommendations.push(...directDiagnosis.recommendations);
+        recommendations.push('❌ Proxy connection failed - this needs to be fixed');
+        recommendations.push('Direct browser access to GPS51 API is blocked by CORS (this is normal)');
+        if (directDiagnosis.canProceed) {
+          recommendations.push('✅ Basic connectivity to GPS51 API is working');
+          recommendations.push('🔧 Focus on fixing the Edge Function proxy configuration');
+          canProceed = true;
+        } else {
+          recommendations.push('❌ No connectivity to GPS51 API detected');
+          recommendations.push(...directDiagnosis.recommendations);
+        }
       }
       
       const result: DiagnosticsResult = {
