@@ -196,23 +196,29 @@ serve(async (req) => {
           
           response = {
             ...response,
+            status: 0, // GPS51 success status for compatibility
             access_token: authResult.token,
             token: authResult.token, // Add for compatibility
             token_type: 'Bearer',
             expires_in: 24 * 60 * 60, // 24 hours
-            user: authResult.user || { username }
+            user: authResult.user || { username },
+            data: authResult.user || { username } // Additional data field
           };
         } else if (action === 'querymonitorlist') {
           response = {
             ...response,
+            status: 0, // GPS51 success status
             groups: authResult.groups || [],
-            devices: authResult.devices || []
+            devices: authResult.devices || [],
+            data: authResult.groups || authResult.devices || []
           };
         } else if (action === 'lastposition') {
           response = {
             ...response,
+            status: 0, // GPS51 success status
             records: authResult.records || [],
-            lastquerypositiontime: authResult.lastquerypositiontime
+            lastquerypositiontime: authResult.lastquerypositiontime,
+            data: authResult.records || []
           };
         }
 

@@ -256,12 +256,32 @@ export class GPS51EmergencyManager {
   // Initialize from existing authentication if available
   private async initializeFromExistingAuth(): Promise<void> {
     try {
-      // Check if we have saved credentials and attempt auto-authentication
+      // Check unified auth manager first
+      const { gps51UnifiedAuthManager } = await import('./unified/index');
+      const authState = gps51UnifiedAuthManager.getAuthState();
+      
+      if (authState.isAuthenticated && authState.credentials) {
+        console.log('🔄 GPS51EmergencyManager: Found unified auth state, syncing');
+        this.authState = {
+          isAuthenticated: true,
+          username: authState.username,
+          lastLoginTime: Date.now()
+        };
+        this.saveAuthState();
+        return;
+      }
+
+      // Fallback to legacy credentials
       const savedCredentials = localStorage.getItem('gps51_credentials');
       if (savedCredentials && !this.authState.isAuthenticated) {
         const credentials = JSON.parse(savedCredentials);
-        console.log('🔄 GPS51EmergencyManager: Found saved credentials, attempting auto-authentication');
-        await this.authenticate(credentials);
+        // Validate password exists before attempting authentication
+        if (credentials.password && credentials.username) {
+          console.log('🔄 GPS51EmergencyManager: Found legacy credentials, attempting auto-authentication');
+          await this.authenticate(credentials);
+        } else {
+          console.warn('🔄 GPS51EmergencyManager: Invalid credentials found, skipping auto-auth');
+        }
       }
 
       // Listen for unified auth service events

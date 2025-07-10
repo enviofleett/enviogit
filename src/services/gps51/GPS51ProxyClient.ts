@@ -90,9 +90,14 @@ export class GPS51ProxyClient {
         const duration = Date.now() - startTime;
         await logApiCall(action, { action, params, method, apiUrl }, data.status || 200, data, duration);
 
-        // Validate response
+        // Validate response - check for proxy errors
         if (data.proxy_error) {
-          throw new Error(`Proxy error: ${data.error || 'Unknown proxy error'}`);
+          throw new Error(`Proxy error: ${data.proxy_error || data.error || 'Unknown proxy error'}`);
+        }
+
+        // For GPS51 responses, check status field instead of proxy_error
+        if (data.status && data.status !== 0 && action === 'login') {
+          throw new Error(`GPS51 authentication failed: ${data.message || data.cause || 'Invalid credentials'}`);
         }
 
         // Enhanced response validation for GPS51

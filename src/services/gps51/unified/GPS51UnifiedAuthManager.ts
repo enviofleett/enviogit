@@ -107,14 +107,17 @@ export class GPS51UnifiedAuthManager {
         throw new Error(`Edge Function error: ${edgeError.message}`);
       }
 
-      if (!response || !response.success) {
-        throw new Error(response?.error || 'Authentication failed');
+      // Handle GPS51 response format - check both success flag and status code
+      if (!response || (!response.success && response.status !== 0)) {
+        const errorMsg = response?.error || response?.message || response?.cause || 'Authentication failed';
+        throw new Error(errorMsg);
       }
 
-      // Extract token from response (handle both access_token and token fields)
-      const token = response.access_token || response.token;
+      // Extract token from response (handle multiple field names)
+      const token = response.access_token || response.token || response.data?.token;
       if (!token) {
-        throw new Error('Authentication successful but no token received');
+        console.warn('GPS51UnifiedAuthManager: No token in response, but auth appears successful', response);
+        throw new Error('Authentication response missing token field');
       }
 
       // Update token manager
